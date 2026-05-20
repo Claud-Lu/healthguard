@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@healthguard/core": ["packages/core/src/index.ts"],
+      "@healthguard/sdk-web": ["packages/sdk-web/src/index.ts"],
+      "@healthguard/server": ["apps/server/src/index.ts"]
+    }
+  }
+}

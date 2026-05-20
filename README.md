@@ -45,6 +45,11 @@ The first useful milestone is a complete local loop:
 
 ```text
 healthguard/
+├── apps/
+│   └── server/
+├── packages/
+│   ├── core/
+│   └── sdk-web/
 ├── docs/
 │   ├── HealthGuard_MVP_技术方案.md
 │   ├── roadmap.md
@@ -56,14 +61,30 @@ healthguard/
 └── README.md
 ```
 
-Implementation folders should be added after the MVP plan is reviewed:
+Planned folders for the next milestones:
 
 ```text
 apps/dashboard/
-apps/server/
-packages/sdk-web/
 packages/sdk-miniprogram/
 examples/vue3-demo/
 examples/wechat-mini-demo/
 deploy/
+```
+
+## Current Development Snapshot
+
+The first implementation pass initializes a yarn workspace monorepo and starts the H5 loop with testable building blocks:
+
+- `packages/core`: shared event schemas, batch validation, URL sanitization, and issue fingerprint helpers.
+- `packages/sdk-web`: minimal browser SDK client that queues error and HTTP events, sanitizes URLs, and flushes batches to a collector.
+- `apps/server`: Fastify collector with `/health`, `POST /api/events/batch`, and `GET /api/issues`, backed by an in-memory store for the first local loop.
+
+Useful commands:
+
+```bash
+yarn install
+yarn test
+yarn type-check
+yarn lint
+yarn dev:server
 ```
