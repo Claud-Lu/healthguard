@@ -4,7 +4,7 @@
 
 HealthGuard 是一个开源、可私有化部署的跨端应用健康度检测系统。长期目标覆盖 H5、小程序、Android、iOS；MVP 阶段只聚焦 H5 和微信小程序，先跑通“采集 -> 入库 -> 聚合 -> 查询 -> 告警雏形”的闭环。
 
-这个版本的核心目标不是一次性复刻 Sentry 或 Bugly，而是做出一个中小团队能部署、个人开发者能维护、后续 AI agent 能接力的最小可用系统。
+这个版本的核心目标不是一次性复刻 Sentry 或 Bugly，而是做出一个中小团队能部署、独立维护者能维护、后续 AI agent 能接力的最小可用系统。
 
 ## 2. MVP 原则
 
@@ -58,7 +58,7 @@ MVP 管理台只做必要页面：
 - Issue 详情：堆栈、最近事件、设备/浏览器、breadcrumb。
 - 事件查询：按时间、平台、版本筛选。
 
-前端技术栈建议使用 Vue 3 + Vite + Element Plus + Pinia + Axios + ECharts，贴合个人维护习惯。
+前端技术栈建议使用 Vue 3 + Vite + Element Plus + Pinia + Axios + ECharts，贴合轻量维护和快速迭代诉求。
 
 ## 4. 暂缓功能
 

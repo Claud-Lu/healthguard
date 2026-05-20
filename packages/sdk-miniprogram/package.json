@@ -1,5 +1,5 @@
 {
-  "name": "@healthguard/sdk-web",
+  "name": "@healthguard/sdk-miniprogram",
   "version": "0.1.0",
   "private": true,
   "type": "module",

@@ -21,7 +21,7 @@ export const breadcrumbSchema = z.object({
 export const baseEventSchema = z.object({
   eventId: z.string().min(1),
   appKey: z.string().min(1),
-  platform: z.enum(['web', 'wechat-miniprogram']),
+  platform: z.enum(['web', 'wechat-miniprogram', 'flutter']),
   timestamp: z.number(),
   sessionId: z.string().min(1),
   userId: z.string().optional(),
@@ -34,7 +34,7 @@ export const baseEventSchema = z.object({
 
 export const errorEventSchema = baseEventSchema.extend({
   type: z.literal('error'),
-  errorType: z.enum(['js', 'promise', 'resource', 'request']),
+  errorType: z.enum(['js', 'promise', 'resource', 'request', 'native']),
   message: z.string().min(1),
   stack: z.string().optional(),
   filename: z.string().optional(),

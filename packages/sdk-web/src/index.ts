@@ -2,7 +2,7 @@ import {
   createIssueFingerprint,
   sanitizeUrl,
   type Breadcrumb,
-  type ErrorEvent,
+  type ErrorEvent as HealthGuardErrorEvent,
   type EventBatch
 } from '@healthguard/core';
 
@@ -21,18 +21,44 @@ export interface HealthGuardClientOptions {
   appKey: string;
   endpoint: string;
   release?: string;
-  environment?: ErrorEvent['environment'];
+  environment?: HealthGuardErrorEvent['environment'];
   userId?: string;
   flushIntervalMs?: number;
   maxBatchSize?: number;
+  autoCapture?: boolean | AutoCaptureOptions;
+  target?: BrowserLikeTarget;
   transport?: (batch: EventBatch, endpoint: string) => Promise<void>;
 }
 
 export interface HealthGuardClient {
   captureException(error: unknown): void;
   captureHttp(input: CaptureHttpInput): void;
+  capturePerformance(input: CapturePerformanceInput): void;
   addBreadcrumb(breadcrumb: Omit<Breadcrumb, 'timestamp'> & { timestamp?: number }): void;
   flush(): Promise<void>;
+}
+
+export interface AutoCaptureOptions {
+  errors?: boolean;
+  unhandledRejections?: boolean;
+  fetch?: boolean;
+  xhr?: boolean;
+}
+
+export interface CapturePerformanceInput {
+  name: string;
+  value: number;
+  rating?: 'good' | 'needs-improvement' | 'poor';
+}
+
+export interface BrowserLikeTarget {
+  location?: {
+    href: string;
+  };
+  addEventListener?: (type: string, listener: EventListener) => void;
+  removeEventListener?: (type: string, listener: EventListener) => void;
+  fetch?: typeof fetch;
+  XMLHttpRequest?: any;
 }
 
 export function createHealthGuardClient(options: HealthGuardClientOptions): HealthGuardClient {
@@ -42,6 +68,7 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
   const anonymousId = getAnonymousId();
   const maxBatchSize = options.maxBatchSize ?? 10;
   const transport = options.transport ?? defaultTransport;
+  const target = options.target ?? getDefaultTarget();
 
   let timer: ReturnType<typeof setInterval> | undefined;
 
@@ -51,7 +78,12 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
     }
 
     const events = queue.splice(0, maxBatchSize);
-    await transport({ appKey: options.appKey, events }, options.endpoint);
+    try {
+      await transport({ appKey: options.appKey, events }, options.endpoint);
+    } catch (error) {
+      queue.unshift(...events);
+      throw error;
+    }
   }
 
   function enqueue(event: EventBatch['events'][number]): void {
@@ -62,6 +94,29 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
     }
   }
 
+  function captureError(error: unknown, errorType: HealthGuardErrorEvent['errorType'], metadata: Partial<HealthGuardErrorEvent> = {}): void {
+    const normalized = normalizeError(error);
+    const message = metadata.message ?? normalized.message;
+    const stack = metadata.stack ?? normalized.stack;
+
+    enqueue({
+      ...createBaseEvent(options, sessionId, anonymousId, target),
+      type: 'error',
+      errorType,
+      message,
+      stack,
+      filename: metadata.filename,
+      lineno: metadata.lineno,
+      colno: metadata.colno,
+      fingerprint: createIssueFingerprint({
+        errorType,
+        message,
+        stack
+      }),
+      breadcrumbs: [...breadcrumbs]
+    });
+  }
+
   if ((options.flushIntervalMs ?? 5000) > 0) {
     timer = setInterval(() => {
       void flush();
@@ -69,27 +124,27 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
     timer.unref?.();
   }
 
+  installAutoCapture(options, target, captureError, (input) => {
+    enqueue({
+      ...createBaseEvent(options, sessionId, anonymousId, target),
+      type: 'http',
+      method: input.method.toUpperCase(),
+      url: sanitizeUrl(input.url),
+      status: input.status,
+      duration: input.duration,
+      success: input.success,
+      errorMessage: input.errorMessage
+    });
+  });
+
   return {
     captureException(error: unknown): void {
-      const normalized = normalizeError(error);
-      enqueue({
-        ...createBaseEvent(options, sessionId, anonymousId),
-        type: 'error',
-        errorType: 'js',
-        message: normalized.message,
-        stack: normalized.stack,
-        fingerprint: createIssueFingerprint({
-          errorType: 'js',
-          message: normalized.message,
-          stack: normalized.stack
-        }),
-        breadcrumbs: [...breadcrumbs]
-      });
+      captureError(error, 'js');
     },
 
     captureHttp(input: CaptureHttpInput): void {
       enqueue({
-        ...createBaseEvent(options, sessionId, anonymousId),
+        ...createBaseEvent(options, sessionId, anonymousId, target),
         type: 'http',
         method: input.method.toUpperCase(),
         url: sanitizeUrl(input.url),
@@ -97,6 +152,16 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
         duration: input.duration,
         success: input.success,
         errorMessage: input.errorMessage
+      });
+    },
+
+    capturePerformance(input: CapturePerformanceInput): void {
+      enqueue({
+        ...createBaseEvent(options, sessionId, anonymousId, target),
+        type: 'performance',
+        name: input.name,
+        value: input.value,
+        rating: input.rating
       });
     },
 
@@ -125,9 +190,10 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
 function createBaseEvent(
   options: HealthGuardClientOptions,
   sessionId: string,
-  anonymousId: string
+  anonymousId: string,
+  target?: BrowserLikeTarget
 ): Pick<
-  ErrorEvent,
+  HealthGuardErrorEvent,
   | 'eventId'
   | 'appKey'
   | 'platform'
@@ -151,7 +217,7 @@ function createBaseEvent(
     release: options.release,
     environment: options.environment,
     userId: options.userId,
-    pageUrl: typeof window === 'undefined' ? undefined : window.location.href
+    pageUrl: target?.location?.href
   };
 }
 
@@ -198,4 +264,197 @@ function getAnonymousId(): string {
 
 function createId(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+}
+
+function getDefaultTarget(): BrowserLikeTarget | undefined {
+  if (typeof window === 'undefined') {
+    return undefined;
+  }
+
+  return window;
+}
+
+function normalizeAutoCapture(autoCapture: HealthGuardClientOptions['autoCapture']): Required<AutoCaptureOptions> {
+  if (autoCapture === true) {
+    return {
+      errors: true,
+      unhandledRejections: true,
+      fetch: true,
+      xhr: true
+    };
+  }
+
+  if (!autoCapture) {
+    return {
+      errors: false,
+      unhandledRejections: false,
+      fetch: false,
+      xhr: false
+    };
+  }
+
+  return {
+    errors: autoCapture?.errors ?? false,
+    unhandledRejections: autoCapture?.unhandledRejections ?? false,
+    fetch: autoCapture?.fetch ?? false,
+    xhr: autoCapture?.xhr ?? false
+  };
+}
+
+function installAutoCapture(
+  options: HealthGuardClientOptions,
+  target: BrowserLikeTarget | undefined,
+  captureError: (
+    error: unknown,
+    errorType: HealthGuardErrorEvent['errorType'],
+    metadata?: Partial<HealthGuardErrorEvent>
+  ) => void,
+  captureHttp: (input: CaptureHttpInput) => void
+): void {
+  if (!target) {
+    return;
+  }
+
+  const autoCapture = normalizeAutoCapture(options.autoCapture);
+
+  if (autoCapture.errors && target.addEventListener) {
+    target.addEventListener('error', ((event: Event) => {
+      const errorEvent = event as globalThis.ErrorEvent;
+      const resourceFailure = getResourceFailure(event);
+
+      if (resourceFailure) {
+        captureError(resourceFailure.message, 'resource', {
+          message: resourceFailure.message,
+          filename: resourceFailure.url
+        });
+        return;
+      }
+
+      captureError(errorEvent.error ?? errorEvent.message, 'js', {
+        message: errorEvent.message,
+        filename: errorEvent.filename,
+        lineno: errorEvent.lineno,
+        colno: errorEvent.colno
+      });
+    }) as EventListener);
+  }
+
+  if (autoCapture.unhandledRejections && target.addEventListener) {
+    target.addEventListener('unhandledrejection', ((event: Event) => {
+      const rejectionEvent = event as PromiseRejectionEvent;
+      captureError(rejectionEvent.reason, 'promise');
+    }) as EventListener);
+  }
+
+  if (autoCapture.fetch && target.fetch) {
+    const originalFetch = target.fetch.bind(target);
+
+    target.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const startedAt = Date.now();
+      const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+      const url = input instanceof Request ? input.url : input.toString();
+
+      if (isCollectorEndpoint(url, options.endpoint)) {
+        return originalFetch(input, init);
+      }
+
+      try {
+        const response = await originalFetch(input, init);
+        captureHttp({
+          method,
+          url,
+          status: response.status,
+          duration: Date.now() - startedAt,
+          success: response.ok
+        });
+        return response;
+      } catch (error) {
+        captureHttp({
+          method,
+          url,
+          duration: Date.now() - startedAt,
+          success: false,
+          errorMessage: normalizeError(error).message
+        });
+        throw error;
+      }
+    }) as typeof fetch;
+  }
+
+  if (autoCapture.xhr && target.XMLHttpRequest) {
+    const OriginalXMLHttpRequest = target.XMLHttpRequest;
+
+    target.XMLHttpRequest = function HealthGuardXMLHttpRequest() {
+      const xhr = new OriginalXMLHttpRequest();
+      let method = 'GET';
+      let url = '';
+      let startedAt = 0;
+      const originalOpen = xhr.open;
+      const originalSend = xhr.send;
+      const originalOnloadend = xhr.onloadend;
+
+      xhr.open = function patchedOpen(this: XMLHttpRequest, nextMethod: string, nextUrl: string | URL, ...args: unknown[]) {
+        method = nextMethod;
+        url = nextUrl.toString();
+        return originalOpen.apply(this, [nextMethod, nextUrl, ...args] as any);
+      };
+
+      xhr.send = function patchedSend(this: XMLHttpRequest, ...args: unknown[]) {
+        startedAt = Date.now();
+        return originalSend.apply(this, args as any);
+      };
+
+      xhr.onloadend = function patchedLoadEnd(this: XMLHttpRequest, event: ProgressEvent) {
+        if (isCollectorEndpoint(url, options.endpoint)) {
+          if (typeof originalOnloadend === 'function') {
+            return originalOnloadend.call(this, event);
+          }
+
+          return undefined;
+        }
+
+        captureHttp({
+          method,
+          url,
+          status: xhr.status,
+          duration: Date.now() - startedAt,
+          success: xhr.status < 400
+        });
+
+        if (typeof originalOnloadend === 'function') {
+          return originalOnloadend.call(this, event);
+        }
+
+        return undefined;
+      };
+
+      return xhr;
+    } as unknown as typeof XMLHttpRequest;
+  }
+}
+
+function isCollectorEndpoint(url: string, endpoint: string): boolean {
+  try {
+    const current = new URL(url, 'http://healthguard.local');
+    const collector = new URL(endpoint, 'http://healthguard.local');
+    return current.pathname === collector.pathname;
+  } catch {
+    return url === endpoint;
+  }
+}
+
+function getResourceFailure(event: Event): { message: string; url: string } | null {
+  const target = event.target as { tagName?: string; src?: string; href?: string } | null;
+  const tagName = target?.tagName;
+  const rawUrl = target?.src ?? target?.href;
+
+  if (!tagName || !rawUrl) {
+    return null;
+  }
+
+  const url = sanitizeUrl(rawUrl);
+  return {
+    url,
+    message: `Resource load failed: ${tagName} ${url}`
+  };
 }

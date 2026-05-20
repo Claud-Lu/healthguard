@@ -14,6 +14,7 @@
     "baseUrl": ".",
     "paths": {
       "@healthguard/core": ["packages/core/src/index.ts"],
+      "@healthguard/sdk-miniprogram": ["packages/sdk-miniprogram/src/index.ts"],
       "@healthguard/sdk-web": ["packages/sdk-web/src/index.ts"],
       "@healthguard/server": ["apps/server/src/index.ts"]
     }

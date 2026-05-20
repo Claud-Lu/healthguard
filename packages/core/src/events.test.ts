@@ -52,6 +52,33 @@ describe('event schema', () => {
       })
     ).toThrow(/appKey/);
   });
+
+  it('accepts a minimal Flutter native error for integration testing', () => {
+    const parsed = parseEventBatch({
+      appKey: 'driver-flutter',
+      events: [
+        {
+          eventId: 'evt_flutter_1',
+          appKey: 'driver-flutter',
+          platform: 'flutter',
+          type: 'error',
+          timestamp: 1710000000000,
+          sessionId: 'session-1',
+          anonymousId: 'device-1',
+          sdkVersion: '0.1.0-flutter-test',
+          errorType: 'native',
+          message: 'FlutterError',
+          fingerprint: 'flutter:FlutterError',
+          breadcrumbs: []
+        }
+      ]
+    });
+
+    expect(parsed.events[0]).toMatchObject({
+      platform: 'flutter',
+      errorType: 'native'
+    });
+  });
 });
 
 describe('privacy helpers', () => {

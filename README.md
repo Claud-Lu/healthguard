@@ -1,5 +1,7 @@
 # HealthGuard
 
+[English](./README.md) | [中文](./README.zh-CN.md)
+
 HealthGuard is an open-source, self-hosted application health monitoring system for H5 and mini program applications.
 
 The long-term vision is to cover H5, mini programs, Android, and iOS. The first version is intentionally smaller: a personal-developer-friendly MVP that can collect frontend errors, performance metrics, request failures, and breadcrumbs, then show them in a private dashboard.
@@ -46,10 +48,16 @@ The first useful milestone is a complete local loop:
 ```text
 healthguard/
 ├── apps/
+│   ├── dashboard/
 │   └── server/
+├── examples/
+│   └── vue3-demo/
 ├── packages/
 │   ├── core/
+│   ├── sdk-miniprogram/
 │   └── sdk-web/
+├── scripts/
+│   └── dev-local.sh
 ├── docs/
 │   ├── HealthGuard_MVP_技术方案.md
 │   ├── roadmap.md
@@ -64,9 +72,6 @@ healthguard/
 Planned folders for the next milestones:
 
 ```text
-apps/dashboard/
-packages/sdk-miniprogram/
-examples/vue3-demo/
 examples/wechat-mini-demo/
 deploy/
 ```
@@ -76,8 +81,11 @@ deploy/
 The first implementation pass initializes a yarn workspace monorepo and starts the H5 loop with testable building blocks:
 
 - `packages/core`: shared event schemas, batch validation, URL sanitization, and issue fingerprint helpers.
-- `packages/sdk-web`: minimal browser SDK client that queues error and HTTP events, sanitizes URLs, and flushes batches to a collector.
-- `apps/server`: Fastify collector with `/health`, `POST /api/events/batch`, and `GET /api/issues`, backed by an in-memory store for the first local loop.
+- `packages/sdk-web`: browser SDK client that queues errors, resource failures, performance metrics, fetch/XHR events, sanitizes URLs, retries failed flushes, and sends batches to a collector.
+- `packages/sdk-miniprogram`: WeChat mini program SDK client for `wx.onError`, `wx.onUnhandledRejection`, `wx.request`, and App/Page lifecycle breadcrumbs.
+- `apps/server`: Fastify collector with app management, overview, event ingestion, issue aggregation, issue detail, and in-memory storage for the first local loop.
+- `examples/vue3-demo`: H5 demo that triggers JavaScript errors, promise rejections, and failed requests through the SDK.
+- `apps/dashboard`: Vue dashboard for app keys, overview metrics, issue lists, issue details, and SDK integration guidance.
 
 Useful commands:
 
@@ -86,5 +94,12 @@ yarn install
 yarn test
 yarn type-check
 yarn lint
+yarn dev:local
 yarn dev:server
 ```
+
+Local MVP URLs:
+
+- Collector: `http://127.0.0.1:3100/health`
+- H5 demo: `http://127.0.0.1:5174/`
+- Dashboard: `http://127.0.0.1:5175/`

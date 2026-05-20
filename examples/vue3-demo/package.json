@@ -1,0 +1,14 @@
+{
+  "name": "@healthguard/vue3-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite --host 0.0.0.0 --port 5174"
+  },
+  "dependencies": {
+    "@healthguard/sdk-web": "0.1.0"
+  },
+  "devDependencies": {}
+}
