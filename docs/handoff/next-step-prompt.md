@@ -9,6 +9,8 @@
 - README.md
 - docs/HealthGuard_MVP_技术方案.md
 - docs/roadmap.md
+- docs/operator-guide.md
+- docs/ai-cli-operations.md
 - docs/decisions/业务与交互变更记录.md
 
 项目当前已完成 MVP 本地闭环雏形：已初始化 yarn workspace monorepo，并新增 `packages/core`、`packages/sdk-web`、`packages/sdk-miniprogram`、`apps/server`、`apps/dashboard`、`examples/vue3-demo`。
@@ -19,6 +21,8 @@
 - 默认使用 yarn。
 - Dashboard 优先 Vue 3 + Vite + Element Plus + Pinia + Axios + ECharts。
 - 所有需求、接口、交互和架构决策都同步写入 docs/decisions/业务与交互变更记录.md。
+- 登录、注册、项目创建、app key、SDK 接入、部署、持久化或验证流程变化时，必须同时更新 `docs/operator-guide.md` 和 `docs/ai-cli-operations.md`。
+- 开源仓库不得提交公司项目名、公司域名、IP、个人路径、密钥、业务账号或业务专用 app key；这些真实值只放到消费方应用环境、私有部署配置或知识库。
 - 写功能前先补测试或最小验证脚本。
 - 每一步完成后必须运行对应验证命令，不要只口头说完成。
 

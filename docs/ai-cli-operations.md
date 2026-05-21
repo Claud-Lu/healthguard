@@ -1,0 +1,126 @@
+# HealthGuard AI CLI Operations
+
+This runbook is for AI coding agents that operate this repository from a CLI.
+
+## Mandatory Context
+
+Read these files before changing behavior:
+
+```bash
+sed -n '1,220p' README.md
+sed -n '1,220p' README.zh-CN.md
+sed -n '1,260p' docs/operator-guide.md
+sed -n '1,260p' docs/ai-cli-operations.md
+sed -n '1,260p' docs/decisions/业务与交互变更记录.md
+```
+
+## Documentation Sync Rule
+
+Operational documentation has two audiences:
+
+- `docs/operator-guide.md`: human-facing guide.
+- `docs/ai-cli-operations.md`: AI CLI runbook.
+
+If a change modifies login, registration, project creation, app key usage, SDK integration, deployment, persistence, verification, or troubleshooting, update both files in the same change. Also update `README.md`, `README.zh-CN.md`, and `docs/decisions/业务与交互变更记录.md` when the behavior is user-visible.
+
+## Open-Source Boundary
+
+Never commit private deployment details to this repository:
+
+- company project names
+- private domains
+- public or internal IP addresses
+- personal filesystem paths
+- accounts, tokens, passwords, API keys
+- business-specific app keys
+
+Use placeholders in this repository. Put real values in the consuming application environment, private deployment scripts, or private knowledge base.
+
+## Local Verification
+
+Run the full verification set before claiming the change is complete:
+
+```bash
+yarn test
+yarn type-check
+yarn lint
+yarn build
+```
+
+For targeted auth or localization changes, run these first:
+
+```bash
+yarn vitest run apps/server/src/app.test.ts
+yarn vitest run apps/dashboard/src/i18n.test.ts
+```
+
+## Local Smoke Test
+
+Start the collector and dashboard:
+
+```bash
+PORT=3100 HOST=127.0.0.1 yarn dev:server
+VITE_HEALTHGUARD_API_BASE=http://127.0.0.1:3100/api yarn dev:dashboard --host 127.0.0.1 --port 5175
+```
+
+Then verify:
+
+1. Dashboard opens at `http://127.0.0.1:5175/`.
+2. China-area time zones default to Chinese; other time zones default to English.
+3. Register with a valid email and a password of at least 8 characters.
+4. Create a project.
+5. Confirm the generated app key has the selected type prefix.
+6. Trigger a test event from a demo or consuming app.
+7. Refresh the dashboard and confirm the event appears.
+
+## Private Deployment Pattern
+
+Build the dashboard with deployment-specific environment variables outside tracked source files:
+
+```bash
+VITE_BASE_PATH=/healthguard/ \
+VITE_HEALTHGUARD_API_BASE=/healthguard-api \
+VITE_HEALTHGUARD_DEFAULT_APP_KEY=demo-web \
+yarn workspace @healthguard/dashboard build
+```
+
+Build the collector:
+
+```bash
+yarn workspace @healthguard/server build
+```
+
+Deployment paths, hostnames, SSH aliases, and real app keys are environment-specific. Do not add them to this repository.
+
+## Integration Pattern For A Consuming Web App
+
+Use environment variables in the consuming app:
+
+```env
+VITE_HEALTHGUARD_ENDPOINT=<COLLECTOR_ENDPOINT>/events/batch
+VITE_HEALTHGUARD_APP_KEY=<PROJECT_APP_KEY>
+```
+
+Initialize the SDK:
+
+```ts
+import { createHealthGuardClient } from '@healthguard/sdk-web';
+
+createHealthGuardClient({
+  appKey: import.meta.env.VITE_HEALTHGUARD_APP_KEY,
+  endpoint: import.meta.env.VITE_HEALTHGUARD_ENDPOINT,
+  environment: import.meta.env.MODE === 'production' ? 'production' : 'test',
+  release: import.meta.env.VITE_APP_VERSION,
+  autoCapture: true
+});
+```
+
+If the consuming app is served over HTTPS, use an HTTPS collector endpoint or an HTTPS same-origin proxy. Browsers block HTTP collector calls from HTTPS pages as mixed content.
+
+## Troubleshooting
+
+- `Request failed: 400` during auth: read the response `code`; the dashboard should map it to a localized message.
+- Project list is empty: the logged-in user has not created a project yet, or the in-memory collector restarted.
+- No events appear: confirm endpoint, app key, browser mixed-content rules, and network requests to `/events/batch`.
+- Events disappeared after restart: current MVP storage is in-memory.
+- Dashboard language looks wrong: clear `healthguard_locale` from browser local storage or switch language manually.

@@ -13,7 +13,7 @@ The long-term vision is to cover H5, mini programs, Android, and iOS. The first 
 - Collector service: receives SDK events, validates schema, writes events, and aggregates issues.
 - Dashboard: local registration and login, per-user project list, app type specific app keys, overview, issue list, issue detail, SDK integration guide, and English / Chinese UI.
 - Deployment: Docker Compose for a minimal private deployment.
-- Documentation: event protocol, roadmap, decision log, and handoff prompt for AI-assisted continuation.
+- Documentation: event protocol, roadmap, decision log, human operator guide, AI CLI runbook, and handoff prompt for AI-assisted continuation.
 
 ## Deferred
 
@@ -63,6 +63,8 @@ healthguard/
 │   ├── roadmap.md
 │   ├── decisions/
 │   │   └── 业务与交互变更记录.md
+│   ├── operator-guide.md
+│   ├── ai-cli-operations.md
 │   └── handoff/
 │       └── next-step-prompt.md
 ├── LICENSE
@@ -95,6 +97,12 @@ The first implementation pass initializes a yarn workspace monorepo and starts t
 - Future dashboard and documentation changes must keep English and Chinese copy synchronized.
 
 The current MVP uses in-memory users, sessions, apps, events, and issues. This keeps the first local loop lightweight, but production private deployments should replace metadata and event storage with a persistent database before relying on it for long-running data retention.
+
+## Operation Guides
+
+- Human operators should use `docs/operator-guide.md`.
+- AI CLI agents should use `docs/ai-cli-operations.md`.
+- Any operational change must update both files together.
 
 Useful commands:
 

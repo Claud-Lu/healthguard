@@ -13,7 +13,7 @@ HealthGuard 是一款开源、可自托管的应用健康监控系统，面向 H
 - Collector 服务：接收 SDK 上报事件、校验数据格式、写入事件并聚合问题。
 - Dashboard：本地注册与登录、按用户隔离的项目列表、按应用类型生成不同 app key、总览、问题列表、问题详情、SDK 接入指引、中英文界面。
 - 部署：Docker Compose 最小化私有部署。
-- 文档：事件协议、路线图、决策日志、以及供 AI 辅助续写的 handoff 提示词。
+- 文档：事件协议、路线图、决策日志、给人看的操作文档、给 AI CLI 执行的操作文档、以及供 AI 辅助续写的 handoff 提示词。
 
 ## 延后计划
 
@@ -63,6 +63,8 @@ healthguard/
 │   ├── roadmap.md
 │   ├── decisions/
 │   │   └── 业务与交互变更记录.md
+│   ├── operator-guide.md
+│   ├── ai-cli-operations.md
 │   └── handoff/
 │       └── next-step-prompt.md
 ├── LICENSE
@@ -95,6 +97,12 @@ deploy/
 - 后续 Dashboard 和文档改动必须同步维护英文与中文文案，避免只更新单一语言。
 
 当前 MVP 的用户、会话、项目、事件和 issue 都使用内存存储，方便快速打通本地闭环。正式私有部署如果需要长期保存数据，后续应替换为持久化数据库。
+
+## 操作文档
+
+- 人工操作优先看 `docs/operator-guide.md`。
+- AI CLI / agent 自动操作优先看 `docs/ai-cli-operations.md`。
+- 只要登录、注册、项目创建、app key、SDK 接入、部署、持久化或验证流程发生变化，必须同步修改这两份文档。
 
 常用命令：
 
