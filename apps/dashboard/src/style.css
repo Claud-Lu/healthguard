@@ -83,6 +83,13 @@ select {
   gap: 8px;
 }
 
+.help {
+  color: #7b8da8;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: -6px 0 4px;
+}
+
 .language-row {
   align-items: center;
   display: flex;

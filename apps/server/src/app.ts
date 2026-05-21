@@ -62,12 +62,12 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
   app.post<{ Body: { email?: string; password?: string } }>('/api/auth/register', async (request, reply) => {
     const credentials = normalizeCredentials(request.body);
 
-    if (!credentials) {
-      return reply.status(400).send({ message: 'Valid email and password are required' });
+    if (!credentials.valid) {
+      return reply.status(400).send(authError(credentials.code));
     }
 
     if (store.users.some((user) => user.email === credentials.email)) {
-      return reply.status(409).send({ message: 'Email already registered' });
+      return reply.status(409).send(authError('EMAIL_ALREADY_REGISTERED'));
     }
 
     const user: UserRecord = {
@@ -87,14 +87,14 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
   app.post<{ Body: { email?: string; password?: string } }>('/api/auth/login', async (request, reply) => {
     const credentials = normalizeCredentials(request.body);
 
-    if (!credentials) {
-      return reply.status(400).send({ message: 'Valid email and password are required' });
+    if (!credentials.valid) {
+      return reply.status(400).send(authError(credentials.code));
     }
 
     const user = store.users.find((item) => item.email === credentials.email);
 
     if (!user || !verifyPassword(credentials.password, user.passwordHash)) {
-      return reply.status(401).send({ message: 'Invalid email or password' });
+      return reply.status(401).send(authError('INVALID_CREDENTIALS'));
     }
 
     const token = createId('session');
@@ -270,15 +270,36 @@ function createId(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
 }
 
-function normalizeCredentials(body: { email?: string; password?: string } | undefined): { email: string; password: string } | null {
+type AuthErrorCode = 'INVALID_EMAIL' | 'PASSWORD_TOO_SHORT' | 'EMAIL_ALREADY_REGISTERED' | 'INVALID_CREDENTIALS';
+
+type CredentialsResult =
+  | { valid: true; email: string; password: string }
+  | { valid: false; code: Extract<AuthErrorCode, 'INVALID_EMAIL' | 'PASSWORD_TOO_SHORT'>; email: string };
+
+function normalizeCredentials(body: { email?: string; password?: string } | undefined): CredentialsResult {
   const email = body?.email?.trim().toLowerCase();
   const password = body?.password;
 
-  if (!email || !email.includes('@') || !password || password.length < 8) {
-    return null;
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { valid: false, code: 'INVALID_EMAIL', email: email ?? '' };
   }
 
-  return { email, password };
+  if (!password || password.length < 8) {
+    return { valid: false, code: 'PASSWORD_TOO_SHORT', email };
+  }
+
+  return { valid: true, email, password };
+}
+
+function authError(code: AuthErrorCode): { code: AuthErrorCode; message: string } {
+  const messages: Record<AuthErrorCode, string> = {
+    INVALID_EMAIL: 'Please enter a valid email address.',
+    PASSWORD_TOO_SHORT: 'Password must be at least 8 characters.',
+    EMAIL_ALREADY_REGISTERED: 'Email is already registered.',
+    INVALID_CREDENTIALS: 'Email or password is incorrect.'
+  };
+
+  return { code, message: messages[code] };
 }
 
 function hashPassword(password: string): string {

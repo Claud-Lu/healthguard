@@ -114,6 +114,54 @@ describe('collector api', () => {
     await app.close();
   });
 
+  it('returns stable auth error codes for friendly dashboard messages', async () => {
+    const app = createServerApp();
+
+    const invalidEmail = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'not-an-email', password: 'secret123' }
+    });
+    const shortPassword = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: '1234567' }
+    });
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const duplicate = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const badLogin = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'owner@example.com', password: 'wrong-pass' }
+    });
+
+    expect(invalidEmail.statusCode).toBe(400);
+    expect(invalidEmail.json()).toMatchObject({
+      code: 'INVALID_EMAIL',
+      message: 'Please enter a valid email address.'
+    });
+    expect(shortPassword.statusCode).toBe(400);
+    expect(shortPassword.json()).toMatchObject({
+      code: 'PASSWORD_TOO_SHORT',
+      message: 'Password must be at least 8 characters.'
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json().code).toBe('EMAIL_ALREADY_REGISTERED');
+    expect(badLogin.statusCode).toBe(401);
+    expect(badLogin.json().code).toBe('INVALID_CREDENTIALS');
+
+    await app.close();
+  });
+
   it('creates apps and lists app keys for SDK integration', async () => {
     const app = createServerApp();
     const register = await app.inject({

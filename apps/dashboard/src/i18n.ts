@@ -15,17 +15,23 @@ export type MessageKey =
   | 'failedRequests'
   | 'groups'
   | 'inspectSubtitle'
+  | 'invalidCredentials'
+  | 'invalidEmail'
   | 'issueDetail'
   | 'issues'
   | 'language'
   | 'login'
   | 'logout'
+  | 'networkError'
   | 'noIssueSelected'
   | 'password'
+  | 'passwordHelp'
+  | 'passwordTooShort'
   | 'projectList'
   | 'refresh'
   | 'register'
   | 'sdkIntegration'
+  | 'emailAlreadyRegistered'
   | 'switchToLogin'
   | 'switchToRegister';
 
@@ -47,17 +53,23 @@ const messages: Record<Locale, Messages> = {
     failedRequests: 'Failed Requests',
     groups: 'groups',
     inspectSubtitle: 'Inspect captured errors, failed requests, and SDK setup for the selected app.',
+    invalidCredentials: 'Email or password is incorrect.',
+    invalidEmail: 'Please enter a valid email address.',
     issueDetail: 'Issue Detail',
     issues: 'Issues',
     language: 'Language',
     login: 'Login',
     logout: 'Logout',
+    networkError: 'Request failed. Please try again later.',
     noIssueSelected: 'Select an issue to inspect stack, breadcrumbs, and recent events.',
     password: 'Password',
+    passwordHelp: 'At least 8 characters.',
+    passwordTooShort: 'Password must be at least 8 characters.',
     projectList: 'Projects',
     refresh: 'Refresh',
     register: 'Register',
     sdkIntegration: 'SDK Integration',
+    emailAlreadyRegistered: 'This email is already registered.',
     switchToLogin: 'Have an account? Login',
     switchToRegister: 'Need an account? Register'
   },
@@ -76,17 +88,23 @@ const messages: Record<Locale, Messages> = {
     failedRequests: '失败请求',
     groups: '组',
     inspectSubtitle: '查看所选项目采集到的错误、失败请求和 SDK 接入信息。',
+    invalidCredentials: '邮箱或密码不正确。',
+    invalidEmail: '请输入正确的邮箱地址。',
     issueDetail: 'Issue 详情',
     issues: 'Issues',
     language: '语言',
     login: '登录',
     logout: '退出登录',
+    networkError: '请求失败，请稍后重试。',
     noIssueSelected: '选择一个 Issue 后查看堆栈、面包屑和最近事件。',
     password: '密码',
+    passwordHelp: '至少 8 位。',
+    passwordTooShort: '密码至少需要 8 位。',
     projectList: '项目列表',
     refresh: '刷新',
     register: '注册',
     sdkIntegration: 'SDK 接入',
+    emailAlreadyRegistered: '该邮箱已注册，请直接登录。',
     switchToLogin: '已有账号？去登录',
     switchToRegister: '没有账号？去注册'
   }
@@ -100,4 +118,17 @@ export function defaultLocaleFromTimeZone(timeZone?: string): Locale {
   return ['Asia/Shanghai', 'Asia/Chongqing', 'Asia/Hong_Kong', 'Asia/Macau', 'Asia/Taipei'].includes(timeZone ?? '')
     ? 'zh-CN'
     : 'en-US';
+}
+
+export function messageForErrorCode(code: string | undefined, locale: Locale): string {
+  const localizedMessages = getMessages(locale);
+  const errorKeys: Record<string, MessageKey> = {
+    INVALID_EMAIL: 'invalidEmail',
+    PASSWORD_TOO_SHORT: 'passwordTooShort',
+    EMAIL_ALREADY_REGISTERED: 'emailAlreadyRegistered',
+    INVALID_CREDENTIALS: 'invalidCredentials'
+  };
+  const key = code ? errorKeys[code] : undefined;
+
+  return key ? localizedMessages[key] : localizedMessages.networkError;
 }

@@ -1,5 +1,5 @@
 import { computed, createApp, h, onMounted, ref } from 'vue';
-import { defaultLocaleFromTimeZone, getMessages, type Locale } from './i18n';
+import { defaultLocaleFromTimeZone, getMessages, messageForErrorCode, type Locale } from './i18n';
 import './style.css';
 
 type AppType = 'web' | 'wechat-miniprogram' | 'alipay-miniprogram' | 'flutter' | 'other';
@@ -49,6 +49,15 @@ interface IssueDetailResponse {
   events: Array<Record<string, unknown>>;
 }
 
+class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string
+  ) {
+    super(message);
+  }
+}
+
 async function requestJson<T>(url: string, init?: RequestInit, token?: string): Promise<T> {
   const response = await fetch(url, {
     ...init,
@@ -60,7 +69,8 @@ async function requestJson<T>(url: string, init?: RequestInit, token?: string): 
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    const payload = await readErrorPayload(response);
+    throw new ApiError(payload.message || `Request failed: ${response.status}`, payload.code);
   }
 
   return response.json() as Promise<T>;
@@ -139,6 +149,12 @@ const App = {
       errorMessage.value = '';
 
       try {
+        const validationError = validateAuthForm(email.value, password.value, locale.value);
+        if (validationError) {
+          errorMessage.value = validationError;
+          return;
+        }
+
         const response = await requestJson<AuthResponse>(apiUrl(`/auth/${authMode.value}`), {
           method: 'POST',
           body: JSON.stringify({ email: email.value, password: password.value })
@@ -149,7 +165,7 @@ const App = {
         localStorage.setItem('healthguard_token', response.token);
         await refresh();
       } catch (error) {
-        errorMessage.value = error instanceof Error ? error.message : 'Authentication failed';
+        errorMessage.value = friendlyErrorMessage(error, locale.value);
       } finally {
         loading.value = false;
       }
@@ -188,7 +204,7 @@ const App = {
           selectedIssue.value = null;
         }
       } catch (error) {
-        errorMessage.value = error instanceof Error ? error.message : 'Failed to load dashboard data';
+        errorMessage.value = friendlyErrorMessage(error, locale.value);
       } finally {
         loading.value = false;
       }
@@ -256,6 +272,7 @@ const App = {
                 }
               })
             ]),
+            h('p', { class: 'help' }, t.passwordHelp),
             h('button', { type: 'button', class: 'wide', onClick: submitAuth, disabled: loading.value }, authMode.value === 'login' ? t.login : t.register),
             h(
               'button',
@@ -420,6 +437,41 @@ function metricCard(label: string, value: number) {
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString();
+}
+
+async function readErrorPayload(response: Response): Promise<{ code?: string; message?: string }> {
+  try {
+    const payload = (await response.json()) as { code?: unknown; message?: unknown };
+
+    return {
+      code: typeof payload.code === 'string' ? payload.code : undefined,
+      message: typeof payload.message === 'string' ? payload.message : undefined
+    };
+  } catch {
+    return {};
+  }
+}
+
+function validateAuthForm(email: string, password: string, locale: Locale): string | null {
+  const trimmedEmail = email.trim();
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    return messageForErrorCode('INVALID_EMAIL', locale);
+  }
+
+  if (password.length < 8) {
+    return messageForErrorCode('PASSWORD_TOO_SHORT', locale);
+  }
+
+  return null;
+}
+
+function friendlyErrorMessage(error: unknown, locale: Locale): string {
+  if (error instanceof ApiError) {
+    return messageForErrorCode(error.code, locale);
+  }
+
+  return messageForErrorCode(undefined, locale);
 }
 
 createApp(App).mount('#app');
