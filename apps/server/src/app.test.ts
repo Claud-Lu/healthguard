@@ -2,27 +2,149 @@ import { describe, expect, it } from 'vitest';
 import { createServerApp } from './app';
 
 describe('collector api', () => {
+  it('registers a local user, returns a session token, and exposes the profile', async () => {
+    const app = createServerApp();
+
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const token = register.json().token;
+    const me = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    expect(register.statusCode).toBe(201);
+    expect(token).toMatch(/^session_/);
+    expect(register.json().user).toMatchObject({
+      email: 'owner@example.com'
+    });
+    expect(register.json().user.passwordHash).toBeUndefined();
+    expect(me.statusCode).toBe(200);
+    expect(me.json().user).toMatchObject({
+      email: 'owner@example.com'
+    });
+
+    await app.close();
+  });
+
+  it('requires login for app management and isolates app lists by user', async () => {
+    const app = createServerApp();
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'first@example.com', password: 'secret123' }
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'second@example.com', password: 'secret123' }
+    });
+
+    const unauthorized = await app.inject({
+      method: 'GET',
+      url: '/api/apps'
+    });
+    const create = await app.inject({
+      method: 'POST',
+      url: '/api/apps',
+      headers: { authorization: `Bearer ${first.json().token}` },
+      payload: { name: 'Admin Console', type: 'web' }
+    });
+    const firstList = await app.inject({
+      method: 'GET',
+      url: '/api/apps',
+      headers: { authorization: `Bearer ${first.json().token}` }
+    });
+    const secondList = await app.inject({
+      method: 'GET',
+      url: '/api/apps',
+      headers: { authorization: `Bearer ${second.json().token}` }
+    });
+
+    expect(unauthorized.statusCode).toBe(401);
+    expect(create.statusCode).toBe(201);
+    expect(create.json().app).toMatchObject({
+      name: 'Admin Console',
+      type: 'web'
+    });
+    expect(create.json().app.appKey).toMatch(/^web_/);
+    expect(firstList.json().apps).toHaveLength(1);
+    expect(firstList.json().apps[0]).toMatchObject({
+      name: 'Admin Console',
+      type: 'web'
+    });
+    expect(secondList.json().apps).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it('logs in with a registered account and rejects duplicate registrations', async () => {
+    const app = createServerApp();
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const duplicate = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const badLogin = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'owner@example.com', password: 'wrong-pass' }
+    });
+
+    expect(duplicate.statusCode).toBe(409);
+    expect(login.statusCode).toBe(200);
+    expect(login.json().token).toMatch(/^session_/);
+    expect(badLogin.statusCode).toBe(401);
+
+    await app.close();
+  });
+
   it('creates apps and lists app keys for SDK integration', async () => {
     const app = createServerApp();
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'demo@example.com', password: 'secret123' }
+    });
+    const headers = { authorization: `Bearer ${register.json().token}` };
 
     const create = await app.inject({
       method: 'POST',
       url: '/api/apps',
-      payload: { name: 'Demo Web' }
+      headers,
+      payload: { name: 'Demo Web', type: 'web' }
     });
     const list = await app.inject({
       method: 'GET',
-      url: '/api/apps'
+      url: '/api/apps',
+      headers
     });
 
     expect(create.statusCode).toBe(201);
     expect(create.json().app).toMatchObject({
-      name: 'Demo Web'
+      name: 'Demo Web',
+      type: 'web'
     });
-    expect(create.json().app.appKey).toMatch(/^app_/);
+    expect(create.json().app.appKey).toMatch(/^web_/);
     expect(list.json().apps).toMatchObject([
       {
         name: 'Demo Web',
+        type: 'web',
         appKey: create.json().app.appKey
       }
     ]);

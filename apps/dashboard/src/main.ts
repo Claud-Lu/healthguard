@@ -1,11 +1,26 @@
 import { computed, createApp, h, onMounted, ref } from 'vue';
+import { defaultLocaleFromTimeZone, getMessages, type Locale } from './i18n';
 import './style.css';
+
+type AppType = 'web' | 'wechat-miniprogram' | 'alipay-miniprogram' | 'flutter' | 'other';
 
 interface AppRecord {
   id: string;
   name: string;
   appKey: string;
+  type: AppType;
   createdAt: number;
+}
+
+interface UserRecord {
+  id: string;
+  email: string;
+  createdAt: number;
+}
+
+interface AuthResponse {
+  token: string;
+  user: UserRecord;
 }
 
 interface OverviewResponse {
@@ -34,12 +49,14 @@ interface IssueDetailResponse {
   events: Array<Record<string, unknown>>;
 }
 
-async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+async function requestJson<T>(url: string, init?: RequestInit, token?: string): Promise<T> {
   const response = await fetch(url, {
+    ...init,
     headers: {
-      'content-type': 'application/json'
-    },
-    ...init
+      'content-type': 'application/json',
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...init?.headers
+    }
   });
 
   if (!response.ok) {
@@ -51,13 +68,30 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 const apiBase = (import.meta.env.VITE_HEALTHGUARD_API_BASE || '/api').replace(/\/$/, '');
 const defaultAppKey = import.meta.env.VITE_HEALTHGUARD_DEFAULT_APP_KEY || 'demo-web';
+const appTypes: AppType[] = ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'other'];
 
 function apiUrl(path: string): string {
   return `${apiBase}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+function initialLocale(): Locale {
+  const saved = localStorage.getItem('healthguard_locale');
+  if (saved === 'en-US' || saved === 'zh-CN') {
+    return saved;
+  }
+
+  return defaultLocaleFromTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+}
+
 const App = {
   setup() {
+    const locale = ref<Locale>(initialLocale());
+    const messages = computed(() => getMessages(locale.value));
+    const token = ref(localStorage.getItem('healthguard_token') ?? '');
+    const user = ref<UserRecord | null>(null);
+    const authMode = ref<'login' | 'register'>('login');
+    const email = ref('');
+    const password = ref('');
     const apps = ref<AppRecord[]>([]);
     const selectedAppKey = ref(defaultAppKey);
     const overview = ref<OverviewResponse['totals']>({
@@ -70,6 +104,7 @@ const App = {
     const issues = ref<IssueSummary[]>([]);
     const selectedIssue = ref<IssueDetailResponse | null>(null);
     const appName = ref('Demo Web');
+    const appType = ref<AppType>('web');
     const errorMessage = ref('');
     const loading = ref(false);
 
@@ -81,16 +116,68 @@ const App = {
 });`
     );
 
+    function setLocale(nextLocale: Locale): void {
+      locale.value = nextLocale;
+      localStorage.setItem('healthguard_locale', nextLocale);
+    }
+
+    async function loadProfile(): Promise<void> {
+      if (!token.value) {
+        return;
+      }
+
+      try {
+        const response = await requestJson<{ user: UserRecord }>(apiUrl('/auth/me'), undefined, token.value);
+        user.value = response.user;
+      } catch {
+        logout();
+      }
+    }
+
+    async function submitAuth(): Promise<void> {
+      loading.value = true;
+      errorMessage.value = '';
+
+      try {
+        const response = await requestJson<AuthResponse>(apiUrl(`/auth/${authMode.value}`), {
+          method: 'POST',
+          body: JSON.stringify({ email: email.value, password: password.value })
+        });
+
+        token.value = response.token;
+        user.value = response.user;
+        localStorage.setItem('healthguard_token', response.token);
+        await refresh();
+      } catch (error) {
+        errorMessage.value = error instanceof Error ? error.message : 'Authentication failed';
+      } finally {
+        loading.value = false;
+      }
+    }
+
+    function logout(): void {
+      token.value = '';
+      user.value = null;
+      apps.value = [];
+      issues.value = [];
+      selectedIssue.value = null;
+      localStorage.removeItem('healthguard_token');
+    }
+
     async function refresh(): Promise<void> {
+      if (!token.value) {
+        return;
+      }
+
       loading.value = true;
       errorMessage.value = '';
 
       try {
         const query = encodeURIComponent(selectedAppKey.value);
         const [appResponse, overviewResponse, issueResponse] = await Promise.all([
-          requestJson<{ apps: AppRecord[] }>(apiUrl('/apps')),
-          requestJson<OverviewResponse>(apiUrl(`/overview?appKey=${query}`)),
-          requestJson<{ issues: IssueSummary[] }>(apiUrl(`/issues?appKey=${query}`))
+          requestJson<{ apps: AppRecord[] }>(apiUrl('/apps'), undefined, token.value),
+          requestJson<OverviewResponse>(apiUrl(`/overview?appKey=${query}`), undefined, token.value),
+          requestJson<{ issues: IssueSummary[] }>(apiUrl(`/issues?appKey=${query}`), undefined, token.value)
         ]);
 
         apps.value = appResponse.apps;
@@ -109,14 +196,18 @@ const App = {
 
     async function createAppRecord(): Promise<void> {
       const name = appName.value.trim();
-      if (!name) {
+      if (!name || !token.value) {
         return;
       }
 
-      const response = await requestJson<{ app: AppRecord }>(apiUrl('/apps'), {
-        method: 'POST',
-        body: JSON.stringify({ name })
-      });
+      const response = await requestJson<{ app: AppRecord }>(
+        apiUrl('/apps'),
+        {
+          method: 'POST',
+          body: JSON.stringify({ name, type: appType.value })
+        },
+        token.value
+      );
 
       selectedAppKey.value = response.app.appKey;
       appName.value = '';
@@ -124,19 +215,74 @@ const App = {
     }
 
     async function openIssue(issue: IssueSummary): Promise<void> {
-      selectedIssue.value = await requestJson<IssueDetailResponse>(apiUrl(`/issues/${encodeURIComponent(issue.id)}`));
+      selectedIssue.value = await requestJson<IssueDetailResponse>(apiUrl(`/issues/${encodeURIComponent(issue.id)}`), undefined, token.value);
     }
 
     onMounted(() => {
-      void refresh();
+      void loadProfile().then(refresh);
     });
 
-    return () =>
-      h('main', { class: 'layout' }, [
+    return () => {
+      const t = messages.value;
+
+      if (!token.value || !user.value) {
+        return h('main', { class: 'auth-page' }, [
+          h('section', { class: 'auth-card' }, [
+            h('div', { class: 'brand' }, [h('strong', 'HealthGuard'), h('span', authMode.value === 'login' ? t.login : t.register)]),
+            h('div', { class: 'language-row' }, [
+              h('span', t.language),
+              languageButton('English', 'en-US', locale.value, setLocale),
+              languageButton('中文', 'zh-CN', locale.value, setLocale)
+            ]),
+            h('label', { class: 'field' }, [
+              h('span', t.email),
+              h('input', {
+                value: email.value,
+                type: 'email',
+                autocomplete: 'email',
+                onInput: (event: Event) => {
+                  email.value = (event.target as HTMLInputElement).value;
+                }
+              })
+            ]),
+            h('label', { class: 'field' }, [
+              h('span', t.password),
+              h('input', {
+                value: password.value,
+                type: 'password',
+                autocomplete: authMode.value === 'login' ? 'current-password' : 'new-password',
+                onInput: (event: Event) => {
+                  password.value = (event.target as HTMLInputElement).value;
+                }
+              })
+            ]),
+            h('button', { type: 'button', class: 'wide', onClick: submitAuth, disabled: loading.value }, authMode.value === 'login' ? t.login : t.register),
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'link-button',
+                onClick: () => {
+                  authMode.value = authMode.value === 'login' ? 'register' : 'login';
+                }
+              },
+              authMode.value === 'login' ? t.switchToRegister : t.switchToLogin
+            ),
+            errorMessage.value ? h('p', { class: 'error' }, errorMessage.value) : null
+          ])
+        ]);
+      }
+
+      return h('main', { class: 'layout' }, [
         h('aside', { class: 'sidebar' }, [
-          h('div', { class: 'brand' }, [h('strong', 'HealthGuard'), h('span', 'MVP Dashboard')]),
+          h('div', { class: 'brand' }, [h('strong', 'HealthGuard'), h('span', user.value.email)]),
+          h('div', { class: 'language-row' }, [
+            h('span', t.language),
+            languageButton('EN', 'en-US', locale.value, setLocale),
+            languageButton('中文', 'zh-CN', locale.value, setLocale)
+          ]),
           h('label', { class: 'field' }, [
-            h('span', 'Current App Key'),
+            h('span', t.currentAppKey),
             h('input', {
               value: selectedAppKey.value,
               onInput: (event: Event) => {
@@ -144,20 +290,35 @@ const App = {
               }
             })
           ]),
-          h('button', { type: 'button', class: 'wide', onClick: refresh, disabled: loading.value }, 'Refresh'),
+          h('button', { type: 'button', class: 'wide', onClick: refresh, disabled: loading.value }, t.refresh),
           h('div', { class: 'create-box' }, [
+            h('h2', t.createApp),
             h('label', { class: 'field' }, [
-              h('span', 'Create App'),
+              h('span', t.appName),
               h('input', {
                 value: appName.value,
-                placeholder: 'App name',
+                placeholder: t.appName,
                 onInput: (event: Event) => {
                   appName.value = (event.target as HTMLInputElement).value;
                 }
               })
             ]),
-            h('button', { type: 'button', class: 'wide secondary', onClick: createAppRecord }, 'Create')
+            h('label', { class: 'field' }, [
+              h('span', t.appType),
+              h(
+                'select',
+                {
+                  value: appType.value,
+                  onChange: (event: Event) => {
+                    appType.value = (event.target as HTMLSelectElement).value as AppType;
+                  }
+                },
+                appTypes.map((type) => h('option', { value: type }, type))
+              )
+            ]),
+            h('button', { type: 'button', class: 'wide secondary', onClick: createAppRecord }, t.create)
           ]),
+          h('div', { class: 'panel-title' }, t.projectList),
           h(
             'div',
             { class: 'app-list' },
@@ -172,28 +333,29 @@ const App = {
                     void refresh();
                   }
                 },
-                [h('span', item.name), h('small', item.appKey)]
+                [h('span', item.name), h('small', item.type), h('small', item.appKey)]
               )
             )
-          )
+          ),
+          h('button', { type: 'button', class: 'wide ghost', onClick: logout }, t.logout)
         ]),
         h('section', { class: 'content' }, [
           h('header', { class: 'topbar' }, [
-            h('div', [h('h1', 'Application Health'), h('p', 'Inspect captured errors, failed requests, and SDK setup for the selected app.')]),
+            h('div', [h('h1', t.applicationHealth), h('p', t.inspectSubtitle)]),
             errorMessage.value ? h('p', { class: 'error' }, errorMessage.value) : null
           ]),
           h('section', { class: 'metrics' }, [
-            metricCard('Events', overview.value.events),
-            metricCard('Errors', overview.value.errors),
-            metricCard('Failed Requests', overview.value.failedRequests),
-            metricCard('Affected Users', overview.value.affectedUsers),
-            metricCard('Issues', overview.value.issues)
+            metricCard(t.events, overview.value.events),
+            metricCard(t.errors, overview.value.errors),
+            metricCard(t.failedRequests, overview.value.failedRequests),
+            metricCard(t.affectedUsers, overview.value.affectedUsers),
+            metricCard(t.issues, overview.value.issues)
           ]),
           h('section', { class: 'grid' }, [
             h('div', { class: 'panel' }, [
-              h('div', { class: 'panel-head' }, [h('h2', 'Issues'), h('span', `${issues.value.length} groups`)]),
+              h('div', { class: 'panel-head' }, [h('h2', t.issues), h('span', `${issues.value.length} ${t.groups}`)]),
               issues.value.length === 0
-                ? h('p', { class: 'empty' }, 'No issues yet. Trigger an error from the Vue demo, then refresh.')
+                ? h('p', { class: 'empty' }, t.emptyIssues)
                 : h(
                     'div',
                     { class: 'issue-list' },
@@ -207,7 +369,7 @@ const App = {
                         },
                         [
                           h('strong', issue.message),
-                          h('span', `${issue.errorType} / ${issue.eventCount} events`),
+                          h('span', `${issue.errorType} / ${issue.eventCount} ${t.events}`),
                           h('small', issue.fingerprint)
                         ]
                       )
@@ -215,11 +377,11 @@ const App = {
                   )
             ]),
             h('div', { class: 'panel detail' }, [
-              h('div', { class: 'panel-head' }, [h('h2', 'Issue Detail'), selectedIssue.value ? h('span', selectedIssue.value.issue.id) : null]),
+              h('div', { class: 'panel-head' }, [h('h2', t.issueDetail), selectedIssue.value ? h('span', selectedIssue.value.issue.id) : null]),
               selectedIssue.value
                 ? h('div', { class: 'detail-body' }, [
                     h('h3', selectedIssue.value.issue.message),
-                    h('p', `${selectedIssue.value.issue.eventCount} events since ${formatTime(selectedIssue.value.issue.firstSeenAt)}`),
+                    h('p', `${selectedIssue.value.issue.eventCount} ${t.events} since ${formatTime(selectedIssue.value.issue.firstSeenAt)}`),
                     h(
                       'pre',
                       selectedIssue.value.events
@@ -227,17 +389,30 @@ const App = {
                         .join('\n\n')
                     )
                   ])
-                : h('p', { class: 'empty' }, 'Select an issue to inspect stack, breadcrumbs, and recent events.')
+                : h('p', { class: 'empty' }, t.noIssueSelected)
             ])
           ]),
           h('section', { class: 'panel guide' }, [
-            h('div', { class: 'panel-head' }, [h('h2', 'SDK Integration'), h('span', selectedAppKey.value)]),
+            h('div', { class: 'panel-head' }, [h('h2', t.sdkIntegration), h('span', selectedAppKey.value)]),
             h('pre', sdkSnippet.value)
           ])
         ])
       ]);
+    };
   }
 };
+
+function languageButton(label: string, value: Locale, current: Locale, onClick: (locale: Locale) => void) {
+  return h(
+    'button',
+    {
+      type: 'button',
+      class: current === value ? 'language-button active' : 'language-button',
+      onClick: () => onClick(value)
+    },
+    label
+  );
+}
 
 function metricCard(label: string, value: number) {
   return h('article', { class: 'metric' }, [h('span', label), h('strong', value.toLocaleString())]);

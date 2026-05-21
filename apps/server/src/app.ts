@@ -1,11 +1,23 @@
 import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { parseEventBatch, type ErrorEvent, type EventBatch, type HealthGuardEvent } from '@healthguard/core';
+
+export type AppType = 'web' | 'wechat-miniprogram' | 'alipay-miniprogram' | 'flutter' | 'other';
+
+export interface UserRecord {
+  id: string;
+  email: string;
+  passwordHash: string;
+  createdAt: number;
+}
 
 export interface AppRecord {
   id: string;
   name: string;
   appKey: string;
+  type: AppType;
+  ownerUserId: string;
   createdAt: number;
 }
 
@@ -21,6 +33,8 @@ export interface IssueSummary {
 }
 
 export interface HealthGuardStore {
+  users: UserRecord[];
+  sessions: Map<string, string>;
   apps: AppRecord[];
   events: HealthGuardEvent[];
   issues: Map<string, IssueSummary>;
@@ -45,27 +59,105 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
     service: 'healthguard-server'
   }));
 
-  app.get('/api/apps', async () => ({
-    apps: store.apps.sort((left, right) => right.createdAt - left.createdAt)
-  }));
+  app.post<{ Body: { email?: string; password?: string } }>('/api/auth/register', async (request, reply) => {
+    const credentials = normalizeCredentials(request.body);
 
-  app.post<{ Body: { name?: string } }>('/api/apps', async (request, reply) => {
+    if (!credentials) {
+      return reply.status(400).send({ message: 'Valid email and password are required' });
+    }
+
+    if (store.users.some((user) => user.email === credentials.email)) {
+      return reply.status(409).send({ message: 'Email already registered' });
+    }
+
+    const user: UserRecord = {
+      id: createId('user'),
+      email: credentials.email,
+      passwordHash: hashPassword(credentials.password),
+      createdAt: Date.now()
+    };
+    const token = createId('session');
+
+    store.users.push(user);
+    store.sessions.set(token, user.id);
+
+    return reply.status(201).send({ token, user: toPublicUser(user) });
+  });
+
+  app.post<{ Body: { email?: string; password?: string } }>('/api/auth/login', async (request, reply) => {
+    const credentials = normalizeCredentials(request.body);
+
+    if (!credentials) {
+      return reply.status(400).send({ message: 'Valid email and password are required' });
+    }
+
+    const user = store.users.find((item) => item.email === credentials.email);
+
+    if (!user || !verifyPassword(credentials.password, user.passwordHash)) {
+      return reply.status(401).send({ message: 'Invalid email or password' });
+    }
+
+    const token = createId('session');
+    store.sessions.set(token, user.id);
+
+    return { token, user: toPublicUser(user) };
+  });
+
+  app.get('/api/auth/me', async (request, reply) => {
+    const user = authenticate(store, request.headers.authorization);
+
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    return { user: toPublicUser(user) };
+  });
+
+  app.get('/api/apps', async (request, reply) => {
+    const user = authenticate(store, request.headers.authorization);
+
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    return {
+      apps: store.apps
+        .filter((record) => record.ownerUserId === user.id)
+        .sort((left, right) => right.createdAt - left.createdAt)
+        .map(toPublicApp)
+    };
+  });
+
+  app.post<{ Body: { name?: string; type?: AppType } }>('/api/apps', async (request, reply) => {
+    const user = authenticate(store, request.headers.authorization);
+
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
     const name = request.body?.name?.trim();
+    const type = request.body?.type ?? 'web';
 
     if (!name) {
       return reply.status(400).send({ message: 'App name is required' });
     }
 
+    if (!isAppType(type)) {
+      return reply.status(400).send({ message: 'Unsupported app type' });
+    }
+
     const record: AppRecord = {
       id: createId('app_record'),
       name,
-      appKey: createId('app'),
+      type,
+      ownerUserId: user.id,
+      appKey: createId(type),
       createdAt: Date.now()
     };
 
     store.apps.push(record);
 
-    return reply.status(201).send({ app: record });
+    return reply.status(201).send({ app: toPublicApp(record) });
   });
 
   app.post('/api/events/batch', async (request, reply) => {
@@ -140,6 +232,8 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
 
 export function createMemoryStore(): HealthGuardStore {
   return {
+    users: [],
+    sessions: new Map(),
     apps: [],
     events: [],
     issues: new Map()
@@ -174,4 +268,63 @@ function filterEvents(events: HealthGuardEvent[], appKey?: string): HealthGuardE
 
 function createId(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+}
+
+function normalizeCredentials(body: { email?: string; password?: string } | undefined): { email: string; password: string } | null {
+  const email = body?.email?.trim().toLowerCase();
+  const password = body?.password;
+
+  if (!email || !email.includes('@') || !password || password.length < 8) {
+    return null;
+  }
+
+  return { email, password };
+}
+
+function hashPassword(password: string): string {
+  const salt = randomBytes(16).toString('hex');
+  const hash = pbkdf2Sync(password, salt, 120000, 32, 'sha256').toString('hex');
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password: string, storedHash: string): boolean {
+  const [salt, hash] = storedHash.split(':');
+
+  if (!salt || !hash) {
+    return false;
+  }
+
+  const candidate = pbkdf2Sync(password, salt, 120000, 32, 'sha256');
+  const expected = Buffer.from(hash, 'hex');
+
+  return candidate.length === expected.length && timingSafeEqual(candidate, expected);
+}
+
+function authenticate(store: HealthGuardStore, authorizationHeader: string | undefined): UserRecord | null {
+  const token = authorizationHeader?.startsWith('Bearer ') ? authorizationHeader.slice('Bearer '.length) : '';
+  const userId = token ? store.sessions.get(token) : undefined;
+
+  return userId ? (store.users.find((user) => user.id === userId) ?? null) : null;
+}
+
+function toPublicUser(user: UserRecord): Omit<UserRecord, 'passwordHash'> {
+  return {
+    id: user.id,
+    email: user.email,
+    createdAt: user.createdAt
+  };
+}
+
+function toPublicApp(record: AppRecord): Omit<AppRecord, 'ownerUserId'> {
+  return {
+    id: record.id,
+    name: record.name,
+    appKey: record.appKey,
+    type: record.type,
+    createdAt: record.createdAt
+  };
+}
+
+function isAppType(value: string): value is AppType {
+  return ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'other'].includes(value);
 }

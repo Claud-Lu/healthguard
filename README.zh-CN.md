@@ -11,7 +11,7 @@ HealthGuard 是一款开源、可自托管的应用健康监控系统，面向 H
 - H5 SDK：JavaScript 错误、未处理的 Promise、资源加载错误、请求失败、基础 Web Vitals、面包屑。
 - 微信小程序 SDK：运行时错误、未处理的 Promise、请求失败、页面生命周期耗时、面包屑。
 - Collector 服务：接收 SDK 上报事件、校验数据格式、写入事件并聚合问题。
-- Dashboard：应用管理、总览、问题列表、问题详情、SDK 接入指引。
+- Dashboard：本地注册与登录、按用户隔离的项目列表、按应用类型生成不同 app key、总览、问题列表、问题详情、SDK 接入指引、中英文界面。
 - 部署：Docker Compose 最小化私有部署。
 - 文档：事件协议、路线图、决策日志、以及供 AI 辅助续写的 handoff 提示词。
 
@@ -83,9 +83,18 @@ deploy/
 - `packages/core`：共享的事件 schema、批量校验、URL 脱敏、issue fingerprint 辅助工具。
 - `packages/sdk-web`：浏览器 SDK，支持错误、资源加载失败、性能指标、fetch/XHR 事件、URL 脱敏和失败重试。
 - `packages/sdk-miniprogram`：微信小程序 SDK，支持 `wx.onError`、`wx.onUnhandledRejection`、`wx.request` 和 App/Page 生命周期面包屑。
-- `apps/server`：基于 Fastify 的 collector，提供应用管理、概览、事件上报、issue 聚合、issue 详情和内存存储。
+- `apps/server`：基于 Fastify 的 collector，提供本地认证、按用户隔离的应用管理、概览、事件上报、issue 聚合、issue 详情和内存存储。
 - `examples/vue3-demo`：H5 示例应用，可触发 JavaScript 错误、Promise 异常和失败请求。
-- `apps/dashboard`：Vue dashboard，用于查看 app key、概览指标、issue 列表、issue 详情和 SDK 接入说明。
+- `apps/dashboard`：Vue dashboard，用于登录 / 注册、切换语言、查看 app key、概览指标、issue 列表、issue 详情和 SDK 接入说明。
+
+## Dashboard 登录与国际化
+
+- 私有部署首次使用时通过本地注册和登录进入系统，每个用户只看到自己的项目列表。
+- 项目包含 `type` 字段，可选值为 `web`、`wechat-miniprogram`、`alipay-miniprogram`、`flutter`、`other`，创建后会生成带类型前缀的 app key。
+- Dashboard 会根据浏览器系统时区选择默认语言：中国相关时区默认中文，其他时区默认英文；用户也可以手动切换语言，选择会保存在浏览器本地。
+- 后续 Dashboard 和文档改动必须同步维护英文与中文文案，避免只更新单一语言。
+
+当前 MVP 的用户、会话、项目、事件和 issue 都使用内存存储，方便快速打通本地闭环。正式私有部署如果需要长期保存数据，后续应替换为持久化数据库。
 
 常用命令：
 

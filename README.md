@@ -11,7 +11,7 @@ The long-term vision is to cover H5, mini programs, Android, and iOS. The first 
 - H5 SDK: JavaScript errors, unhandled promises, resource errors, request failures, basic Web Vitals, breadcrumbs.
 - WeChat mini program SDK: runtime errors, unhandled promises, request failures, page lifecycle timing, breadcrumbs.
 - Collector service: receives SDK events, validates schema, writes events, and aggregates issues.
-- Dashboard: app management, overview, issue list, issue detail, SDK integration guide.
+- Dashboard: local registration and login, per-user project list, app type specific app keys, overview, issue list, issue detail, SDK integration guide, and English / Chinese UI.
 - Deployment: Docker Compose for a minimal private deployment.
 - Documentation: event protocol, roadmap, decision log, and handoff prompt for AI-assisted continuation.
 
@@ -83,9 +83,18 @@ The first implementation pass initializes a yarn workspace monorepo and starts t
 - `packages/core`: shared event schemas, batch validation, URL sanitization, and issue fingerprint helpers.
 - `packages/sdk-web`: browser SDK client that queues errors, resource failures, performance metrics, fetch/XHR events, sanitizes URLs, retries failed flushes, and sends batches to a collector.
 - `packages/sdk-miniprogram`: WeChat mini program SDK client for `wx.onError`, `wx.onUnhandledRejection`, `wx.request`, and App/Page lifecycle breadcrumbs.
-- `apps/server`: Fastify collector with app management, overview, event ingestion, issue aggregation, issue detail, and in-memory storage for the first local loop.
+- `apps/server`: Fastify collector with local auth, user-scoped app management, overview, event ingestion, issue aggregation, issue detail, and in-memory storage for the first local loop.
 - `examples/vue3-demo`: H5 demo that triggers JavaScript errors, promise rejections, and failed requests through the SDK.
-- `apps/dashboard`: Vue dashboard for app keys, overview metrics, issue lists, issue details, and SDK integration guidance.
+- `apps/dashboard`: Vue dashboard for login / registration, language switching, app keys, overview metrics, issue lists, issue details, and SDK integration guidance.
+
+## Dashboard Auth And Localization
+
+- Private deployments start with local registration and login. Each user sees only their own projects.
+- Projects have a `type` value (`web`, `wechat-miniprogram`, `alipay-miniprogram`, `flutter`, or `other`) and receive a type-prefixed app key.
+- The dashboard defaults to Chinese for China-area time zones and English for other time zones. Users can switch languages manually, and the choice is saved in the browser.
+- Future dashboard and documentation changes must keep English and Chinese copy synchronized.
+
+The current MVP uses in-memory users, sessions, apps, events, and issues. This keeps the first local loop lightweight, but production private deployments should replace metadata and event storage with a persistent database before relying on it for long-running data retention.
 
 Useful commands:
 
