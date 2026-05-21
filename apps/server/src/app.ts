@@ -40,6 +40,11 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
     service: 'healthguard-server'
   }));
 
+  app.get('/api/health', async () => ({
+    ok: true,
+    service: 'healthguard-server'
+  }));
+
   app.get('/api/apps', async () => ({
     apps: store.apps.sort((left, right) => right.createdAt - left.createdAt)
   }));

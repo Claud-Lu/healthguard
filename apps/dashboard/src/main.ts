@@ -49,6 +49,12 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+const apiBase = (import.meta.env.VITE_HEALTHGUARD_API_BASE || '/api').replace(/\/$/, '');
+
+function apiUrl(path: string): string {
+  return `${apiBase}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
 const App = {
   setup() {
     const apps = ref<AppRecord[]>([]);
@@ -69,7 +75,7 @@ const App = {
     const sdkSnippet = computed(
       () => `const client = createHealthGuardClient({
   appKey: '${selectedAppKey.value}',
-  endpoint: '/api/events/batch',
+  endpoint: '${apiUrl('/events/batch')}',
   autoCapture: true
 });`
     );
@@ -81,9 +87,9 @@ const App = {
       try {
         const query = encodeURIComponent(selectedAppKey.value);
         const [appResponse, overviewResponse, issueResponse] = await Promise.all([
-          requestJson<{ apps: AppRecord[] }>('/api/apps'),
-          requestJson<OverviewResponse>(`/api/overview?appKey=${query}`),
-          requestJson<{ issues: IssueSummary[] }>(`/api/issues?appKey=${query}`)
+          requestJson<{ apps: AppRecord[] }>(apiUrl('/apps')),
+          requestJson<OverviewResponse>(apiUrl(`/overview?appKey=${query}`)),
+          requestJson<{ issues: IssueSummary[] }>(apiUrl(`/issues?appKey=${query}`))
         ]);
 
         apps.value = appResponse.apps;
@@ -106,7 +112,7 @@ const App = {
         return;
       }
 
-      const response = await requestJson<{ app: AppRecord }>('/api/apps', {
+      const response = await requestJson<{ app: AppRecord }>(apiUrl('/apps'), {
         method: 'POST',
         body: JSON.stringify({ name })
       });
@@ -117,7 +123,7 @@ const App = {
     }
 
     async function openIssue(issue: IssueSummary): Promise<void> {
-      selectedIssue.value = await requestJson<IssueDetailResponse>(`/api/issues/${encodeURIComponent(issue.id)}`);
+      selectedIssue.value = await requestJson<IssueDetailResponse>(apiUrl(`/issues/${encodeURIComponent(issue.id)}`));
     }
 
     onMounted(() => {
