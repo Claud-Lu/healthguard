@@ -37,6 +37,17 @@ The current MVP stores users, sessions, projects, events, and issues in memory. 
 
 Each project has its own app key. Use a separate key for each application or runtime that should be tracked independently.
 
+## Dashboard Navigation
+
+After login, the dashboard home shows the project list. It does not load `demo-web` or any single default project.
+
+1. Open the dashboard home to review available projects.
+2. Select a project card or a project in the sidebar.
+3. Inspect metrics, issues, issue detail, and SDK setup for that project.
+4. Use the project list button to return to the project list.
+
+Refreshing the dashboard keeps the current project detail only when a project is selected. If no project is selected, refresh reloads the project list only.
+
 ## Integrate The Web SDK
 
 Install or link `@healthguard/sdk-web`, then initialize the client in the target web application:
@@ -60,7 +71,7 @@ Do not hard-code private company domains, internal IPs, business project names, 
 1. Open the monitored application.
 2. Trigger a harmless JavaScript error or a failed request in a test environment.
 3. Return to the dashboard.
-4. Select or enter the project app key.
+4. Select the project from the project list.
 5. Refresh the dashboard.
 6. Confirm that event, error, failed request, or issue counts update.
 

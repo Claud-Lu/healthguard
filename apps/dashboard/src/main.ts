@@ -77,7 +77,6 @@ async function requestJson<T>(url: string, init?: RequestInit, token?: string): 
 }
 
 const apiBase = (import.meta.env.VITE_HEALTHGUARD_API_BASE || '/api').replace(/\/$/, '');
-const defaultAppKey = import.meta.env.VITE_HEALTHGUARD_DEFAULT_APP_KEY || 'demo-web';
 const appTypes: AppType[] = ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'other'];
 
 function apiUrl(path: string): string {
@@ -103,7 +102,8 @@ const App = {
     const email = ref('');
     const password = ref('');
     const apps = ref<AppRecord[]>([]);
-    const selectedAppKey = ref(defaultAppKey);
+    const selectedAppKey = ref('');
+    const selectedApp = computed(() => apps.value.find((item) => item.appKey === selectedAppKey.value) ?? null);
     const overview = ref<OverviewResponse['totals']>({
       events: 0,
       errors: 0,
@@ -175,8 +175,8 @@ const App = {
       token.value = '';
       user.value = null;
       apps.value = [];
-      issues.value = [];
-      selectedIssue.value = null;
+      selectedAppKey.value = '';
+      resetProjectData();
       localStorage.removeItem('healthguard_token');
     }
 
@@ -189,25 +189,69 @@ const App = {
       errorMessage.value = '';
 
       try {
-        const query = encodeURIComponent(selectedAppKey.value);
-        const [appResponse, overviewResponse, issueResponse] = await Promise.all([
-          requestJson<{ apps: AppRecord[] }>(apiUrl('/apps'), undefined, token.value),
-          requestJson<OverviewResponse>(apiUrl(`/overview?appKey=${query}`), undefined, token.value),
-          requestJson<{ issues: IssueSummary[] }>(apiUrl(`/issues?appKey=${query}`), undefined, token.value)
-        ]);
+        const appResponse = await requestJson<{ apps: AppRecord[] }>(apiUrl('/apps'), undefined, token.value);
 
         apps.value = appResponse.apps;
-        overview.value = overviewResponse.totals;
-        issues.value = issueResponse.issues;
 
-        if (selectedIssue.value && !issues.value.some((issue) => issue.id === selectedIssue.value?.issue.id)) {
-          selectedIssue.value = null;
+        if (!selectedApp.value) {
+          selectedAppKey.value = '';
+          resetProjectData();
+          return;
         }
+
+        await loadProjectData(selectedAppKey.value);
       } catch (error) {
         errorMessage.value = friendlyErrorMessage(error, locale.value);
       } finally {
         loading.value = false;
       }
+    }
+
+    async function loadProjectData(appKey: string): Promise<void> {
+      const query = encodeURIComponent(appKey);
+      const [overviewResponse, issueResponse] = await Promise.all([
+        requestJson<OverviewResponse>(apiUrl(`/overview?appKey=${query}`), undefined, token.value),
+        requestJson<{ issues: IssueSummary[] }>(apiUrl(`/issues?appKey=${query}`), undefined, token.value)
+      ]);
+
+      overview.value = overviewResponse.totals;
+      issues.value = issueResponse.issues;
+
+      if (selectedIssue.value && !issues.value.some((issue) => issue.id === selectedIssue.value?.issue.id)) {
+        selectedIssue.value = null;
+      }
+    }
+
+    function resetProjectData(): void {
+      overview.value = {
+        events: 0,
+        errors: 0,
+        failedRequests: 0,
+        affectedUsers: 0,
+        issues: 0
+      };
+      issues.value = [];
+      selectedIssue.value = null;
+    }
+
+    async function selectProject(appKey: string): Promise<void> {
+      selectedAppKey.value = appKey;
+      selectedIssue.value = null;
+      loading.value = true;
+      errorMessage.value = '';
+
+      try {
+        await loadProjectData(appKey);
+      } catch (error) {
+        errorMessage.value = friendlyErrorMessage(error, locale.value);
+      } finally {
+        loading.value = false;
+      }
+    }
+
+    function showProjectList(): void {
+      selectedAppKey.value = '';
+      resetProjectData();
     }
 
     async function createAppRecord(): Promise<void> {
@@ -298,15 +342,6 @@ const App = {
             languageButton('EN', 'en-US', locale.value, setLocale),
             languageButton('中文', 'zh-CN', locale.value, setLocale)
           ]),
-          h('label', { class: 'field' }, [
-            h('span', t.currentAppKey),
-            h('input', {
-              value: selectedAppKey.value,
-              onInput: (event: Event) => {
-                selectedAppKey.value = (event.target as HTMLInputElement).value;
-              }
-            })
-          ]),
           h('button', { type: 'button', class: 'wide', onClick: refresh, disabled: loading.value }, t.refresh),
           h('div', { class: 'create-box' }, [
             h('h2', t.createApp),
@@ -346,8 +381,7 @@ const App = {
                   type: 'button',
                   class: item.appKey === selectedAppKey.value ? 'app-row active' : 'app-row',
                   onClick: () => {
-                    selectedAppKey.value = item.appKey;
-                    void refresh();
+                    void selectProject(item.appKey);
                   }
                 },
                 [h('span', item.name), h('small', item.type), h('small', item.appKey)]
@@ -356,9 +390,11 @@ const App = {
           ),
           h('button', { type: 'button', class: 'wide ghost', onClick: logout }, t.logout)
         ]),
-        h('section', { class: 'content' }, [
+        selectedApp.value
+          ? h('section', { class: 'content' }, [
           h('header', { class: 'topbar' }, [
-            h('div', [h('h1', t.applicationHealth), h('p', t.inspectSubtitle)]),
+            h('div', [h('h1', selectedApp.value.name), h('p', t.inspectSubtitle)]),
+            h('button', { type: 'button', class: 'outline-button', onClick: showProjectList }, t.projectList),
             errorMessage.value ? h('p', { class: 'error' }, errorMessage.value) : null
           ]),
           h('section', { class: 'metrics' }, [
@@ -414,6 +450,27 @@ const App = {
             h('pre', sdkSnippet.value)
           ])
         ])
+          : h('section', { class: 'content' }, [
+              h('header', { class: 'topbar' }, [
+                h('div', [h('h1', t.projectList), h('p', t.dashboardHomeSubtitle)]),
+                errorMessage.value ? h('p', { class: 'error' }, errorMessage.value) : null
+              ]),
+              h(
+                'section',
+                { class: 'project-grid' },
+                apps.value.length === 0
+                  ? [h('div', { class: 'panel empty-panel' }, [h('p', { class: 'empty' }, t.emptyProjects)])]
+                  : apps.value.map((item) =>
+                      h('button', { type: 'button', class: 'project-card', onClick: () => void selectProject(item.appKey) }, [
+                        h('span', item.type),
+                        h('strong', item.name),
+                        h('code', item.appKey),
+                        h('small', `${t.create}: ${formatTime(item.createdAt)}`),
+                        h('em', t.selectProject)
+                      ])
+                    )
+              )
+            ])
       ]);
     };
   }

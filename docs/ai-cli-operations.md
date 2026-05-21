@@ -70,8 +70,10 @@ Then verify:
 3. Register with a valid email and a password of at least 8 characters.
 4. Create a project.
 5. Confirm the generated app key has the selected type prefix.
-6. Trigger a test event from a demo or consuming app.
-7. Refresh the dashboard and confirm the event appears.
+6. Confirm the logged-in home shows the project list, not `demo-web` detail data.
+7. Select the project and confirm the detail view loads metrics, issues, and SDK setup for that project.
+8. Trigger a test event from a demo or consuming app.
+9. Refresh the selected project detail and confirm the event appears.
 
 ## Private Deployment Pattern
 
@@ -121,6 +123,7 @@ If the consuming app is served over HTTPS, use an HTTPS collector endpoint or an
 
 - `Request failed: 400` during auth: read the response `code`; the dashboard should map it to a localized message.
 - Project list is empty: the logged-in user has not created a project yet, or the in-memory collector restarted.
+- Dashboard refresh shows the project list: this is expected when no project is selected. Select a project to inspect its detail data.
 - No events appear: confirm endpoint, app key, browser mixed-content rules, and network requests to `/events/batch`.
 - Events disappeared after restart: current MVP storage is in-memory.
 - Dashboard language looks wrong: clear `healthguard_locale` from browser local storage or switch language manually.

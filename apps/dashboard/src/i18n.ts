@@ -8,8 +8,10 @@ export type MessageKey =
   | 'create'
   | 'createApp'
   | 'currentAppKey'
+  | 'dashboardHomeSubtitle'
   | 'email'
   | 'emptyIssues'
+  | 'emptyProjects'
   | 'errors'
   | 'events'
   | 'failedRequests'
@@ -28,9 +30,11 @@ export type MessageKey =
   | 'passwordHelp'
   | 'passwordTooShort'
   | 'projectList'
+  | 'projectDetail'
   | 'refresh'
   | 'register'
   | 'sdkIntegration'
+  | 'selectProject'
   | 'emailAlreadyRegistered'
   | 'switchToLogin'
   | 'switchToRegister';
@@ -46,8 +50,10 @@ const messages: Record<Locale, Messages> = {
     create: 'Create',
     createApp: 'Create App',
     currentAppKey: 'Current App Key',
+    dashboardHomeSubtitle: 'Select a project to inspect its health data, issues, and SDK setup.',
     email: 'Email',
     emptyIssues: 'No issues yet. Trigger an error from an integrated app, then refresh.',
+    emptyProjects: 'No projects yet. Create one from the sidebar to get an app key.',
     errors: 'Errors',
     events: 'Events',
     failedRequests: 'Failed Requests',
@@ -66,9 +72,11 @@ const messages: Record<Locale, Messages> = {
     passwordHelp: 'At least 8 characters.',
     passwordTooShort: 'Password must be at least 8 characters.',
     projectList: 'Projects',
+    projectDetail: 'Project Detail',
     refresh: 'Refresh',
     register: 'Register',
     sdkIntegration: 'SDK Integration',
+    selectProject: 'Select Project',
     emailAlreadyRegistered: 'This email is already registered.',
     switchToLogin: 'Have an account? Login',
     switchToRegister: 'Need an account? Register'
@@ -81,8 +89,10 @@ const messages: Record<Locale, Messages> = {
     create: '创建',
     createApp: '添加项目',
     currentAppKey: '当前 App Key',
+    dashboardHomeSubtitle: '选择一个项目后查看它的健康数据、Issue 和 SDK 接入信息。',
     email: '邮箱',
     emptyIssues: '暂无 Issue。请从已接入项目触发一次错误后刷新。',
+    emptyProjects: '暂无项目。请先在左侧创建项目并生成 app key。',
     errors: '错误数',
     events: '事件数',
     failedRequests: '失败请求',
@@ -101,9 +111,11 @@ const messages: Record<Locale, Messages> = {
     passwordHelp: '至少 8 位。',
     passwordTooShort: '密码至少需要 8 位。',
     projectList: '项目列表',
+    projectDetail: '项目详情',
     refresh: '刷新',
     register: '注册',
     sdkIntegration: 'SDK 接入',
+    selectProject: '查看项目',
     emailAlreadyRegistered: '该邮箱已注册，请直接登录。',
     switchToLogin: '已有账号？去登录',
     switchToRegister: '没有账号？去注册'

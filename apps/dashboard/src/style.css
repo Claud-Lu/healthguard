@@ -140,6 +140,16 @@ select {
   min-height: 40px;
 }
 
+.outline-button {
+  background: #ffffff;
+  border: 1px solid #cfd9df;
+  border-radius: 6px;
+  color: #334155;
+  font-weight: 700;
+  min-height: 38px;
+  padding: 0 14px;
+}
+
 .secondary {
   background: #334155;
 }
@@ -230,7 +240,8 @@ h1 {
 }
 
 .metric,
-.panel {
+.panel,
+.project-card {
   background: #ffffff;
   border: 1px solid #d8e1e6;
   border-radius: 8px;
@@ -256,6 +267,52 @@ h1 {
   display: grid;
   gap: 20px;
   grid-template-columns: 420px minmax(0, 1fr);
+}
+
+.project-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.project-card {
+  color: #182229;
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  text-align: left;
+}
+
+.project-card:hover,
+.outline-button:hover {
+  border-color: #0f766e;
+}
+
+.project-card span,
+.project-card small {
+  color: #60717d;
+}
+
+.project-card strong {
+  font-size: 18px;
+}
+
+.project-card code {
+  background: #eef2f4;
+  border-radius: 6px;
+  color: #334155;
+  overflow-wrap: anywhere;
+  padding: 8px;
+}
+
+.project-card em {
+  color: #0f766e;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.empty-panel {
+  padding: 22px;
 }
 
 .panel {
