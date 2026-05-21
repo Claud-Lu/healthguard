@@ -50,6 +50,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 const apiBase = (import.meta.env.VITE_HEALTHGUARD_API_BASE || '/api').replace(/\/$/, '');
+const defaultAppKey = import.meta.env.VITE_HEALTHGUARD_DEFAULT_APP_KEY || 'demo-web';
 
 function apiUrl(path: string): string {
   return `${apiBase}${path.startsWith('/') ? path : `/${path}`}`;
@@ -58,7 +59,7 @@ function apiUrl(path: string): string {
 const App = {
   setup() {
     const apps = ref<AppRecord[]>([]);
-    const selectedAppKey = ref('demo-web');
+    const selectedAppKey = ref(defaultAppKey);
     const overview = ref<OverviewResponse['totals']>({
       events: 0,
       errors: 0,
