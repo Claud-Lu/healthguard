@@ -38,5 +38,16 @@ services:
     ports:
       - "3100:3100"
 
+  dashboard:
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile
+    container_name: healthguard-dashboard
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "80:80"
+
 volumes:
   postgres_data:
