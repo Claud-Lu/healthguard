@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: healthguard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: healthguard
+      POSTGRES_PASSWORD: healthguard
+      POSTGRES_DB: healthguard
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U healthguard -d healthguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: healthguard-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3100
+      HOST: 0.0.0.0
+      DATABASE_URL: postgres://healthguard:healthguard@postgres:5432/healthguard
+      CORS_ORIGIN: "*"
+      LOG_LEVEL: info
+    ports:
+      - "3100:3100"
+
+volumes:
+  postgres_data:

@@ -1,0 +1,331 @@
+import type { Client } from 'pg';
+import type { ErrorEvent, HealthGuardEvent } from '@healthguard/core';
+import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail } from './types';
+
+export interface PostgresStoreOptions {
+  client: Client;
+}
+
+export async function createPostgresStore(options: PostgresStoreOptions): Promise<Store> {
+  const { client } = options;
+  await ensureSchema(client);
+
+  return {
+    async createUser(user: UserRecord): Promise<void> {
+      await client.query(
+        'INSERT INTO users (id, email, password_hash, created_at) VALUES ($1, $2, $3, $4)',
+        [user.id, user.email, user.passwordHash, user.createdAt]
+      );
+    },
+
+    async findUserByEmail(email: string): Promise<UserRecord | null> {
+      const result = await client.query('SELECT * FROM users WHERE email = $1', [email]);
+      if (result.rows.length === 0) return null;
+      return rowToUser(result.rows[0]);
+    },
+
+    async findUserById(id: string): Promise<UserRecord | null> {
+      const result = await client.query('SELECT * FROM users WHERE id = $1', [id]);
+      if (result.rows.length === 0) return null;
+      return rowToUser(result.rows[0]);
+    },
+
+    async createSession(token: string, userId: string): Promise<void> {
+      await client.query(
+        'INSERT INTO sessions (token, user_id, created_at) VALUES ($1, $2, EXTRACT(EPOCH FROM NOW()) * 1000)',
+        [token, userId]
+      );
+    },
+
+    async findUserBySessionToken(token: string): Promise<UserRecord | null> {
+      const result = await client.query(
+        'SELECT u.* FROM users u JOIN sessions s ON u.id = s.user_id WHERE s.token = $1',
+        [token]
+      );
+      if (result.rows.length === 0) return null;
+      return rowToUser(result.rows[0]);
+    },
+
+    async createApp(app: AppRecord): Promise<void> {
+      await client.query(
+        'INSERT INTO apps (id, name, app_key, type, owner_user_id, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+        [app.id, app.name, app.appKey, app.type, app.ownerUserId, app.createdAt]
+      );
+    },
+
+    async listAppsByUser(userId: string): Promise<AppRecord[]> {
+      const result = await client.query(
+        'SELECT * FROM apps WHERE owner_user_id = $1 ORDER BY created_at DESC',
+        [userId]
+      );
+      return result.rows.map(rowToApp);
+    },
+
+    async ingestEvents(events: HealthGuardEvent[]): Promise<void> {
+      for (const event of events) {
+        await client.query(
+          `INSERT INTO events (
+            event_id, app_key, platform, type, timestamp, session_id, user_id,
+            anonymous_id, release, environment, page_url, sdk_version, payload
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+          [
+            event.eventId,
+            event.appKey,
+            event.platform,
+            event.type,
+            event.timestamp,
+            event.sessionId,
+            event.userId ?? null,
+            event.anonymousId,
+            event.release ?? null,
+            event.environment ?? null,
+            event.pageUrl ?? null,
+            event.sdkVersion,
+            JSON.stringify(event)
+          ]
+        );
+
+        if (event.type === 'error') {
+          await upsertIssue(client, event as ErrorEvent);
+        }
+      }
+    },
+
+    async listIssues(appKey?: string, platform?: string): Promise<IssueSummary[]> {
+      let sql = 'SELECT * FROM issues';
+      const params: (string | number)[] = [];
+      const conditions: string[] = [];
+
+      if (appKey) {
+        conditions.push(`app_key = $${params.length + 1}`);
+        params.push(appKey);
+      }
+
+      if (platform) {
+        conditions.push(`platform_distribution->>$${params.length + 1} IS NOT NULL`);
+        params.push(platform);
+      }
+
+      if (conditions.length > 0) {
+        sql += ' WHERE ' + conditions.join(' AND ');
+      }
+
+      sql += ' ORDER BY last_seen_at DESC';
+
+      const result = await client.query(sql, params);
+      return result.rows.map(rowToIssue);
+    },
+
+    async getOverview(appKey?: string, platform?: string): Promise<OverviewTotals> {
+      let eventSql = 'SELECT COUNT(*)::int as total, COUNT(CASE WHEN type = $1 THEN 1 END)::int as errors, COUNT(CASE WHEN type = $2 AND (payload->>\'success\')::boolean = false THEN 1 END)::int as failed_requests FROM events';
+      const eventParams: (string | number)[] = ['error', 'http'];
+      const conditions: string[] = [];
+
+      if (appKey) {
+        conditions.push(`app_key = $${eventParams.length + 1}`);
+        eventParams.push(appKey);
+      }
+
+      if (platform) {
+        conditions.push(`platform = $${eventParams.length + 1}`);
+        eventParams.push(platform);
+      }
+
+      if (conditions.length > 0) {
+        eventSql += ' WHERE ' + conditions.join(' AND ');
+      }
+
+      const eventResult = await client.query(eventSql, eventParams);
+      const row = eventResult.rows[0];
+
+      const userResult = await client.query(
+        `SELECT COUNT(DISTINCT COALESCE(user_id, anonymous_id))::int as affected_users FROM events ${conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ').replace(/\$[0-9]+/g, (m) => `$${Number(m.slice(1)) + eventParams.length}`) : ''}`,
+        [...eventParams]
+      );
+
+      let issueSql = 'SELECT COUNT(*)::int as issues FROM issues';
+      const issueParams: (string | number)[] = [];
+      const issueConditions: string[] = [];
+
+      if (appKey) {
+        issueConditions.push(`app_key = $${issueParams.length + 1}`);
+        issueParams.push(appKey);
+      }
+
+      if (platform) {
+        issueConditions.push(`platform_distribution->>$${issueParams.length + 1} IS NOT NULL`);
+        issueParams.push(platform);
+      }
+
+      if (issueConditions.length > 0) {
+        issueSql += ' WHERE ' + issueConditions.join(' AND ');
+      }
+
+      const issueResult = await client.query(issueSql, issueParams);
+
+      return {
+        events: row.total ?? 0,
+        errors: row.errors ?? 0,
+        failedRequests: row.failed_requests ?? 0,
+        affectedUsers: userResult.rows[0]?.affected_users ?? 0,
+        issues: issueResult.rows[0]?.issues ?? 0
+      };
+    },
+
+    async getIssueDetail(id: string, platform?: string): Promise<IssueDetail> {
+      const issueResult = await client.query('SELECT * FROM issues WHERE id = $1', [id]);
+      if (issueResult.rows.length === 0) {
+        return { issue: null, events: [] };
+      }
+
+      const issue = rowToIssue(issueResult.rows[0]);
+
+      let sql = 'SELECT payload FROM events WHERE type = $1 AND app_key = $2 AND payload->>\'fingerprint\' = $3';
+      const params: (string | number)[] = ['error', issue.appKey, issue.fingerprint];
+
+      if (platform) {
+        sql += ` AND platform = $${params.length + 1}`;
+        params.push(platform);
+      }
+
+      sql += ' ORDER BY timestamp DESC';
+
+      const eventResult = await client.query(sql, params);
+      const events = eventResult.rows.map((row) => JSON.parse(row.payload) as HealthGuardEvent);
+
+      return { issue, events };
+    }
+  };
+}
+
+async function ensureSchema(client: Client): Promise<void> {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id VARCHAR(64) PRIMARY KEY,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password_hash VARCHAR(255) NOT NULL,
+      created_at BIGINT NOT NULL
+    )
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token VARCHAR(64) PRIMARY KEY,
+      user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000
+    )
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS apps (
+      id VARCHAR(64) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      app_key VARCHAR(64) UNIQUE NOT NULL,
+      type VARCHAR(32) NOT NULL,
+      owner_user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at BIGINT NOT NULL
+    )
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS events (
+      event_id VARCHAR(64) PRIMARY KEY,
+      app_key VARCHAR(64) NOT NULL,
+      platform VARCHAR(32) NOT NULL,
+      type VARCHAR(32) NOT NULL,
+      timestamp BIGINT NOT NULL,
+      session_id VARCHAR(64) NOT NULL,
+      user_id VARCHAR(64),
+      anonymous_id VARCHAR(64) NOT NULL,
+      release VARCHAR(255),
+      environment VARCHAR(32),
+      page_url TEXT,
+      sdk_version VARCHAR(32) NOT NULL,
+      payload JSONB NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_events_app_key ON events(app_key)
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_events_platform ON events(platform)
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS issues (
+      id VARCHAR(255) PRIMARY KEY,
+      app_key VARCHAR(64) NOT NULL,
+      fingerprint VARCHAR(255) NOT NULL,
+      message TEXT NOT NULL,
+      error_type VARCHAR(32) NOT NULL,
+      event_count INTEGER NOT NULL DEFAULT 0,
+      first_seen_at BIGINT NOT NULL,
+      last_seen_at BIGINT NOT NULL,
+      platform_distribution JSONB NOT NULL DEFAULT '{}'
+    )
+  `);
+}
+
+async function upsertIssue(client: Client, event: ErrorEvent): Promise<void> {
+  const id = `${event.appKey}:${event.fingerprint}`;
+  const existing = await client.query('SELECT event_count, last_seen_at, platform_distribution FROM issues WHERE id = $1', [id]);
+
+  if (existing.rows.length === 0) {
+    await client.query(
+      `INSERT INTO issues (id, app_key, fingerprint, message, error_type, event_count, first_seen_at, last_seen_at, platform_distribution)
+       VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8)`,
+      [id, event.appKey, event.fingerprint, event.message, event.errorType, event.timestamp, event.timestamp, JSON.stringify({ [event.platform]: 1 })]
+    );
+    return;
+  }
+
+  const row = existing.rows[0];
+  const distribution = (row.platform_distribution as Record<string, number>) ?? {};
+  distribution[event.platform] = (distribution[event.platform] ?? 0) + 1;
+
+  await client.query(
+    `UPDATE issues SET event_count = $1, last_seen_at = $2, platform_distribution = $3 WHERE id = $4`,
+    [(row.event_count as number) + 1, Math.max(Number(row.last_seen_at), event.timestamp), JSON.stringify(distribution), id]
+  );
+}
+
+function rowToUser(row: Record<string, unknown>): UserRecord {
+  return {
+    id: String(row.id),
+    email: String(row.email),
+    passwordHash: String(row.password_hash),
+    createdAt: Number(row.created_at)
+  };
+}
+
+function rowToApp(row: Record<string, unknown>): AppRecord {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    appKey: String(row.app_key),
+    type: String(row.type) as AppRecord['type'],
+    ownerUserId: String(row.owner_user_id),
+    createdAt: Number(row.created_at)
+  };
+}
+
+function rowToIssue(row: Record<string, unknown>): IssueSummary {
+  return {
+    id: String(row.id),
+    appKey: String(row.app_key),
+    fingerprint: String(row.fingerprint),
+    message: String(row.message),
+    errorType: String(row.error_type) as IssueSummary['errorType'],
+    eventCount: Number(row.event_count),
+    firstSeenAt: Number(row.first_seen_at),
+    lastSeenAt: Number(row.last_seen_at),
+    platformDistribution: (row.platform_distribution as Record<string, number>) ?? {}
+  };
+}

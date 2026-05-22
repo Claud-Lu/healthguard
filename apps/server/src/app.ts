@@ -1,53 +1,22 @@
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
-import { parseEventBatch, type ErrorEvent, type EventBatch, type HealthGuardEvent } from '@healthguard/core';
+import { parseEventBatch, type ErrorEvent, type EventBatch } from '@healthguard/core';
+import type { AppType, IssueSummary, Store, UserRecord } from './store';
 
-export type AppType = 'web' | 'wechat-miniprogram' | 'alipay-miniprogram' | 'flutter' | 'uni-app' | 'other';
-
-export interface UserRecord {
-  id: string;
-  email: string;
-  passwordHash: string;
-  createdAt: number;
-}
-
-export interface AppRecord {
-  id: string;
-  name: string;
-  appKey: string;
-  type: AppType;
-  ownerUserId: string;
-  createdAt: number;
-}
-
-export interface IssueSummary {
-  id: string;
-  appKey: string;
-  fingerprint: string;
-  message: string;
-  errorType: ErrorEvent['errorType'];
-  eventCount: number;
-  firstSeenAt: number;
-  lastSeenAt: number;
-  platformDistribution: Record<string, number>;
-}
-
-export interface HealthGuardStore {
-  users: UserRecord[];
-  sessions: Map<string, string>;
-  apps: AppRecord[];
-  events: HealthGuardEvent[];
-  issues: Map<string, IssueSummary>;
-}
-
-export function createServerApp(store: HealthGuardStore = createMemoryStore()): FastifyInstance {
+export function createServerApp(store: Store, options?: { corsOrigin?: string | boolean }): FastifyInstance {
   const app = Fastify({
-    logger: false
+    logger: { level: process.env.LOG_LEVEL ?? 'info' }
   });
 
   void app.register(cors, {
-    origin: true
+    origin: options?.corsOrigin ?? (process.env.CORS_ORIGIN || true)
+  });
+
+  void app.register(rateLimit, {
+    max: 100,
+    timeWindow: '1 minute'
   });
 
   app.get('/health', async () => ({
@@ -67,7 +36,8 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
       return reply.status(400).send(authError(credentials.code));
     }
 
-    if (store.users.some((user) => user.email === credentials.email)) {
+    const existing = await store.findUserByEmail(credentials.email);
+    if (existing) {
       return reply.status(409).send(authError('EMAIL_ALREADY_REGISTERED'));
     }
 
@@ -79,8 +49,8 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
     };
     const token = createId('session');
 
-    store.users.push(user);
-    store.sessions.set(token, user.id);
+    await store.createUser(user);
+    await store.createSession(token, user.id);
 
     return reply.status(201).send({ token, user: toPublicUser(user) });
   });
@@ -92,20 +62,20 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
       return reply.status(400).send(authError(credentials.code));
     }
 
-    const user = store.users.find((item) => item.email === credentials.email);
+    const user = await store.findUserByEmail(credentials.email);
 
     if (!user || !verifyPassword(credentials.password, user.passwordHash)) {
       return reply.status(401).send(authError('INVALID_CREDENTIALS'));
     }
 
     const token = createId('session');
-    store.sessions.set(token, user.id);
+    await store.createSession(token, user.id);
 
     return { token, user: toPublicUser(user) };
   });
 
   app.get('/api/auth/me', async (request, reply) => {
-    const user = authenticate(store, request.headers.authorization);
+    const user = await authenticate(store, request.headers.authorization);
 
     if (!user) {
       return reply.status(401).send({ message: 'Unauthorized' });
@@ -115,22 +85,18 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
   });
 
   app.get('/api/apps', async (request, reply) => {
-    const user = authenticate(store, request.headers.authorization);
+    const user = await authenticate(store, request.headers.authorization);
 
     if (!user) {
       return reply.status(401).send({ message: 'Unauthorized' });
     }
 
-    return {
-      apps: store.apps
-        .filter((record) => record.ownerUserId === user.id)
-        .sort((left, right) => right.createdAt - left.createdAt)
-        .map(toPublicApp)
-    };
+    const apps = await store.listAppsByUser(user.id);
+    return { apps: apps.map(toPublicApp) };
   });
 
   app.post<{ Body: { name?: string; type?: AppType } }>('/api/apps', async (request, reply) => {
-    const user = authenticate(store, request.headers.authorization);
+    const user = await authenticate(store, request.headers.authorization);
 
     if (!user) {
       return reply.status(401).send({ message: 'Unauthorized' });
@@ -147,7 +113,7 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
       return reply.status(400).send({ message: 'Unsupported app type' });
     }
 
-    const record: AppRecord = {
+    const record = {
       id: createId('app_record'),
       name,
       type,
@@ -156,12 +122,19 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
       createdAt: Date.now()
     };
 
-    store.apps.push(record);
+    await store.createApp(record);
 
     return reply.status(201).send({ app: toPublicApp(record) });
   });
 
-  app.post('/api/events/batch', async (request, reply) => {
+  app.post('/api/events/batch', {
+    config: {
+      rateLimit: {
+        max: 200,
+        timeWindow: '1 minute'
+      }
+    }
+  }, async (request, reply) => {
     let batch: EventBatch;
 
     try {
@@ -172,13 +145,7 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
       });
     }
 
-    store.events.push(...batch.events);
-
-    for (const event of batch.events) {
-      if (event.type === 'error') {
-        aggregateIssue(store, event);
-      }
-    }
+    await store.ingestEvents(batch.events);
 
     return reply.status(202).send({
       accepted: batch.events.length
@@ -186,93 +153,60 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
   });
 
   app.get<{ Querystring: { appKey?: string; platform?: string } }>('/api/issues', async (request) => {
-    const issues = Array.from(store.issues.values())
-      .filter((issue) => (request.query.appKey ? issue.appKey === request.query.appKey : true))
-      .filter((issue) =>
-        request.query.platform ? (issue.platformDistribution[request.query.platform] ?? 0) > 0 : true
-      )
-      .sort((left, right) => right.lastSeenAt - left.lastSeenAt);
-
+    const issues = await store.listIssues(request.query.appKey, request.query.platform);
     return { issues };
   });
 
   app.get<{ Querystring: { appKey?: string; platform?: string } }>('/api/overview', async (request) => {
-    const events = filterEvents(store.events, request.query.appKey, request.query.platform);
-    const issues = Array.from(store.issues.values()).filter((issue) =>
-      request.query.appKey ? issue.appKey === request.query.appKey : true
-    ).filter((issue) =>
-      request.query.platform ? (issue.platformDistribution[request.query.platform] ?? 0) > 0 : true
-    );
-    const affectedUsers = new Set(events.map((event) => event.userId ?? event.anonymousId));
-
-    return {
-      totals: {
-        events: events.length,
-        errors: events.filter((event) => event.type === 'error').length,
-        failedRequests: events.filter((event) => event.type === 'http' && !event.success).length,
-        affectedUsers: affectedUsers.size,
-        issues: issues.length
-      }
-    };
+    const totals = await store.getOverview(request.query.appKey, request.query.platform);
+    return { totals };
   });
 
   app.get<{ Params: { id: string }; Querystring: { platform?: string } }>('/api/issues/:id', async (request, reply) => {
-    const issue = store.issues.get(request.params.id);
+    const detail = await store.getIssueDetail(request.params.id, request.query.platform);
 
-    if (!issue) {
+    if (!detail.issue) {
       return reply.status(404).send({ message: 'Issue not found' });
     }
 
-    const events = store.events
-      .filter((event) => event.type === 'error' && event.appKey === issue.appKey && event.fingerprint === issue.fingerprint)
-      .filter((event) => (request.query.platform ? event.platform === request.query.platform : true))
-      .sort((left, right) => right.timestamp - left.timestamp);
-
-    return {
-      issue,
-      events
-    };
+    return detail;
   });
 
   return app;
 }
 
-export function createMemoryStore(): HealthGuardStore {
+async function authenticate(store: Store, authorizationHeader: string | undefined): Promise<UserRecord | null> {
+  const token = authorizationHeader?.startsWith('Bearer ') ? authorizationHeader.slice('Bearer '.length) : '';
+  if (!token) return null;
+  return store.findUserBySessionToken(token);
+}
+
+function toPublicUser(user: UserRecord): Omit<UserRecord, 'passwordHash'> {
   return {
-    users: [],
-    sessions: new Map(),
-    apps: [],
-    events: [],
-    issues: new Map()
+    id: user.id,
+    email: user.email,
+    createdAt: user.createdAt
   };
 }
 
-function aggregateIssue(store: HealthGuardStore, event: ErrorEvent): void {
-  const key = `${event.appKey}:${event.fingerprint}`;
-  const existing = store.issues.get(key);
-
-  if (existing) {
-    existing.eventCount += 1;
-    existing.lastSeenAt = Math.max(existing.lastSeenAt, event.timestamp);
-    existing.platformDistribution[event.platform] = (existing.platformDistribution[event.platform] ?? 0) + 1;
-    return;
-  }
-
-  store.issues.set(key, {
-    id: key,
-    appKey: event.appKey,
-    fingerprint: event.fingerprint,
-    message: event.message,
-    errorType: event.errorType,
-    eventCount: 1,
-    firstSeenAt: event.timestamp,
-    lastSeenAt: event.timestamp,
-    platformDistribution: { [event.platform]: 1 }
-  });
+function toPublicApp(record: { id: string; name: string; appKey: string; type: string; createdAt: number }): {
+  id: string;
+  name: string;
+  appKey: string;
+  type: string;
+  createdAt: number;
+} {
+  return {
+    id: record.id,
+    name: record.name,
+    appKey: record.appKey,
+    type: record.type,
+    createdAt: record.createdAt
+  };
 }
 
-function filterEvents(events: HealthGuardEvent[], appKey?: string, platform?: string): HealthGuardEvent[] {
-  return events.filter((event) => (appKey ? event.appKey === appKey : true)).filter((event) => (platform ? event.platform === platform : true));
+function isAppType(value: string): value is AppType {
+  return ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'uni-app', 'other'].includes(value);
 }
 
 function createId(prefix: string): string {
@@ -328,33 +262,4 @@ function verifyPassword(password: string, storedHash: string): boolean {
   const expected = Buffer.from(hash, 'hex');
 
   return candidate.length === expected.length && timingSafeEqual(candidate, expected);
-}
-
-function authenticate(store: HealthGuardStore, authorizationHeader: string | undefined): UserRecord | null {
-  const token = authorizationHeader?.startsWith('Bearer ') ? authorizationHeader.slice('Bearer '.length) : '';
-  const userId = token ? store.sessions.get(token) : undefined;
-
-  return userId ? (store.users.find((user) => user.id === userId) ?? null) : null;
-}
-
-function toPublicUser(user: UserRecord): Omit<UserRecord, 'passwordHash'> {
-  return {
-    id: user.id,
-    email: user.email,
-    createdAt: user.createdAt
-  };
-}
-
-function toPublicApp(record: AppRecord): Omit<AppRecord, 'ownerUserId'> {
-  return {
-    id: record.id,
-    name: record.name,
-    appKey: record.appKey,
-    type: record.type,
-    createdAt: record.createdAt
-  };
-}
-
-function isAppType(value: string): value is AppType {
-  return ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'uni-app', 'other'].includes(value);
 }

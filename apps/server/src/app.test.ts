@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createServerApp } from './app';
+import { createMemoryStore } from './store';
 
 describe('collector api', () => {
   it('registers a local user, returns a session token, and exposes the profile', async () => {
-    const app = createServerApp();
+    const app = createServerApp(createMemoryStore());
 
     const register = await app.inject({
       method: 'POST',
@@ -32,7 +33,7 @@ describe('collector api', () => {
   });
 
   it('requires login for app management and isolates app lists by user', async () => {
-    const app = createServerApp();
+    const app = createServerApp(createMemoryStore());
     const first = await app.inject({
       method: 'POST',
       url: '/api/auth/register',
@@ -83,7 +84,7 @@ describe('collector api', () => {
   });
 
   it('logs in with a registered account and rejects duplicate registrations', async () => {
-    const app = createServerApp();
+    const app = createServerApp(createMemoryStore());
 
     await app.inject({
       method: 'POST',
@@ -115,7 +116,7 @@ describe('collector api', () => {
   });
 
   it('returns stable auth error codes for friendly dashboard messages', async () => {
-    const app = createServerApp();
+    const app = createServerApp(createMemoryStore());
 
     const invalidEmail = await app.inject({
       method: 'POST',
@@ -163,7 +164,7 @@ describe('collector api', () => {
   });
 
   it('creates apps and lists app keys for SDK integration', async () => {
-    const app = createServerApp();
+    const app = createServerApp(createMemoryStore());
     const register = await app.inject({
       method: 'POST',
       url: '/api/auth/register',
@@ -201,7 +202,7 @@ describe('collector api', () => {
   });
 
   it('stores a batch and aggregates repeated errors into one issue', async () => {
-    const app = createServerApp();
+    const app = createServerApp(createMemoryStore());
 
     const payload = {
       appKey: 'demo-app',
@@ -263,7 +264,7 @@ describe('collector api', () => {
   });
 
   it('rejects malformed event batches', async () => {
-    const app = createServerApp();
+    const app = createServerApp(createMemoryStore());
 
     const response = await app.inject({
       method: 'POST',
@@ -278,7 +279,7 @@ describe('collector api', () => {
   });
 
   it('returns overview metrics and issue detail with recent events', async () => {
-    const app = createServerApp();
+    const app = createServerApp(createMemoryStore());
     const payload = {
       appKey: 'demo-app',
       events: [
@@ -344,7 +345,7 @@ describe('collector api', () => {
   });
 
   it('aggregates platform distribution and filters issues/events by platform', async () => {
-    const app = createServerApp();
+    const app = createServerApp(createMemoryStore());
 
     const payload = {
       appKey: 'demo-app',

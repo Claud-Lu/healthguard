@@ -11,7 +11,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@healthguard/core": "0.1.0"
+    "@fastify/cors": "^9.0.1",
+    "@fastify/rate-limit": "^9.1.0",
+    "@healthguard/core": "0.1.0",
+    "fastify": "^4.29.1",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "tsx": "^4.21.0"
