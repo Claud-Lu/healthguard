@@ -1,5 +1,7 @@
 # HealthGuard Operator Guide
 
+> **Project website:** https://hg.chathappy.cn/
+
 This guide is for people running a private HealthGuard deployment.
 
 ## What To Keep In Sync

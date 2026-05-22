@@ -2,6 +2,8 @@
 
 [English](./README.md) | [中文](./README.zh-CN.md)
 
+**Website:** https://hg.chathappy.cn/
+
 HealthGuard is an open-source, self-hosted application health monitoring system for H5 and mini program applications.
 
 The long-term vision is to cover H5, mini programs, Android, and iOS. The first version is intentionally smaller: a personal-developer-friendly MVP that can collect frontend errors, performance metrics, request failures, and breadcrumbs, then show them in a private dashboard.

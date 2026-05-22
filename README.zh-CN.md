@@ -2,6 +2,8 @@
 
 [English](./README.md) | [中文](./README.zh-CN.md)
 
+**官网：** https://hg.chathappy.cn/
+
 HealthGuard 是一款开源、可自托管的应用健康监控系统，面向 H5 与小程序场景。
 
 长期目标是覆盖 H5、小程序、Android 和 iOS。首个版本刻意保持精简：先做一个对独立开发者友好的 MVP，采集前端错误、性能指标、请求失败和面包屑信息，并在私有看板中展示。
