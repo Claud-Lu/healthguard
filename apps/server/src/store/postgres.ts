@@ -138,10 +138,23 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       const eventResult = await client.query(eventSql, eventParams);
       const row = eventResult.rows[0];
 
-      const userResult = await client.query(
-        `SELECT COUNT(DISTINCT COALESCE(user_id, anonymous_id))::int as affected_users FROM events ${conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ').replace(/\$[0-9]+/g, (m) => `$${Number(m.slice(1)) + eventParams.length}`) : ''}`,
-        [...eventParams]
-      );
+      let userSql = 'SELECT COUNT(DISTINCT COALESCE(user_id, anonymous_id))::int as affected_users FROM events';
+      const userParams: (string | number)[] = [];
+      const userConditions: string[] = [];
+
+      if (appKey) {
+        userConditions.push(`app_key = $${userParams.length + 1}`);
+        userParams.push(appKey);
+      }
+      if (platform) {
+        userConditions.push(`platform = $${userParams.length + 1}`);
+        userParams.push(platform);
+      }
+      if (userConditions.length > 0) {
+        userSql += ' WHERE ' + userConditions.join(' AND ');
+      }
+
+      const userResult = await client.query(userSql, userParams);
 
       let issueSql = 'SELECT COUNT(*)::int as issues FROM issues';
       const issueParams: (string | number)[] = [];

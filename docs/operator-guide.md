@@ -84,3 +84,8 @@ Do not hard-code private company domains, internal IPs, business project names, 
 - There is no session expiry policy yet.
 - There is no role or team management yet.
 - Production private deployment should add persistent storage before real use.
+
+## Security Notes
+
+- The default `docker-compose.yml` uses hardcoded database credentials (`healthguard:healthguard`) for development convenience. **Before deploying to production, change `POSTGRES_PASSWORD` and the corresponding `DATABASE_URL` to strong, unique passwords.**
+- `CORS_ORIGIN` is set to `*` by default. Restrict it to your actual domain in production.
