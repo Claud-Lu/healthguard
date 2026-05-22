@@ -21,7 +21,18 @@ export const breadcrumbSchema = z.object({
 export const baseEventSchema = z.object({
   eventId: z.string().min(1),
   appKey: z.string().min(1),
-  platform: z.enum(['web', 'wechat-miniprogram', 'flutter']),
+  platform: z.enum([
+    'web',
+    'wechat-miniprogram',
+    'alipay-miniprogram',
+    'flutter',
+    'uniapp-h5',
+    'uniapp-wechat',
+    'uniapp-alipay',
+    'uniapp-douyin',
+    'uniapp-app',
+    'uniapp'
+  ]),
   timestamp: z.number(),
   sessionId: z.string().min(1),
   userId: z.string().optional(),

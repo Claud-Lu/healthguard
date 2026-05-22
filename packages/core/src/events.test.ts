@@ -79,6 +79,46 @@ describe('event schema', () => {
       errorType: 'native'
     });
   });
+
+  it('accepts uni-app multi-platform events', () => {
+    const parsed = parseEventBatch({
+      appKey: 'driver-uniapp',
+      events: [
+        {
+          eventId: 'evt_uniapp_h5',
+          appKey: 'driver-uniapp',
+          platform: 'uniapp-h5',
+          type: 'error',
+          timestamp: 1710000000000,
+          sessionId: 'session-1',
+          anonymousId: 'anon-1',
+          sdkVersion: '0.1.0-uniapp',
+          errorType: 'js',
+          message: 'h5 error',
+          fingerprint: 'uniapp:h5',
+          breadcrumbs: []
+        },
+        {
+          eventId: 'evt_uniapp_wechat',
+          appKey: 'driver-uniapp',
+          platform: 'uniapp-wechat',
+          type: 'error',
+          timestamp: 1710000000000,
+          sessionId: 'session-2',
+          anonymousId: 'anon-2',
+          sdkVersion: '0.1.0-uniapp',
+          errorType: 'js',
+          message: 'wechat error',
+          fingerprint: 'uniapp:wechat',
+          breadcrumbs: []
+        }
+      ]
+    });
+
+    expect(parsed.events).toHaveLength(2);
+    expect(parsed.events[0].platform).toBe('uniapp-h5');
+    expect(parsed.events[1].platform).toBe('uniapp-wechat');
+  });
 });
 
 describe('privacy helpers', () => {

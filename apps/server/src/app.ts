@@ -3,7 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { parseEventBatch, type ErrorEvent, type EventBatch, type HealthGuardEvent } from '@healthguard/core';
 
-export type AppType = 'web' | 'wechat-miniprogram' | 'alipay-miniprogram' | 'flutter' | 'other';
+export type AppType = 'web' | 'wechat-miniprogram' | 'alipay-miniprogram' | 'flutter' | 'uni-app' | 'other';
 
 export interface UserRecord {
   id: string;
@@ -30,6 +30,7 @@ export interface IssueSummary {
   eventCount: number;
   firstSeenAt: number;
   lastSeenAt: number;
+  platformDistribution: Record<string, number>;
 }
 
 export interface HealthGuardStore {
@@ -184,18 +185,23 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
     });
   });
 
-  app.get<{ Querystring: { appKey?: string } }>('/api/issues', async (request) => {
+  app.get<{ Querystring: { appKey?: string; platform?: string } }>('/api/issues', async (request) => {
     const issues = Array.from(store.issues.values())
       .filter((issue) => (request.query.appKey ? issue.appKey === request.query.appKey : true))
+      .filter((issue) =>
+        request.query.platform ? (issue.platformDistribution[request.query.platform] ?? 0) > 0 : true
+      )
       .sort((left, right) => right.lastSeenAt - left.lastSeenAt);
 
     return { issues };
   });
 
-  app.get<{ Querystring: { appKey?: string } }>('/api/overview', async (request) => {
-    const events = filterEvents(store.events, request.query.appKey);
+  app.get<{ Querystring: { appKey?: string; platform?: string } }>('/api/overview', async (request) => {
+    const events = filterEvents(store.events, request.query.appKey, request.query.platform);
     const issues = Array.from(store.issues.values()).filter((issue) =>
       request.query.appKey ? issue.appKey === request.query.appKey : true
+    ).filter((issue) =>
+      request.query.platform ? (issue.platformDistribution[request.query.platform] ?? 0) > 0 : true
     );
     const affectedUsers = new Set(events.map((event) => event.userId ?? event.anonymousId));
 
@@ -210,7 +216,7 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
     };
   });
 
-  app.get<{ Params: { id: string } }>('/api/issues/:id', async (request, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { platform?: string } }>('/api/issues/:id', async (request, reply) => {
     const issue = store.issues.get(request.params.id);
 
     if (!issue) {
@@ -219,6 +225,7 @@ export function createServerApp(store: HealthGuardStore = createMemoryStore()): 
 
     const events = store.events
       .filter((event) => event.type === 'error' && event.appKey === issue.appKey && event.fingerprint === issue.fingerprint)
+      .filter((event) => (request.query.platform ? event.platform === request.query.platform : true))
       .sort((left, right) => right.timestamp - left.timestamp);
 
     return {
@@ -247,6 +254,7 @@ function aggregateIssue(store: HealthGuardStore, event: ErrorEvent): void {
   if (existing) {
     existing.eventCount += 1;
     existing.lastSeenAt = Math.max(existing.lastSeenAt, event.timestamp);
+    existing.platformDistribution[event.platform] = (existing.platformDistribution[event.platform] ?? 0) + 1;
     return;
   }
 
@@ -258,12 +266,13 @@ function aggregateIssue(store: HealthGuardStore, event: ErrorEvent): void {
     errorType: event.errorType,
     eventCount: 1,
     firstSeenAt: event.timestamp,
-    lastSeenAt: event.timestamp
+    lastSeenAt: event.timestamp,
+    platformDistribution: { [event.platform]: 1 }
   });
 }
 
-function filterEvents(events: HealthGuardEvent[], appKey?: string): HealthGuardEvent[] {
-  return events.filter((event) => (appKey ? event.appKey === appKey : true));
+function filterEvents(events: HealthGuardEvent[], appKey?: string, platform?: string): HealthGuardEvent[] {
+  return events.filter((event) => (appKey ? event.appKey === appKey : true)).filter((event) => (platform ? event.platform === platform : true));
 }
 
 function createId(prefix: string): string {
@@ -347,5 +356,5 @@ function toPublicApp(record: AppRecord): Omit<AppRecord, 'ownerUserId'> {
 }
 
 function isAppType(value: string): value is AppType {
-  return ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'other'].includes(value);
+  return ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'uni-app', 'other'].includes(value);
 }

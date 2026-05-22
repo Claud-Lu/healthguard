@@ -342,4 +342,88 @@ describe('collector api', () => {
 
     await app.close();
   });
+
+  it('aggregates platform distribution and filters issues/events by platform', async () => {
+    const app = createServerApp();
+
+    const payload = {
+      appKey: 'demo-app',
+      events: [
+        {
+          eventId: 'evt_1',
+          appKey: 'demo-app',
+          platform: 'uniapp-h5',
+          type: 'error',
+          timestamp: 1710000000000,
+          sessionId: 'session-1',
+          anonymousId: 'anon-1',
+          sdkVersion: '0.1.0',
+          errorType: 'js',
+          message: 'boom',
+          fingerprint: 'js:boom',
+          breadcrumbs: []
+        },
+        {
+          eventId: 'evt_2',
+          appKey: 'demo-app',
+          platform: 'uniapp-wechat',
+          type: 'error',
+          timestamp: 1710000000100,
+          sessionId: 'session-2',
+          anonymousId: 'anon-2',
+          sdkVersion: '0.1.0',
+          errorType: 'js',
+          message: 'boom',
+          fingerprint: 'js:boom',
+          breadcrumbs: []
+        },
+        {
+          eventId: 'evt_3',
+          appKey: 'demo-app',
+          platform: 'uniapp-wechat',
+          type: 'error',
+          timestamp: 1710000000200,
+          sessionId: 'session-3',
+          anonymousId: 'anon-3',
+          sdkVersion: '0.1.0',
+          errorType: 'js',
+          message: 'boom',
+          fingerprint: 'js:boom',
+          breadcrumbs: []
+        }
+      ]
+    };
+
+    await app.inject({ method: 'POST', url: '/api/events/batch', payload });
+
+    const issuesAll = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app' });
+    const issuesH5 = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app&platform=uniapp-h5' });
+    const issuesWechat = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app&platform=uniapp-wechat' });
+    const issuesUnknown = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app&platform=unknown' });
+
+    expect(issuesAll.json().issues).toHaveLength(1);
+    expect(issuesAll.json().issues[0]).toMatchObject({
+      eventCount: 3,
+      platformDistribution: { 'uniapp-h5': 1, 'uniapp-wechat': 2 }
+    });
+
+    expect(issuesH5.json().issues).toHaveLength(1);
+    expect(issuesWechat.json().issues).toHaveLength(1);
+    expect(issuesUnknown.json().issues).toHaveLength(0);
+
+    const overviewH5 = await app.inject({ method: 'GET', url: '/api/overview?appKey=demo-app&platform=uniapp-h5' });
+    expect(overviewH5.json().totals).toMatchObject({ events: 1, errors: 1, issues: 1 });
+
+    const overviewWechat = await app.inject({ method: 'GET', url: '/api/overview?appKey=demo-app&platform=uniapp-wechat' });
+    expect(overviewWechat.json().totals).toMatchObject({ events: 2, errors: 2, issues: 1 });
+
+    const detailH5 = await app.inject({ method: 'GET', url: '/api/issues/demo-app%3Ajs%3Aboom?platform=uniapp-h5' });
+    expect(detailH5.json().events).toHaveLength(1);
+    expect(detailH5.json().events[0].platform).toBe('uniapp-h5');
+
+    const detailWechat = await app.inject({ method: 'GET', url: '/api/issues/demo-app%3Ajs%3Aboom?platform=uniapp-wechat' });
+    expect(detailWechat.json().events).toHaveLength(2);
+
+    await app.close();
+  });
 });

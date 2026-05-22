@@ -2,9 +2,12 @@ export type Locale = 'en-US' | 'zh-CN';
 
 export type MessageKey =
   | 'affectedUsers'
+  | 'allPlatforms'
   | 'appName'
   | 'appType'
   | 'applicationHealth'
+  | 'cancel'
+  | 'confirm'
   | 'create'
   | 'createApp'
   | 'currentAppKey'
@@ -29,6 +32,7 @@ export type MessageKey =
   | 'password'
   | 'passwordHelp'
   | 'passwordTooShort'
+  | 'platform'
   | 'projectList'
   | 'projectDetail'
   | 'refresh'
@@ -44,7 +48,10 @@ type Messages = Record<MessageKey, string>;
 const messages: Record<Locale, Messages> = {
   'en-US': {
     affectedUsers: 'Affected Users',
+    allPlatforms: 'All Platforms',
     appName: 'App name',
+    cancel: 'Cancel',
+    confirm: 'Confirm',
     appType: 'App Type',
     applicationHealth: 'Application Health',
     create: 'Create',
@@ -71,6 +78,7 @@ const messages: Record<Locale, Messages> = {
     password: 'Password',
     passwordHelp: 'At least 8 characters.',
     passwordTooShort: 'Password must be at least 8 characters.',
+    platform: 'Platform',
     projectList: 'Projects',
     projectDetail: 'Project Detail',
     refresh: 'Refresh',
@@ -83,7 +91,10 @@ const messages: Record<Locale, Messages> = {
   },
   'zh-CN': {
     affectedUsers: '影响用户',
+    allPlatforms: '全部平台',
     appName: '项目名称',
+    cancel: '取消',
+    confirm: '确定',
     appType: '项目类型',
     applicationHealth: '应用健康度',
     create: '创建',
@@ -110,6 +121,7 @@ const messages: Record<Locale, Messages> = {
     password: '密码',
     passwordHelp: '至少 8 位。',
     passwordTooShort: '密码至少需要 8 位。',
+    platform: '平台',
     projectList: '项目列表',
     projectDetail: '项目详情',
     refresh: '刷新',

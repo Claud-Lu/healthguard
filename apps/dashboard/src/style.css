@@ -233,6 +233,75 @@ h1 {
   font-weight: 700;
 }
 
+.platform-filter {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.platform-filter .field {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+}
+
+.platform-filter select {
+  min-width: 180px;
+}
+
+.platform-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.platform-tag {
+  background: #e0f2fe;
+  border-radius: 4px;
+  color: #0369a1;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+}
+
+.modal-overlay {
+  align-items: center;
+  background: rgb(16 24 32 / 50%);
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 100;
+}
+
+.modal-card {
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 18px 50px rgb(16 24 32 / 15%);
+  display: grid;
+  gap: 16px;
+  max-width: 420px;
+  padding: 24px;
+  width: 100%;
+}
+
+.modal-card h2 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.modal-actions .wide {
+  flex: 1;
+}
+
 .metrics {
   display: grid;
   gap: 12px;

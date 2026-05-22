@@ -1,8 +1,8 @@
-import { computed, createApp, h, onMounted, ref } from 'vue';
+import { computed, createApp, h, onMounted, ref, watch } from 'vue';
 import { defaultLocaleFromTimeZone, getMessages, messageForErrorCode, type Locale } from './i18n';
 import './style.css';
 
-type AppType = 'web' | 'wechat-miniprogram' | 'alipay-miniprogram' | 'flutter' | 'other';
+type AppType = 'web' | 'wechat-miniprogram' | 'alipay-miniprogram' | 'flutter' | 'uni-app' | 'other';
 
 interface AppRecord {
   id: string;
@@ -42,6 +42,7 @@ interface IssueSummary {
   eventCount: number;
   firstSeenAt: number;
   lastSeenAt: number;
+  platformDistribution: Record<string, number>;
 }
 
 interface IssueDetailResponse {
@@ -77,7 +78,8 @@ async function requestJson<T>(url: string, init?: RequestInit, token?: string): 
 }
 
 const apiBase = (import.meta.env.VITE_HEALTHGUARD_API_BASE || '/api').replace(/\/$/, '');
-const appTypes: AppType[] = ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'other'];
+const appTypes: AppType[] = ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'uni-app', 'other'];
+const platforms = ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'uniapp-h5', 'uniapp-wechat', 'uniapp-alipay', 'uniapp-douyin', 'uniapp-app', 'uniapp'];
 
 function apiUrl(path: string): string {
   return `${apiBase}${path.startsWith('/') ? path : `/${path}`}`;
@@ -117,14 +119,27 @@ const App = {
     const appType = ref<AppType>('web');
     const errorMessage = ref('');
     const loading = ref(false);
+    const selectedPlatform = ref('');
+    const showCreateModal = ref(false);
 
-    const sdkSnippet = computed(
-      () => `const client = createHealthGuardClient({
-  appKey: '${selectedAppKey.value}',
-  endpoint: '${apiUrl('/events/batch')}',
+    const sdkSnippet = computed(() => {
+      const appKey = selectedAppKey.value;
+      const endpoint = apiUrl('/events/batch');
+      if (selectedApp.value?.type === 'uni-app') {
+        return `import { createUniAppClient } from '@healthguard/sdk-uniapp';
+
+const client = createUniAppClient({
+  appKey: '${appKey}',
+  endpoint: '${endpoint}',
   autoCapture: true
-});`
-    );
+});`;
+      }
+      return `const client = createHealthGuardClient({
+  appKey: '${appKey}',
+  endpoint: '${endpoint}',
+  autoCapture: true
+});`;
+    });
 
     function setLocale(nextLocale: Locale): void {
       locale.value = nextLocale;
@@ -209,9 +224,10 @@ const App = {
 
     async function loadProjectData(appKey: string): Promise<void> {
       const query = encodeURIComponent(appKey);
+      const platformQuery = selectedPlatform.value ? `&platform=${encodeURIComponent(selectedPlatform.value)}` : '';
       const [overviewResponse, issueResponse] = await Promise.all([
-        requestJson<OverviewResponse>(apiUrl(`/overview?appKey=${query}`), undefined, token.value),
-        requestJson<{ issues: IssueSummary[] }>(apiUrl(`/issues?appKey=${query}`), undefined, token.value)
+        requestJson<OverviewResponse>(apiUrl(`/overview?appKey=${query}${platformQuery}`), undefined, token.value),
+        requestJson<{ issues: IssueSummary[] }>(apiUrl(`/issues?appKey=${query}${platformQuery}`), undefined, token.value)
       ]);
 
       overview.value = overviewResponse.totals;
@@ -260,26 +276,41 @@ const App = {
         return;
       }
 
-      const response = await requestJson<{ app: AppRecord }>(
-        apiUrl('/apps'),
-        {
-          method: 'POST',
-          body: JSON.stringify({ name, type: appType.value })
-        },
-        token.value
-      );
+      try {
+        const response = await requestJson<{ app: AppRecord }>(
+          apiUrl('/apps'),
+          {
+            method: 'POST',
+            body: JSON.stringify({ name, type: appType.value })
+          },
+          token.value
+        );
 
-      selectedAppKey.value = response.app.appKey;
-      appName.value = '';
-      await refresh();
+        selectedAppKey.value = response.app.appKey;
+        appName.value = '';
+        showCreateModal.value = false;
+        await refresh();
+      } catch (error) {
+        errorMessage.value = friendlyErrorMessage(error, locale.value);
+      }
     }
 
     async function openIssue(issue: IssueSummary): Promise<void> {
-      selectedIssue.value = await requestJson<IssueDetailResponse>(apiUrl(`/issues/${encodeURIComponent(issue.id)}`), undefined, token.value);
+      const platformQuery = selectedPlatform.value ? `?platform=${encodeURIComponent(selectedPlatform.value)}` : '';
+      selectedIssue.value = await requestJson<IssueDetailResponse>(apiUrl(`/issues/${encodeURIComponent(issue.id)}${platformQuery}`), undefined, token.value);
     }
 
     onMounted(() => {
       void loadProfile().then(refresh);
+    });
+
+    watch(selectedPlatform, () => {
+      if (selectedAppKey.value) {
+        void loadProjectData(selectedAppKey.value);
+        if (selectedIssue.value) {
+          void openIssue(selectedIssue.value.issue);
+        }
+      }
     });
 
     return () => {
@@ -345,30 +376,7 @@ const App = {
           h('button', { type: 'button', class: 'wide', onClick: refresh, disabled: loading.value }, t.refresh),
           h('div', { class: 'create-box' }, [
             h('h2', t.createApp),
-            h('label', { class: 'field' }, [
-              h('span', t.appName),
-              h('input', {
-                value: appName.value,
-                placeholder: t.appName,
-                onInput: (event: Event) => {
-                  appName.value = (event.target as HTMLInputElement).value;
-                }
-              })
-            ]),
-            h('label', { class: 'field' }, [
-              h('span', t.appType),
-              h(
-                'select',
-                {
-                  value: appType.value,
-                  onChange: (event: Event) => {
-                    appType.value = (event.target as HTMLSelectElement).value as AppType;
-                  }
-                },
-                appTypes.map((type) => h('option', { value: type }, type))
-              )
-            ]),
-            h('button', { type: 'button', class: 'wide secondary', onClick: createAppRecord }, t.create)
+            h('button', { type: 'button', class: 'wide secondary', onClick: () => { showCreateModal.value = true; } }, t.create)
           ]),
           h('div', { class: 'panel-title' }, t.projectList),
           h(
@@ -397,6 +405,21 @@ const App = {
             h('button', { type: 'button', class: 'outline-button', onClick: showProjectList }, t.projectList),
             errorMessage.value ? h('p', { class: 'error' }, errorMessage.value) : null
           ]),
+          h('section', { class: 'platform-filter' }, [
+            h('label', { class: 'field' }, [
+              h('span', t.platform),
+              h(
+                'select',
+                {
+                  value: selectedPlatform.value,
+                  onChange: (event: Event) => {
+                    selectedPlatform.value = (event.target as HTMLSelectElement).value;
+                  }
+                },
+                [h('option', { value: '' }, t.allPlatforms), ...platforms.map((p) => h('option', { value: p }, p))]
+              )
+            ])
+          ]),
           h('section', { class: 'metrics' }, [
             metricCard(t.events, overview.value.events),
             metricCard(t.errors, overview.value.errors),
@@ -423,6 +446,15 @@ const App = {
                         [
                           h('strong', issue.message),
                           h('span', `${issue.errorType} / ${issue.eventCount} ${t.events}`),
+                          Object.keys(issue.platformDistribution).length > 0
+                            ? h(
+                                'div',
+                                { class: 'platform-tags' },
+                                Object.entries(issue.platformDistribution).map(([platform, count]) =>
+                                  h('span', { class: 'platform-tag', title: `${count} events` }, `${platform}: ${count}`)
+                                )
+                              )
+                            : null,
                           h('small', issue.fingerprint)
                         ]
                       )
@@ -470,8 +502,80 @@ const App = {
                       ])
                     )
               )
-            ])
-      ]);
+            ]),
+            showCreateModal.value
+              ? h(
+                  'div',
+                  {
+                    class: 'modal-overlay',
+                    onClick: () => {
+                      showCreateModal.value = false;
+                    }
+                  },
+                  [
+                    h(
+                      'div',
+                      {
+                        class: 'modal-card',
+                        onClick: (event: Event) => {
+                          event.stopPropagation();
+                        }
+                      },
+                      [
+                        h('h2', t.createApp),
+                        h('label', { class: 'field' }, [
+                          h('span', t.appName),
+                          h('input', {
+                            value: appName.value,
+                            placeholder: t.appName,
+                            onInput: (event: Event) => {
+                              appName.value = (event.target as HTMLInputElement).value;
+                            }
+                          })
+                        ]),
+                        h('label', { class: 'field' }, [
+                          h('span', t.appType),
+                          h(
+                            'select',
+                            {
+                              value: appType.value,
+                              onChange: (event: Event) => {
+                                appType.value = (event.target as HTMLSelectElement).value as AppType;
+                              }
+                            },
+                            appTypes.map((type) => h('option', { value: type }, type))
+                          )
+                        ]),
+                        h('div', { class: 'modal-actions' }, [
+                          h(
+                            'button',
+                            {
+                              type: 'button',
+                              class: 'wide secondary',
+                              onClick: () => {
+                                showCreateModal.value = false;
+                              }
+                            },
+                            t.cancel
+                          ),
+                          h(
+                            'button',
+                            {
+                              type: 'button',
+                              class: 'wide',
+                              onClick: createAppRecord,
+                              disabled: loading.value
+                            },
+                            t.confirm
+                          )
+                        ]),
+                        errorMessage.value ? h('p', { class: 'error' }, errorMessage.value) : null
+                      ]
+                    )
+                  ]
+                )
+              : null
+          ]);
     };
   }
 };
