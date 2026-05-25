@@ -31,6 +31,7 @@ export interface MiniProgramClientOptions {
   appKey: string;
   endpoint: string;
   wx: MiniProgramWxLike;
+  platform?: Extract<ErrorEvent['platform'], 'wechat-miniprogram' | 'alipay-miniprogram'>;
   release?: string;
   environment?: ErrorEvent['environment'];
   userId?: string;
@@ -52,7 +53,7 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
   const breadcrumbs: Breadcrumb[] = [];
   const sessionId = createId('session');
   const anonymousId = createId('anon');
-  const transport = options.transport ?? defaultTransport;
+  const transport = options.transport ?? createRequestTransport(options.wx);
 
   function enqueue(event: EventBatch['events'][number]): void {
     queue.push(event);
@@ -184,7 +185,7 @@ function createBaseEvent(
   return {
     eventId: createId('evt'),
     appKey: options.appKey,
-    platform: 'wechat-miniprogram',
+    platform: options.platform ?? 'wechat-miniprogram',
     timestamp: Date.now(),
     sessionId,
     anonymousId,
@@ -231,13 +232,29 @@ function installRequestCapture(
   };
 }
 
-async function defaultTransport(batch: EventBatch, endpoint: string): Promise<void> {
-  await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify(batch)
+function createRequestTransport(wx: MiniProgramWxLike): (batch: EventBatch, endpoint: string) => Promise<void> {
+  const request = wx.request.bind(wx);
+
+  return (batch: EventBatch, endpoint: string) => new Promise((resolve, reject) => {
+    request({
+      url: endpoint,
+      method: 'POST',
+      data: batch,
+      header: {
+        'content-type': 'application/json'
+      },
+      success(response: { statusCode?: number }) {
+        if (response.statusCode && response.statusCode >= 400) {
+          reject(new Error(`HealthGuard transport failed with status ${response.statusCode}`));
+          return;
+        }
+
+        resolve();
+      },
+      fail(error: { errMsg?: string }) {
+        reject(new Error(error.errMsg || 'HealthGuard transport failed'));
+      }
+    });
   });
 }
 

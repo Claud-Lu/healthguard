@@ -73,6 +73,56 @@ describe('sdk-miniprogram client', () => {
     });
   });
 
+  it('uses the configured mini-program platform for captured events', async () => {
+    const transport = vi.fn().mockResolvedValue(undefined);
+    const wx = {
+      onError: vi.fn(),
+      onUnhandledRejection: vi.fn(),
+      request: vi.fn()
+    };
+    const client = createMiniProgramClient({
+      appKey: 'mini-app',
+      endpoint: '/api/events/batch',
+      wx,
+      platform: 'alipay-miniprogram',
+      transport
+    });
+
+    client.captureException(new Error('alipay boom'));
+    await client.flush();
+
+    expect(transport.mock.calls[0][0].events[0]).toMatchObject({
+      platform: 'alipay-miniprogram',
+      message: 'alipay boom'
+    });
+  });
+
+  it('uses wx.request as the default transport and posts to the collector endpoint', async () => {
+    const wx = {
+      onError: vi.fn(),
+      onUnhandledRejection: vi.fn(),
+      request: vi.fn((options: any) => {
+        options.success?.({ statusCode: 202 });
+      })
+    };
+    const client = createMiniProgramClient({
+      appKey: 'mini-app',
+      endpoint: 'https://collector.example.com/events/batch',
+      wx
+    });
+
+    client.captureException(new Error('native transport boom'));
+    await client.flush();
+
+    expect(wx.request).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'https://collector.example.com/events/batch',
+      method: 'POST',
+      data: expect.objectContaining({
+        appKey: 'mini-app'
+      })
+    }));
+  });
+
   it('records page lifecycle breadcrumbs', async () => {
     const transport = vi.fn().mockResolvedValue(undefined);
     const pageDefinition = {
