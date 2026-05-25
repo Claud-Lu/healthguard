@@ -17,7 +17,7 @@ describe('project list layout', () => {
     const styles = readFileSync(new URL('./style.css', import.meta.url), 'utf8');
 
     expect(styles).toContain('align-content: start;');
-    expect(styles).toContain('.project-card');
-    expect(styles).toContain('min-height: 220px;');
+    expect(styles).toContain('.project-table');
+    expect(styles).toContain('.project-table-row');
   });
 });

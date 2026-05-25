@@ -26,16 +26,22 @@ export type MessageKey =
   | 'events'
   | 'failedRequests'
   | 'groups'
+  | 'healthScore'
+  | 'healthStatus'
+  | 'healthy'
   | 'inspectSubtitle'
   | 'invalidCredentials'
   | 'invalidEmail'
   | 'issueDetail'
   | 'issues'
+  | 'latestActivity'
   | 'language'
   | 'login'
   | 'logout'
   | 'networkError'
+  | 'noData'
   | 'noIssueSelected'
+  | 'openDetail'
   | 'password'
   | 'passwordHelp'
   | 'passwordTooShort'
@@ -48,7 +54,9 @@ export type MessageKey =
   | 'selectProject'
   | 'emailAlreadyRegistered'
   | 'switchToLogin'
-  | 'switchToRegister';
+  | 'switchToRegister'
+  | 'warning'
+  | 'critical';
 
 type Messages = Record<MessageKey, string>;
 
@@ -79,16 +87,22 @@ const messages: Record<Locale, Messages> = {
     events: 'Events',
     failedRequests: 'Failed Requests',
     groups: 'groups',
+    healthScore: 'Health',
+    healthStatus: 'Status',
+    healthy: 'Healthy',
     inspectSubtitle: 'Inspect captured errors, failed requests, and SDK setup for the selected app.',
     invalidCredentials: 'Email or password is incorrect.',
     invalidEmail: 'Please enter a valid email address.',
     issueDetail: 'Issue Detail',
     issues: 'Issues',
+    latestActivity: 'Latest Activity',
     language: 'Language',
     login: 'Login',
     logout: 'Logout',
     networkError: 'Request failed. Please try again later.',
+    noData: 'No data',
     noIssueSelected: 'Select an issue to inspect stack, breadcrumbs, and recent events.',
+    openDetail: 'Open',
     password: 'Password',
     passwordHelp: 'At least 8 characters.',
     passwordTooShort: 'Password must be at least 8 characters.',
@@ -101,7 +115,9 @@ const messages: Record<Locale, Messages> = {
     selectProject: 'Select Project',
     emailAlreadyRegistered: 'This email is already registered.',
     switchToLogin: 'Have an account? Login',
-    switchToRegister: 'Need an account? Register'
+    switchToRegister: 'Need an account? Register',
+    warning: 'Warning',
+    critical: 'Critical'
   },
   'zh-CN': {
     affectedUsers: '影响用户',
@@ -129,16 +145,22 @@ const messages: Record<Locale, Messages> = {
     events: '事件数',
     failedRequests: '失败请求',
     groups: '组',
+    healthScore: '健康度',
+    healthStatus: '状态',
+    healthy: '健康',
     inspectSubtitle: '查看所选项目采集到的错误、失败请求和 SDK 接入信息。',
     invalidCredentials: '邮箱或密码不正确。',
     invalidEmail: '请输入正确的邮箱地址。',
     issueDetail: 'Issue 详情',
     issues: 'Issues',
+    latestActivity: '最近活动',
     language: '语言',
     login: '登录',
     logout: '退出登录',
     networkError: '请求失败，请稍后重试。',
+    noData: '暂无数据',
     noIssueSelected: '选择一个 Issue 后查看堆栈、面包屑和最近事件。',
+    openDetail: '查看详情',
     password: '密码',
     passwordHelp: '至少 8 位。',
     passwordTooShort: '密码至少需要 8 位。',
@@ -151,7 +173,9 @@ const messages: Record<Locale, Messages> = {
     selectProject: '查看项目',
     emailAlreadyRegistered: '该邮箱已注册，请直接登录。',
     switchToLogin: '已有账号？去登录',
-    switchToRegister: '没有账号？去注册'
+    switchToRegister: '没有账号？去注册',
+    warning: '注意',
+    critical: '异常'
   }
 };
 

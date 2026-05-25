@@ -1,11 +1,9 @@
-import { h, ref, watch, onMounted, computed } from 'vue';
+import { computed, h, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { store, messages, loadApps, createApp, setLocale } from '../globalStore';
-import { apiUrl, requestJson, formatTime } from '../api';
-import type { Locale } from '../i18n';
-import type { OverviewTotals, IssueSummary, AppType } from '../globalStore';
+import { store, messages, loadApps } from '../globalStore';
+import { apiUrl, formatTime, requestJson } from '../api';
+import type { IssueSummary, OverviewTotals } from '../globalStore';
 
-const appTypes: AppType[] = ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'uni-app', 'other'];
 const platforms = ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'uniapp-h5', 'uniapp-wechat', 'uniapp-alipay', 'uniapp-douyin', 'uniapp-app', 'uniapp'];
 
 interface IssueDetailResponse {
@@ -23,9 +21,6 @@ export default {
     const issues = ref<IssueSummary[]>([]);
     const selectedIssue = ref<IssueDetailResponse | null>(null);
     const selectedPlatform = ref('');
-    const showCreateModal = ref(false);
-    const appName = ref('');
-    const appType = ref<AppType>('web');
 
     const selectedApp = computed(() => store.apps.find((item) => item.appKey === appKey.value) ?? null);
 
@@ -33,6 +28,9 @@ export default {
       const endpoint = apiUrl('/events/batch');
       if (selectedApp.value?.type === 'uni-app') {
         return `import { createUniAppClient } from '@healthguard/sdk-uniapp';\n\nconst client = createUniAppClient({\n  appKey: '${appKey.value}',\n  endpoint: '${endpoint}',\n  autoCapture: true\n});`;
+      }
+      if (selectedApp.value?.type === 'flutter') {
+        return `flutter build apk --release \\\n  --dart-define=HEALTHGUARD_ENDPOINT=${endpoint} \\\n  --dart-define=HEALTHGUARD_APP_KEY=${appKey.value} \\\n  --dart-define=HEALTHGUARD_ENV=production`;
       }
       return `const client = createHealthGuardClient({\n  appKey: '${appKey.value}',\n  endpoint: '${endpoint}',\n  autoCapture: true\n});`;
     });
@@ -53,7 +51,7 @@ export default {
     onMounted(() => {
       void loadApps().then(() => {
         if (!selectedApp.value) {
-          router.push('/projects');
+          void router.push('/projects');
           return;
         }
         void loadProjectData();
@@ -84,26 +82,6 @@ export default {
       selectedIssue.value = await requestJson<IssueDetailResponse>(apiUrl(`/issues/${encodeURIComponent(issue.id)}${platformQuery}`), undefined, store.token);
     }
 
-    async function handleCreateApp(): Promise<void> {
-      const key = await createApp(appName.value, appType.value);
-      if (key) {
-        appName.value = '';
-        showCreateModal.value = false;
-      }
-    }
-
-    function languageButton(label: string, value: Locale, current: Locale, onClick: (locale: Locale) => void) {
-      return h(
-        'button',
-        {
-          type: 'button',
-          class: current === value ? 'language-button active' : 'language-button',
-          onClick: () => onClick(value)
-        },
-        label
-      );
-    }
-
     function metricCard(label: string, value: number) {
       return h('article', { class: 'metric' }, [h('span', label), h('strong', value.toLocaleString())]);
     }
@@ -116,18 +94,8 @@ export default {
       }
 
       return h('main', { class: 'layout' }, [
-        h('aside', { class: 'sidebar' }, [
+        h('aside', { class: 'sidebar detail-sidebar' }, [
           h('div', { class: 'brand' }, [h('strong', 'HealthGuard'), h('span', store.user?.email ?? '')]),
-          h('div', { class: 'language-row' }, [
-            h('span', t.language),
-            languageButton('EN', 'en-US', store.locale, setLocale),
-            languageButton('中文', 'zh-CN', store.locale, setLocale)
-          ]),
-          h('button', { type: 'button', class: 'wide', onClick: () => { void loadProjectData(); }, disabled: store.loading }, t.refresh),
-          h('div', { class: 'create-box' }, [
-            h('h2', t.createApp),
-            h('button', { type: 'button', class: 'wide secondary', onClick: () => { showCreateModal.value = true; } }, t.create)
-          ]),
           h('div', { class: 'panel-title' }, t.projectList),
           h(
             'div',
@@ -144,13 +112,21 @@ export default {
               )
             )
           ),
+          h('section', { class: 'sdk-sidebar' }, [
+            h('div', { class: 'panel-title' }, t.sdkIntegration),
+            h('small', appKey.value),
+            h('pre', sdkSnippet.value)
+          ]),
           h('button', { type: 'button', class: 'wide ghost', onClick: () => router.push('/projects') }, t.projectList)
         ]),
 
-        h('section', { class: 'content' }, [
+        h('section', { class: 'content detail-content' }, [
           h('header', { class: 'topbar' }, [
             h('div', [h('h1', selectedApp.value.name), h('p', t.inspectSubtitle)]),
-            h('button', { type: 'button', class: 'outline-button', onClick: () => router.push('/projects') }, t.projectList),
+            h('div', { class: 'topbar-actions' }, [
+              h('button', { type: 'button', class: 'outline-button', onClick: () => { void loadProjectData(); }, disabled: store.loading }, t.refresh),
+              h('button', { type: 'button', class: 'outline-button', onClick: () => router.push('/projects') }, t.projectList)
+            ]),
             store.errorMessage ? h('p', { class: 'error' }, store.errorMessage) : null
           ]),
 
@@ -225,86 +201,8 @@ export default {
                   ])
                 : h('p', { class: 'empty' }, t.noIssueSelected)
             ])
-          ]),
-
-          h('section', { class: 'panel guide' }, [
-            h('div', { class: 'panel-head' }, [h('h2', t.sdkIntegration), h('span', appKey.value)]),
-            h('pre', sdkSnippet.value)
           ])
-        ]),
-
-        showCreateModal.value
-          ? h(
-              'div',
-              {
-                class: 'modal-overlay',
-                onClick: () => {
-                  showCreateModal.value = false;
-                }
-              },
-              [
-                h(
-                  'div',
-                  {
-                    class: 'modal-card',
-                    onClick: (event: Event) => {
-                      event.stopPropagation();
-                    }
-                  },
-                  [
-                    h('h2', t.createApp),
-                    h('label', { class: 'field' }, [
-                      h('span', t.appName),
-                      h('input', {
-                        value: appName.value,
-                        placeholder: t.appName,
-                        onInput: (event: Event) => {
-                          appName.value = (event.target as HTMLInputElement).value;
-                        }
-                      })
-                    ]),
-                    h('label', { class: 'field' }, [
-                      h('span', t.appType),
-                      h(
-                        'select',
-                        {
-                          value: appType.value,
-                          onChange: (event: Event) => {
-                            appType.value = (event.target as HTMLSelectElement).value as AppType;
-                          }
-                        },
-                        appTypes.map((type) => h('option', { value: type }, type))
-                      )
-                    ]),
-                    h('div', { class: 'modal-actions' }, [
-                      h(
-                        'button',
-                        {
-                          type: 'button',
-                          class: 'wide secondary',
-                          onClick: () => {
-                            showCreateModal.value = false;
-                          }
-                        },
-                        t.cancel
-                      ),
-                      h(
-                        'button',
-                        {
-                          type: 'button',
-                          class: 'wide',
-                          onClick: handleCreateApp,
-                          disabled: store.loading
-                        },
-                        t.confirm
-                      )
-                    ]),
-                    store.errorMessage ? h('p', { class: 'error' }, store.errorMessage) : null
-                  ]
-                )
-              ]
-            )
-          : null
+        ])
       ]);
     };
   }
