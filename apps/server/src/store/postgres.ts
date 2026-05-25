@@ -1,5 +1,6 @@
 import type { Client } from 'pg';
-import type { ErrorEvent, HealthGuardEvent } from '@healthguard/core';
+import { createHttpFingerprint } from '@healthguard/core';
+import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@healthguard/core';
 import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail } from './types';
 
 export interface PostgresStoreOptions {
@@ -9,6 +10,7 @@ export interface PostgresStoreOptions {
 export async function createPostgresStore(options: PostgresStoreOptions): Promise<Store> {
   const { client } = options;
   await ensureSchema(client);
+  await backfillFailedHttpIssues(client);
 
   return {
     async createUser(user: UserRecord): Promise<void> {
@@ -63,30 +65,40 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
 
     async ingestEvents(events: HealthGuardEvent[]): Promise<void> {
       for (const event of events) {
+        let payload = event;
+
+        if (event.type === 'http' && !event.success) {
+          payload = { ...event, fingerprint: createHttpFingerprint(event) };
+        }
+
         await client.query(
           `INSERT INTO events (
             event_id, app_key, platform, type, timestamp, session_id, user_id,
             anonymous_id, release, environment, page_url, sdk_version, payload
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
           [
-            event.eventId,
-            event.appKey,
-            event.platform,
-            event.type,
-            event.timestamp,
-            event.sessionId,
-            event.userId ?? null,
-            event.anonymousId,
-            event.release ?? null,
-            event.environment ?? null,
-            event.pageUrl ?? null,
-            event.sdkVersion,
-            JSON.stringify(event)
+            payload.eventId,
+            payload.appKey,
+            payload.platform,
+            payload.type,
+            payload.timestamp,
+            payload.sessionId,
+            payload.userId ?? null,
+            payload.anonymousId,
+            payload.release ?? null,
+            payload.environment ?? null,
+            payload.pageUrl ?? null,
+            payload.sdkVersion,
+            JSON.stringify(payload)
           ]
         );
 
         if (event.type === 'error') {
           await upsertIssue(client, event as ErrorEvent);
+        }
+
+        if (event.type === 'http' && !event.success) {
+          await upsertHttpIssue(client, payload as HttpEvent & { fingerprint: string });
         }
       }
     },
@@ -192,9 +204,10 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       }
 
       const issue = rowToIssue(issueResult.rows[0]);
+      const eventType = issue.errorType === 'http' ? 'http' : 'error';
 
       let sql = 'SELECT payload FROM events WHERE type = $1 AND app_key = $2 AND payload->>\'fingerprint\' = $3';
-      const params: (string | number)[] = ['error', issue.appKey, issue.fingerprint];
+      const params: (string | number)[] = [eventType, issue.appKey, issue.fingerprint];
 
       if (platform) {
         sql += ` AND platform = $${params.length + 1}`;
@@ -204,7 +217,7 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       sql += ' ORDER BY timestamp DESC';
 
       const eventResult = await client.query(sql, params);
-      const events = eventResult.rows.map((row) => JSON.parse(row.payload) as HealthGuardEvent);
+      const events = eventResult.rows.map((row) => parsePayload(row.payload));
 
       return { issue, events };
     }
@@ -286,6 +299,63 @@ async function ensureSchema(client: Client): Promise<void> {
   `);
 }
 
+async function backfillFailedHttpIssues(client: Client): Promise<void> {
+  const result = await client.query(
+    `SELECT event_id, app_key, platform, timestamp, payload
+     FROM events
+     WHERE type = $1 AND (payload->>'success')::boolean = false`,
+    ['http']
+  );
+
+  const aggregates = new Map<
+    string,
+    {
+      event: HttpEvent & { fingerprint: string };
+      count: number;
+      firstSeenAt: number;
+      lastSeenAt: number;
+      platformDistribution: Record<string, number>;
+    }
+  >();
+
+  for (const row of result.rows) {
+    const payload = parsePayload(row.payload);
+    if (payload.type !== 'http' || payload.success) {
+      continue;
+    }
+
+    const fingerprint = payload.fingerprint ?? createHttpFingerprint(payload);
+    const event = { ...payload, fingerprint };
+
+    if (payload.fingerprint !== fingerprint) {
+      await client.query('UPDATE events SET payload = $1 WHERE event_id = $2', [JSON.stringify(event), row.event_id]);
+    }
+
+    const key = `${event.appKey}:${fingerprint}`;
+    const existing = aggregates.get(key);
+
+    if (existing) {
+      existing.count += 1;
+      existing.firstSeenAt = Math.min(existing.firstSeenAt, event.timestamp);
+      existing.lastSeenAt = Math.max(existing.lastSeenAt, event.timestamp);
+      existing.platformDistribution[event.platform] = (existing.platformDistribution[event.platform] ?? 0) + 1;
+      continue;
+    }
+
+    aggregates.set(key, {
+      event,
+      count: 1,
+      firstSeenAt: event.timestamp,
+      lastSeenAt: event.timestamp,
+      platformDistribution: { [event.platform]: 1 }
+    });
+  }
+
+  for (const aggregate of aggregates.values()) {
+    await upsertHttpIssueSnapshot(client, aggregate);
+  }
+}
+
 async function upsertIssue(client: Client, event: ErrorEvent): Promise<void> {
   const id = `${event.appKey}:${event.fingerprint}`;
   const existing = await client.query('SELECT event_count, last_seen_at, platform_distribution FROM issues WHERE id = $1', [id]);
@@ -307,6 +377,77 @@ async function upsertIssue(client: Client, event: ErrorEvent): Promise<void> {
     `UPDATE issues SET event_count = $1, last_seen_at = $2, platform_distribution = $3 WHERE id = $4`,
     [(row.event_count as number) + 1, Math.max(Number(row.last_seen_at), event.timestamp), JSON.stringify(distribution), id]
   );
+}
+
+async function upsertHttpIssue(client: Client, event: HttpEvent & { fingerprint: string }): Promise<void> {
+  const id = `${event.appKey}:${event.fingerprint}`;
+  const message = event.errorMessage ?? `${event.method} ${event.url}`;
+  const existing = await client.query('SELECT event_count, last_seen_at, platform_distribution FROM issues WHERE id = $1', [id]);
+
+  if (existing.rows.length === 0) {
+    await client.query(
+      `INSERT INTO issues (id, app_key, fingerprint, message, error_type, event_count, first_seen_at, last_seen_at, platform_distribution)
+       VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8)`,
+      [id, event.appKey, event.fingerprint, message, 'http', event.timestamp, event.timestamp, JSON.stringify({ [event.platform]: 1 })]
+    );
+    return;
+  }
+
+  const row = existing.rows[0];
+  const distribution = (row.platform_distribution as Record<string, number>) ?? {};
+  distribution[event.platform] = (distribution[event.platform] ?? 0) + 1;
+
+  await client.query(
+    `UPDATE issues SET event_count = $1, last_seen_at = $2, platform_distribution = $3 WHERE id = $4`,
+    [(row.event_count as number) + 1, Math.max(Number(row.last_seen_at), event.timestamp), JSON.stringify(distribution), id]
+  );
+}
+
+async function upsertHttpIssueSnapshot(
+  client: Client,
+  aggregate: {
+    event: HttpEvent & { fingerprint: string };
+    count: number;
+    firstSeenAt: number;
+    lastSeenAt: number;
+    platformDistribution: Record<string, number>;
+  }
+): Promise<void> {
+  const { event } = aggregate;
+  const id = `${event.appKey}:${event.fingerprint}`;
+  const message = event.errorMessage ?? `${event.method} ${event.url}`;
+  const existing = await client.query('SELECT event_count, last_seen_at, platform_distribution FROM issues WHERE id = $1', [id]);
+
+  if (existing.rows.length === 0) {
+    await client.query(
+      `INSERT INTO issues (id, app_key, fingerprint, message, error_type, event_count, first_seen_at, last_seen_at, platform_distribution)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        id,
+        event.appKey,
+        event.fingerprint,
+        message,
+        'http',
+        aggregate.count,
+        aggregate.firstSeenAt,
+        aggregate.lastSeenAt,
+        JSON.stringify(aggregate.platformDistribution)
+      ]
+    );
+    return;
+  }
+
+  await client.query(
+    `UPDATE issues SET event_count = $1, last_seen_at = $2, platform_distribution = $3 WHERE id = $4`,
+    [aggregate.count, aggregate.lastSeenAt, JSON.stringify(aggregate.platformDistribution), id]
+  );
+}
+
+function parsePayload(payload: unknown): HealthGuardEvent {
+  if (typeof payload === 'string') {
+    return JSON.parse(payload) as HealthGuardEvent;
+  }
+  return payload as HealthGuardEvent;
 }
 
 function rowToUser(row: Record<string, unknown>): UserRecord {

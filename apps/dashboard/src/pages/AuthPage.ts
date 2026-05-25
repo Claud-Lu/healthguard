@@ -1,12 +1,21 @@
 import { h, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { store, messages, setLocale, loginOrRegister } from '../globalStore';
 import type { Locale } from '../i18n';
 
 export default {
   setup() {
+    const router = useRouter();
     const authMode = ref<'login' | 'register'>('login');
     const email = ref('');
     const password = ref('');
+
+    async function submitAuth(): Promise<void> {
+      const success = await loginOrRegister(authMode.value, email.value, password.value);
+      if (success) {
+        await router.push('/projects');
+      }
+    }
 
     function languageButton(label: string, value: Locale, current: Locale, onClick: (locale: Locale) => void) {
       return h(
@@ -62,7 +71,7 @@ export default {
             {
               type: 'button',
               class: 'wide',
-              onClick: () => loginOrRegister(authMode.value, email.value, password.value),
+              onClick: submitAuth,
               disabled: store.loading
             },
             authMode.value === 'login' ? t.login : t.register

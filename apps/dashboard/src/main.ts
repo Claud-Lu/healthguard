@@ -1,10 +1,11 @@
-import { createApp } from 'vue';
+import { createApp, h } from 'vue';
+import { RouterView } from 'vue-router';
 import { store, loadProfile, loadApps } from './globalStore';
 import router from './router';
 import './style.css';
 
 const app = createApp({
-  template: '<router-view />'
+  render: () => h(RouterView)
 });
 
 app.use(router);

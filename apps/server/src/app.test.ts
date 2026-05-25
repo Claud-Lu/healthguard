@@ -327,7 +327,7 @@ describe('collector api', () => {
         errors: 1,
         failedRequests: 1,
         affectedUsers: 1,
-        issues: 1
+        issues: 2
       }
     });
     expect(detail.statusCode).toBe(200);
@@ -339,6 +339,24 @@ describe('collector api', () => {
     expect(detail.json().events[0]).toMatchObject({
       eventId: 'evt_error',
       stack: 'Error: boom'
+    });
+
+    // Since we can't easily know the exact http fingerprint hash, query issues list instead
+    const issuesList = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app' });
+    expect(issuesList.statusCode).toBe(200);
+    const issues = issuesList.json().issues;
+    expect(issues).toHaveLength(2);
+    const httpIssue = issues.find((i: { errorType: string }) => i.errorType === 'http');
+    expect(httpIssue).toBeDefined();
+    expect(httpIssue.message).toBe('GET https://api.example.com/fail');
+
+    const httpDetail = await app.inject({ method: 'GET', url: `/api/issues/${encodeURIComponent(httpIssue.id)}` });
+    expect(httpDetail.statusCode).toBe(200);
+    expect(httpDetail.json().issue.errorType).toBe('http');
+    expect(httpDetail.json().events).toHaveLength(1);
+    expect(httpDetail.json().events[0]).toMatchObject({
+      eventId: 'evt_http',
+      type: 'http'
     });
 
     await app.close();

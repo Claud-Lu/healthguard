@@ -62,7 +62,8 @@ export const httpEventSchema = baseEventSchema.extend({
   status: z.number().optional(),
   duration: z.number().nonnegative(),
   success: z.boolean(),
-  errorMessage: z.string().optional()
+  errorMessage: z.string().optional(),
+  fingerprint: z.string().optional()
 });
 
 export const performanceEventSchema = baseEventSchema.extend({
@@ -147,6 +148,12 @@ export function createIssueFingerprint(input: FingerprintInput): string {
   const stackHead = input.stack?.split('\n').slice(0, 2).join('\n').trim() ?? '';
   const source = `${input.errorType}|${input.message}|${stackHead}`;
   return `${input.errorType}:${hashString(source)}`;
+}
+
+export function createHttpFingerprint(event: { method: string; url: string; status?: number }): string {
+  const sanitized = sanitizeUrl(event.url);
+  const source = `http|${event.method}|${event.status ?? 'unknown'}|${sanitized}`;
+  return `http:${hashString(source)}`;
 }
 
 function hashString(value: string): string {

@@ -16,6 +16,14 @@ HealthGuard is a lightweight, privacy-first alternative to Sentry for teams who 
 
 ---
 
+## Why HealthGuard
+
+Frontend monitoring is often either too heavy for small teams or too expensive to run across many H5 and mini-program projects. HealthGuard focuses on the practical middle ground: collect actionable error and request-failure signals, separate them by project and platform, and keep all data inside your own deployment.
+
+It is designed for teams shipping browser, mini-program, and uni-app experiences that need a simple operational dashboard before adopting a larger observability stack.
+
+---
+
 ## ✨ Features
 
 - **🔌 Multi-Platform SDKs** — H5, WeChat Mini Program, Alipay, uni-app, Flutter

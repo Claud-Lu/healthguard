@@ -23,7 +23,7 @@ export interface IssueSummary {
   appKey: string;
   fingerprint: string;
   message: string;
-  errorType: ErrorEvent['errorType'];
+  errorType: ErrorEvent['errorType'] | 'http';
   eventCount: number;
   firstSeenAt: number;
   lastSeenAt: number;

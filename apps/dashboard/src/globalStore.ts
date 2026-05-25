@@ -88,7 +88,7 @@ export async function loadApps(): Promise<void> {
   }
 }
 
-export async function loginOrRegister(mode: 'login' | 'register', email: string, password: string): Promise<void> {
+export async function loginOrRegister(mode: 'login' | 'register', email: string, password: string): Promise<boolean> {
   store.loading = true;
   store.errorMessage = '';
   try {
@@ -100,8 +100,10 @@ export async function loginOrRegister(mode: 'login' | 'register', email: string,
     store.user = response.user;
     localStorage.setItem('healthguard_token', response.token);
     await loadApps();
+    return true;
   } catch (error) {
     store.errorMessage = friendlyErrorMessage(error, store.locale);
+    return false;
   } finally {
     store.loading = false;
   }

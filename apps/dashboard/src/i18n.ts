@@ -12,6 +12,13 @@ export type MessageKey =
   | 'createApp'
   | 'currentAppKey'
   | 'dashboardHomeSubtitle'
+  | 'dashboardIntroTitle'
+  | 'dashboardIntroBody'
+  | 'dashboardIntroPrivacy'
+  | 'dashboardIntroPlatforms'
+  | 'dashboardIntroDeploy'
+  | 'dashboardIntroSdk'
+  | 'projectWorkspace'
   | 'email'
   | 'emptyIssues'
   | 'emptyProjects'
@@ -58,6 +65,13 @@ const messages: Record<Locale, Messages> = {
     createApp: 'Create App',
     currentAppKey: 'Current App Key',
     dashboardHomeSubtitle: 'Select a project to inspect its health data, issues, and SDK setup.',
+    dashboardIntroTitle: 'Self-hosted monitoring for H5 and mini-program apps',
+    dashboardIntroBody: 'HealthGuard collects frontend errors, failed requests, breadcrumbs, and platform distribution in a private dashboard that can run on your own server.',
+    dashboardIntroPrivacy: 'Private deployment',
+    dashboardIntroPlatforms: 'H5 / Mini program / uni-app',
+    dashboardIntroDeploy: 'Docker + PostgreSQL',
+    dashboardIntroSdk: 'SDK-first integration',
+    projectWorkspace: 'Project Workspace',
     email: 'Email',
     emptyIssues: 'No issues yet. Trigger an error from an integrated app, then refresh.',
     emptyProjects: 'No projects yet. Create one from the sidebar to get an app key.',
@@ -101,6 +115,13 @@ const messages: Record<Locale, Messages> = {
     createApp: '添加项目',
     currentAppKey: '当前 App Key',
     dashboardHomeSubtitle: '选择一个项目后查看它的健康数据、Issue 和 SDK 接入信息。',
+    dashboardIntroTitle: '开源、自托管的应用健康监控',
+    dashboardIntroBody: 'HealthGuard 用私有化看板采集前端错误、失败请求、面包屑和多端平台分布，适合 H5、小程序与 uni-app 项目快速接入。',
+    dashboardIntroPrivacy: '私有化部署',
+    dashboardIntroPlatforms: 'H5 / 小程序 / uni-app',
+    dashboardIntroDeploy: 'Docker + PostgreSQL',
+    dashboardIntroSdk: 'SDK 优先接入',
+    projectWorkspace: '项目工作区',
     email: '邮箱',
     emptyIssues: '暂无 Issue。请从已接入项目触发一次错误后刷新。',
     emptyProjects: '暂无项目。请先在左侧创建项目并生成 app key。',

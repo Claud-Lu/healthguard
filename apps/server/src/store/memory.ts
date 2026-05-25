@@ -1,4 +1,5 @@
-import type { ErrorEvent, HealthGuardEvent } from '@healthguard/core';
+import { createHttpFingerprint } from '@healthguard/core';
+import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@healthguard/core';
 import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail } from './types';
 
 export interface MemoryStoreState {
@@ -52,10 +53,21 @@ export function createMemoryStore(): Store {
     },
 
     async ingestEvents(events: HealthGuardEvent[]): Promise<void> {
-      state.events.push(...events);
       for (const event of events) {
+        let payload = event;
+
+        if (event.type === 'http' && !event.success) {
+          payload = { ...event, fingerprint: createHttpFingerprint(event) };
+        }
+
+        state.events.push(payload);
+
         if (event.type === 'error') {
           aggregateError(state, event);
+        }
+
+        if (event.type === 'http' && !event.success) {
+          aggregateHttpIssue(state, payload as HttpEvent & { fingerprint: string });
         }
       }
     },
@@ -88,8 +100,9 @@ export function createMemoryStore(): Store {
       if (!issue) {
         return { issue: null, events: [] };
       }
+      const eventType = issue.errorType === 'http' ? 'http' : 'error';
       const events = state.events
-        .filter((event) => event.type === 'error' && event.appKey === issue.appKey && event.fingerprint === issue.fingerprint)
+        .filter((event) => event.type === eventType && event.appKey === issue.appKey && 'fingerprint' in event && event.fingerprint === issue.fingerprint)
         .filter((event) => (platform ? event.platform === platform : true))
         .sort((left, right) => right.timestamp - left.timestamp);
 
@@ -115,6 +128,31 @@ function aggregateError(state: MemoryStoreState, event: ErrorEvent): void {
     fingerprint: event.fingerprint,
     message: event.message,
     errorType: event.errorType,
+    eventCount: 1,
+    firstSeenAt: event.timestamp,
+    lastSeenAt: event.timestamp,
+    platformDistribution: { [event.platform]: 1 }
+  });
+}
+
+function aggregateHttpIssue(state: MemoryStoreState, event: HttpEvent & { fingerprint: string }): void {
+  const key = `${event.appKey}:${event.fingerprint}`;
+  const existing = state.issues.get(key);
+  const message = event.errorMessage ?? `${event.method} ${event.url}`;
+
+  if (existing) {
+    existing.eventCount += 1;
+    existing.lastSeenAt = Math.max(existing.lastSeenAt, event.timestamp);
+    existing.platformDistribution[event.platform] = (existing.platformDistribution[event.platform] ?? 0) + 1;
+    return;
+  }
+
+  state.issues.set(key, {
+    id: key,
+    appKey: event.appKey,
+    fingerprint: event.fingerprint,
+    message,
+    errorType: 'http',
     eventCount: 1,
     firstSeenAt: event.timestamp,
     lastSeenAt: event.timestamp,

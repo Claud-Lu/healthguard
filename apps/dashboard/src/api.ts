@@ -1,4 +1,4 @@
-import { getMessages, messageForErrorCode, type Locale } from './i18n';
+import { messageForErrorCode, type Locale } from './i18n';
 
 const apiBase = (import.meta.env.VITE_HEALTHGUARD_API_BASE || '/api').replace(/\/$/, '');
 
