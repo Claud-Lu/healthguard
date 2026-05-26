@@ -3,8 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.js",
+      "default": "./dist/index.cjs"
+    }
+  },
   "scripts": {
     "build": "tsup",
     "test": "vitest run --root ../.. packages/sdk-miniprogram/src/index.test.ts packages/sdk-miniprogram/src/bundle-boundary.test.ts"

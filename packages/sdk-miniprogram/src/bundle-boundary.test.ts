@@ -9,9 +9,16 @@ describe('sdk-miniprogram bundle boundary', () => {
     const source = readFileSync(resolve(packageRoot, 'src/index.ts'), 'utf8');
     const manifest = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>;
+      exports?: Record<string, { require?: string; import?: string; default?: string }>;
+      main?: string;
+      module?: string;
     };
 
     expect(source).not.toContain("from '@healthguard/core'");
     expect(manifest.dependencies ?? {}).not.toHaveProperty('@healthguard/core');
+    expect(manifest.main).toBe('dist/index.cjs');
+    expect(manifest.exports?.['.']?.require).toBe('./dist/index.cjs');
+    expect(manifest.exports?.['.']?.default).toBe('./dist/index.cjs');
+    expect(manifest.exports?.['.']?.import).toBe('./dist/index.js');
   });
 });
