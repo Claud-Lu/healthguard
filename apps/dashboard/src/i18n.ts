@@ -56,7 +56,10 @@ export type MessageKey =
   | 'switchToLogin'
   | 'switchToRegister'
   | 'warning'
-  | 'critical';
+  | 'critical'
+  | 'noMatchingIssues'
+  | 'firstSeen'
+  | 'lastSeen';
 
 type Messages = Record<MessageKey, string>;
 
@@ -117,7 +120,10 @@ const messages: Record<Locale, Messages> = {
     switchToLogin: 'Have an account? Login',
     switchToRegister: 'Need an account? Register',
     warning: 'Warning',
-    critical: 'Critical'
+    critical: 'Critical',
+    noMatchingIssues: 'No matching issues found',
+    firstSeen: 'First:',
+    lastSeen: 'Last:'
   },
   'zh-CN': {
     affectedUsers: '影响用户',
@@ -175,7 +181,10 @@ const messages: Record<Locale, Messages> = {
     switchToLogin: '已有账号？去登录',
     switchToRegister: '没有账号？去注册',
     warning: '注意',
-    critical: '异常'
+    critical: '异常',
+    noMatchingIssues: '未找到匹配的 issue',
+    firstSeen: '首次:',
+    lastSeen: '最近:'
   }
 };
 

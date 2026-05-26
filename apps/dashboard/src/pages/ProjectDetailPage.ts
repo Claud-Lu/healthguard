@@ -21,6 +21,8 @@ export default {
     const issues = ref<IssueSummary[]>([]);
     const selectedIssue = ref<IssueDetailResponse | null>(null);
     const selectedPlatform = ref('');
+    const searchQuery = ref('');
+    const selectedMetricFilter = ref<'all' | 'error' | 'http'>('all');
 
     const selectedApp = computed(() => store.apps.find((item) => item.appKey === appKey.value) ?? null);
 
@@ -82,8 +84,16 @@ export default {
       selectedIssue.value = await requestJson<IssueDetailResponse>(apiUrl(`/issues/${encodeURIComponent(issue.id)}${platformQuery}`), undefined, store.token);
     }
 
-    function metricCard(label: string, value: number) {
-      return h('article', { class: 'metric' }, [h('span', label), h('strong', value.toLocaleString())]);
+    function metricCard(label: string, value: number, filterType?: 'error' | 'http') {
+      const isActive = filterType ? selectedMetricFilter.value === filterType : false;
+      return h('article', {
+        class: isActive ? 'metric active' : 'metric',
+        onClick: filterType
+          ? () => {
+              selectedMetricFilter.value = filterType;
+            }
+          : undefined
+      }, [h('span', label), h('strong', value.toLocaleString())]);
     }
 
     function groupEventsByType(events: Array<Record<string, unknown>>) {
@@ -126,7 +136,7 @@ export default {
       const samples = events.slice(0, SAMPLE);
       const remainder = events.length - SAMPLE;
 
-      const renderers: Record<string, (e: Record<string, unknown>) => unknown> = {
+      const renderers: Record<string, (e: Record<string, unknown>) => ReturnType<typeof h>> = {
         error: renderErrorEvent,
         http: renderHttpEvent
       };
@@ -140,6 +150,12 @@ export default {
 
     function renderRawEvent(evt: Record<string, unknown>) {
       return h('pre', { class: 'event-raw' }, JSON.stringify(evt, null, 2));
+    }
+
+    function getSeverityClass(count: number) {
+      if (count > 20) return 'severity-critical';
+      if (count > 5) return 'severity-warning';
+      return 'severity-normal';
     }
 
     return () => {
@@ -203,54 +219,93 @@ export default {
 
           h('section', { class: 'metrics' }, [
             metricCard(t.events, overview.value.events),
-            metricCard(t.errors, overview.value.errors),
-            metricCard(t.failedRequests, overview.value.failedRequests),
+            metricCard(t.errors, overview.value.errors, 'error'),
+            metricCard(t.failedRequests, overview.value.failedRequests, 'http'),
             metricCard(t.affectedUsers, overview.value.affectedUsers),
             metricCard(t.issues, overview.value.issues)
           ]),
 
           h('section', { class: 'grid' }, [
             h('div', { class: 'panel' }, [
-              h('div', { class: 'panel-head' }, [h('h2', t.issues), h('span', `${issues.value.length} ${t.groups}`)]),
-              issues.value.length === 0
-                ? h('p', { class: 'empty' }, t.emptyIssues)
-                : h(
-                    'div',
-                    { class: 'issue-list' },
-                    issues.value.map((issue) =>
-                      h(
-                        'button',
-                        {
-                          type: 'button',
-                          class: selectedIssue.value?.issue.id === issue.id ? 'issue-row active' : 'issue-row',
-                          onClick: () => void openIssue(issue)
-                        },
-                        [
-                          h('strong', issue.message),
-                          h('span', `${issue.errorType} / ${issue.eventCount} ${t.events}`),
-                          Object.keys(issue.platformDistribution).length > 0
-                            ? h(
-                                'div',
-                                { class: 'platform-tags' },
-                                Object.entries(issue.platformDistribution).map(([platform, count]) =>
-                                  h('span', { class: 'platform-tag', title: `${count} events` }, `${platform}: ${count}`)
-                                )
-                              )
-                            : null,
-                          h('small', issue.fingerprint)
-                        ]
+              (() => {
+                const filteredIssues = issues.value.filter((issue) => {
+                  if (!issue.message.toLowerCase().includes(searchQuery.value.toLowerCase())) return false;
+                  if (selectedMetricFilter.value === 'error') return issue.errorType === 'error' || issue.errorType === 'js' || issue.errorType === 'promise' || issue.errorType === 'resource';
+                  if (selectedMetricFilter.value === 'http') return issue.errorType === 'http' || issue.errorType === 'request';
+                  return true;
+                });
+                return [
+                  h('div', { class: 'panel-head' }, [h('h2', t.issues), h('span', `${filteredIssues.length} ${t.groups}`)]),
+                  h('div', { class: 'issue-search' }, [
+                    h('input', {
+                      type: 'text',
+                      placeholder: 'Search issues...',
+                      value: searchQuery.value,
+                      onInput: (event: Event) => {
+                        searchQuery.value = (event.target as HTMLInputElement).value;
+                      }
+                    })
+                  ]),
+                  filteredIssues.length === 0
+                    ? h('p', { class: 'empty' }, searchQuery.value || selectedMetricFilter.value !== 'all' ? t.noMatchingIssues : t.emptyIssues)
+                    : h(
+                        'div',
+                        { class: 'issue-list' },
+                        filteredIssues.map((issue) =>
+                          h(
+                            'button',
+                            {
+                              type: 'button',
+                              class: selectedIssue.value?.issue.id === issue.id ? `issue-row active ${getSeverityClass(issue.eventCount)}` : `issue-row ${getSeverityClass(issue.eventCount)}`,
+                              onClick: () => void openIssue(issue)
+                            },
+                            [
+                              h('strong', issue.message),
+                              h('span', `${issue.errorType} / ${issue.eventCount} ${t.events}`),
+                              Object.keys(issue.platformDistribution).length > 0
+                                ? h(
+                                    'div',
+                                    { class: 'platform-tags' },
+                                    Object.entries(issue.platformDistribution).map(([platform, count]) =>
+                                      h('span', { class: 'platform-tag', title: `${count} events` }, `${platform}: ${count}`)
+                                    )
+                                  )
+                                : null,
+                              h('p', { class: 'issue-last-seen' }, formatTime(issue.lastSeenAt)),
+                              h('small', issue.fingerprint)
+                            ]
+                          )
+                        )
                       )
-                    )
-                  )
+                ];
+              })()
             ]),
             h('div', { class: 'panel detail' }, [
               h('div', { class: 'panel-head' }, [h('h2', t.issueDetail), selectedIssue.value ? h('span', selectedIssue.value.issue.id) : null]),
               selectedIssue.value
-                ? h('div', { class: 'detail-body' }, [
-                    h('h3', selectedIssue.value.issue.message),
-                    h('p', `${selectedIssue.value.issue.eventCount} ${t.events} since ${formatTime(selectedIssue.value.issue.firstSeenAt)}`),
-                    ...Object.entries(groupEventsByType(selectedIssue.value.events)).map(([type, events]) => renderEventGroup(type, events))
-                  ])
+                ? (() => {
+                    const issue = selectedIssue.value.issue;
+                    return h('div', { class: 'detail-body' }, [
+                      h('h3', issue.message),
+                      h('div', { class: 'detail-info-bar' }, [
+                        h('span', { class: issue.errorType === 'http' || issue.errorType === 'request' ? 'badge-http' : 'badge-error' }, issue.errorType.toUpperCase()),
+                        h('span', `${t.firstSeen} ${formatTime(issue.firstSeenAt)}`),
+                        h('span', `${t.lastSeen} ${formatTime(issue.lastSeenAt)}`),
+                        h('span', { class: 'detail-fingerprint' }, issue.fingerprint),
+                        Object.keys(issue.platformDistribution).length > 0
+                          ? h(
+                              'div',
+                              { class: 'platform-tags' },
+                              Object.entries(issue.platformDistribution).map(([platform, count]) =>
+                                h('span', { class: 'platform-tag', title: `${count} events` }, `${platform}: ${count}`)
+                              )
+                            )
+                          : null
+                      ]),
+                      h('p', `${issue.eventCount} ${t.events} since ${formatTime(issue.firstSeenAt)}`),
+                      ...Object.entries(groupEventsByType(selectedIssue.value.events)).map(([type, events]) => renderEventGroup(type, events))
+                    ]);
+                  })()
                 : h('p', { class: 'empty' }, t.noIssueSelected)
             ])
           ])
