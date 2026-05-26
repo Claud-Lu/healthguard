@@ -262,6 +262,75 @@ describe('sdk-web client', () => {
     });
   });
 
+  it('captures XMLHttpRequest even when a request library overwrites onloadend', async () => {
+    const transport = vi.fn().mockResolvedValue(undefined);
+    class FakeXMLHttpRequest {
+      static instances: FakeXMLHttpRequest[] = [];
+      method = 'GET';
+      url = '';
+      status = 0;
+      onloadend: (() => void) | null = null;
+      listeners = new Map<string, Array<() => void>>();
+
+      constructor() {
+        FakeXMLHttpRequest.instances.push(this);
+      }
+
+      open(method: string, url: string): void {
+        this.method = method;
+        this.url = url;
+      }
+
+      send(): void {}
+
+      addEventListener(type: string, listener: () => void): void {
+        const listeners = this.listeners.get(type) ?? [];
+        listeners.push(listener);
+        this.listeners.set(type, listeners);
+      }
+
+      dispatch(type: string): void {
+        for (const listener of this.listeners.get(type) ?? []) {
+          listener();
+        }
+        if (type === 'loadend') {
+          this.onloadend?.();
+        }
+      }
+    }
+    const target = {
+      location: { href: 'https://demo.example.com/' },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      XMLHttpRequest: FakeXMLHttpRequest
+    };
+    const client = createHealthGuardClient({
+      appKey: 'demo-app',
+      endpoint: '/api/events/batch',
+      transport,
+      flushIntervalMs: 0,
+      autoCapture: { xhr: true },
+      target
+    });
+
+    const xhr = new target.XMLHttpRequest();
+    xhr.open('GET', 'https://api.example.com/axios-style');
+    xhr.onloadend = vi.fn();
+    xhr.status = 502;
+    xhr.send();
+    xhr.dispatch('loadend');
+    await client.flush();
+
+    expect(transport.mock.calls[0][0].events[0]).toMatchObject({
+      type: 'http',
+      method: 'GET',
+      url: 'https://api.example.com/axios-style',
+      status: 502,
+      success: false
+    });
+    expect(xhr.onloadend).toHaveBeenCalled();
+  });
+
   it('keeps events queued when transport fails so they can be retried', async () => {
     const transport = vi.fn().mockRejectedValueOnce(new Error('network down')).mockResolvedValueOnce(undefined);
     const client = createHealthGuardClient({

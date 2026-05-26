@@ -393,6 +393,20 @@ function installAutoCapture(
       const originalSend = xhr.send;
       const originalOnloadend = xhr.onloadend;
 
+      const recordRequest = () => {
+        if (isCollectorEndpoint(url, options.endpoint)) {
+          return;
+        }
+
+        captureHttp({
+          method,
+          url,
+          status: xhr.status,
+          duration: Date.now() - startedAt,
+          success: xhr.status < 400
+        });
+      };
+
       xhr.open = function patchedOpen(this: XMLHttpRequest, nextMethod: string, nextUrl: string | URL, ...args: unknown[]) {
         method = nextMethod;
         url = nextUrl.toString();
@@ -404,29 +418,19 @@ function installAutoCapture(
         return originalSend.apply(this, args as any);
       };
 
-      xhr.onloadend = function patchedLoadEnd(this: XMLHttpRequest, event: ProgressEvent) {
-        if (isCollectorEndpoint(url, options.endpoint)) {
+      if (typeof xhr.addEventListener === 'function') {
+        xhr.addEventListener('loadend', recordRequest);
+      } else {
+        xhr.onloadend = function patchedLoadEnd(this: XMLHttpRequest, event: ProgressEvent) {
+          recordRequest();
+
           if (typeof originalOnloadend === 'function') {
             return originalOnloadend.call(this, event);
           }
 
           return undefined;
-        }
-
-        captureHttp({
-          method,
-          url,
-          status: xhr.status,
-          duration: Date.now() - startedAt,
-          success: xhr.status < 400
-        });
-
-        if (typeof originalOnloadend === 'function') {
-          return originalOnloadend.call(this, event);
-        }
-
-        return undefined;
-      };
+        };
+      }
 
       return xhr;
     } as unknown as typeof XMLHttpRequest;
