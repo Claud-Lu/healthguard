@@ -21,4 +21,14 @@ describe('sdk-miniprogram bundle boundary', () => {
     expect(manifest.exports?.['.']?.default).toBe('./dist/index.cjs');
     expect(manifest.exports?.['.']?.import).toBe('./dist/index.js');
   });
+
+  it('emits JavaScript that mini-program builders can parse', () => {
+    const cjs = readFileSync(resolve(packageRoot, 'dist/index.cjs'), 'utf8');
+    const esm = readFileSync(resolve(packageRoot, 'dist/index.js'), 'utf8');
+
+    for (const output of [cjs, esm]) {
+      expect(output).not.toContain('??');
+      expect(output).not.toContain('?.');
+    }
+  });
 });
