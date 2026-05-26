@@ -1,12 +1,63 @@
-import {
-  createIssueFingerprint,
-  sanitizeUrl,
-  type Breadcrumb,
-  type ErrorEvent,
-  type EventBatch
-} from '@healthguard/core';
-
 const SDK_VERSION = '0.1.0';
+
+const sensitiveQueryKeys = new Set([
+  'authorization',
+  'auth',
+  'cookie',
+  'password',
+  'secret',
+  'token',
+  'access_token',
+  'refresh_token'
+]);
+
+export interface Breadcrumb {
+  type: 'navigation' | 'click' | 'http' | 'manual';
+  message: string;
+  timestamp: number;
+  data?: Record<string, unknown>;
+}
+
+export type MiniProgramPlatform = 'wechat-miniprogram' | 'alipay-miniprogram';
+export type HealthGuardEnvironment = 'development' | 'test' | 'production';
+export type ErrorType = 'js' | 'promise' | 'resource' | 'request' | 'native';
+
+export interface BaseEvent {
+  eventId: string;
+  appKey: string;
+  platform: MiniProgramPlatform;
+  timestamp: number;
+  sessionId: string;
+  anonymousId: string;
+  sdkVersion: string;
+  release?: string;
+  environment?: HealthGuardEnvironment;
+  userId?: string;
+}
+
+export interface ErrorEvent extends BaseEvent {
+  type: 'error';
+  errorType: ErrorType;
+  message: string;
+  stack?: string;
+  fingerprint: string;
+  breadcrumbs: Breadcrumb[];
+}
+
+export interface HttpEvent extends BaseEvent {
+  type: 'http';
+  method: string;
+  url: string;
+  status?: number;
+  duration: number;
+  success: boolean;
+  errorMessage?: string;
+}
+
+export interface EventBatch {
+  appKey: string;
+  events: Array<ErrorEvent | HttpEvent>;
+}
 
 export interface MiniProgramWxLike {
   onError?: (handler: (message: string) => void) => void;
@@ -31,9 +82,9 @@ export interface MiniProgramClientOptions {
   appKey: string;
   endpoint: string;
   wx: MiniProgramWxLike;
-  platform?: Extract<ErrorEvent['platform'], 'wechat-miniprogram' | 'alipay-miniprogram'>;
+  platform?: MiniProgramPlatform;
   release?: string;
-  environment?: ErrorEvent['environment'];
+  environment?: HealthGuardEnvironment;
   userId?: string;
   autoCapture?: boolean | MiniProgramAutoCaptureOptions;
   transport?: (batch: EventBatch, endpoint: string) => Promise<void>;
@@ -59,7 +110,7 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
     queue.push(event);
   }
 
-  function captureException(error: unknown, errorType: ErrorEvent['errorType'] = 'js'): void {
+  function captureException(error: unknown, errorType: ErrorType = 'js'): void {
     const normalized = normalizeError(error);
     const message = firstLine(normalized.message);
 
@@ -289,4 +340,40 @@ function firstLine(message: string): string {
 
 function createId(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+}
+
+function sanitizeUrl(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl, 'http://healthguard.local');
+
+    for (const key of Array.from(url.searchParams.keys())) {
+      if (sensitiveQueryKeys.has(key.toLowerCase())) {
+        url.searchParams.set(key, '[Filtered]');
+      }
+    }
+
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+      return url.toString();
+    }
+
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return rawUrl;
+  }
+}
+
+function createIssueFingerprint(input: { errorType: ErrorType; message: string; stack?: string }): string {
+  const stackHead = input.stack?.split('\n').slice(0, 2).join('\n').trim() ?? '';
+  const source = `${input.errorType}|${input.message}|${stackHead}`;
+  return `${input.errorType}:${hashString(source)}`;
+}
+
+function hashString(value: string): string {
+  let hash = 5381;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 33) ^ value.charCodeAt(index);
+  }
+
+  return (hash >>> 0).toString(36);
 }
