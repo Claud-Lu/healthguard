@@ -73,6 +73,74 @@ describe('sdk-miniprogram client', () => {
     });
   });
 
+  it('treats business error responses as failed requests', async () => {
+    const transport = vi.fn().mockResolvedValue(undefined);
+    const wx = {
+      onError: vi.fn(),
+      onUnhandledRejection: vi.fn(),
+      request: vi.fn((options: any) => {
+        options.success?.({
+          statusCode: 200,
+          data: {
+            success: false,
+            error: {
+              code: 500,
+              message: '服务器内部错误'
+            },
+            message: '操作失败'
+          }
+        });
+      })
+    };
+    const client = createMiniProgramClient({
+      appKey: 'mini-app',
+      endpoint: '/api/events/batch',
+      wx,
+      transport,
+      autoCapture: { request: true }
+    });
+
+    wx.request({ url: 'https://api.example.com/create-order', method: 'POST' });
+    await client.flush();
+
+    expect(transport.mock.calls[0][0].events[0]).toMatchObject({
+      type: 'http',
+      method: 'POST',
+      url: 'https://api.example.com/create-order',
+      status: 500,
+      success: false,
+      errorMessage: '服务器内部错误'
+    });
+  });
+
+  it('captures Alipay-style response status fields', async () => {
+    const transport = vi.fn().mockResolvedValue(undefined);
+    const wx = {
+      onError: vi.fn(),
+      onUnhandledRejection: vi.fn(),
+      request: vi.fn((options: any) => {
+        options.success?.({ status: 500, data: { message: '服务器内部错误' } });
+      })
+    };
+    const client = createMiniProgramClient({
+      appKey: 'mini-app',
+      endpoint: '/api/events/batch',
+      wx,
+      transport,
+      autoCapture: { request: true }
+    });
+
+    wx.request({ url: 'https://api.example.com/alipay-status', method: 'GET' });
+    await client.flush();
+
+    expect(transport.mock.calls[0][0].events[0]).toMatchObject({
+      type: 'http',
+      status: 500,
+      success: false,
+      errorMessage: '服务器内部错误'
+    });
+  });
+
   it('uses the configured mini-program platform for captured events', async () => {
     const transport = vi.fn().mockResolvedValue(undefined);
     const wx = {

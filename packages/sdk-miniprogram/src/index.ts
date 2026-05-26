@@ -68,7 +68,7 @@ export interface MiniProgramWxLike {
 export interface WxRequestOptions {
   url: string;
   method?: string;
-  success?: (response: { statusCode?: number }) => void;
+  success?: (response: { statusCode?: number; status?: number; data?: unknown }) => void;
   fail?: (error: { errMsg?: string }) => void;
   complete?: (response: unknown) => void;
   [key: string]: unknown;
@@ -259,13 +259,15 @@ function installRequestCapture(
 
     return originalRequest({
       ...options,
-      success(response: { statusCode?: number }) {
+      success(response: { statusCode?: number; status?: number; data?: unknown }) {
+        const result = getRequestResult(response);
         captureHttp({
           method,
           url: options.url,
-          status: response.statusCode,
+          status: result.status,
           duration: Date.now() - startedAt,
-          success: response.statusCode ? response.statusCode < 400 : true
+          success: result.success,
+          errorMessage: result.errorMessage
         });
         options.success?.(response);
       },
@@ -281,6 +283,45 @@ function installRequestCapture(
       }
     });
   };
+}
+
+function getRequestResult(response: { statusCode?: number; status?: number; data?: unknown }): {
+  status?: number;
+  success: boolean;
+  errorMessage?: string;
+} {
+  const body = response.data as { success?: unknown; error?: { code?: unknown; message?: unknown }; message?: unknown; msg?: unknown } | undefined;
+  const status = getBusinessStatusCode(body) ?? response.statusCode ?? response.status;
+  const isBusinessFailure = body?.success === false;
+
+  return {
+    status,
+    success: isBusinessFailure ? false : status ? status < 400 : true,
+    errorMessage: isBusinessFailure || (status && status >= 400) ? getBusinessErrorMessage(body) : undefined
+  };
+}
+
+function getBusinessStatusCode(body: { error?: { code?: unknown } } | undefined): number | undefined {
+  const code = body?.error?.code;
+
+  if (typeof code === 'number') {
+    return code;
+  }
+
+  if (typeof code === 'string' && /^\d+$/.test(code)) {
+    return Number(code);
+  }
+
+  return undefined;
+}
+
+function getBusinessErrorMessage(
+  body: { error?: { message?: unknown }; message?: unknown; msg?: unknown } | undefined
+): string | undefined {
+  const candidates = [body?.error?.message, body?.message, body?.msg];
+  const message = candidates.find((item): item is string => typeof item === 'string' && item.trim().length > 0);
+
+  return message;
 }
 
 function createRequestTransport(wx: MiniProgramWxLike): (batch: EventBatch, endpoint: string) => Promise<void> {

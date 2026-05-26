@@ -25,4 +25,13 @@ describe('project dashboard layout', () => {
     expect(source).toContain('sdk-sidebar');
     expect(source).not.toContain("class: 'panel guide'");
   });
+
+  it('constrains long issue text in list rows and detail headers', () => {
+    const styles = readFileSync(new URL('./style.css', import.meta.url), 'utf8');
+
+    expect(styles).toContain('.issue-row strong');
+    expect(styles).toContain('.detail-body h3');
+    expect(styles).toContain('overflow-wrap: anywhere');
+    expect(styles).toContain('word-break: break-word');
+  });
 });

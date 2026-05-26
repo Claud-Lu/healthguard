@@ -551,6 +551,7 @@ h1 {
   color: #182229;
   display: grid;
   gap: 6px;
+  min-width: 0;
   padding: 12px;
   text-align: left;
 }
@@ -559,14 +560,26 @@ h1 {
   border-color: #0f766e;
 }
 
+.issue-row strong,
 .issue-row span,
 .issue-row small {
   color: #60717d;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .detail-body {
   display: grid;
   gap: 12px;
+  min-width: 0;
+}
+
+.detail-body h3,
+.panel-head span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 pre {
