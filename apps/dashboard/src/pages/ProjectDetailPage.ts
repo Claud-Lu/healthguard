@@ -116,8 +116,7 @@ export default {
             h('div', { class: 'panel-title' }, t.sdkIntegration),
             h('small', appKey.value),
             h('pre', sdkSnippet.value)
-          ]),
-          h('button', { type: 'button', class: 'wide ghost', onClick: () => router.push('/projects') }, t.projectList)
+          ])
         ]),
 
         h('section', { class: 'content detail-content' }, [

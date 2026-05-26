@@ -205,6 +205,7 @@ function createBaseEvent(
   | 'environment'
   | 'userId'
   | 'pageUrl'
+  | 'deviceInfo'
 > {
   return {
     eventId: createId('evt'),
@@ -217,7 +218,20 @@ function createBaseEvent(
     release: options.release,
     environment: options.environment,
     userId: options.userId,
-    pageUrl: target?.location?.href
+    pageUrl: target?.location?.href,
+    deviceInfo: getWebDeviceInfo()
+  };
+}
+
+function getWebDeviceInfo() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return undefined;
+  }
+  return {
+    userAgent: navigator.userAgent,
+    language: navigator.language,
+    screenWidth: window.screen?.width,
+    screenHeight: window.screen?.height
   };
 }
 

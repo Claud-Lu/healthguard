@@ -22,6 +22,15 @@ export type MiniProgramPlatform = 'wechat-miniprogram' | 'alipay-miniprogram';
 export type HealthGuardEnvironment = 'development' | 'test' | 'production';
 export type ErrorType = 'js' | 'promise' | 'resource' | 'request' | 'native';
 
+export interface DeviceInfo {
+  model?: string;
+  system?: string;
+  screenWidth?: number;
+  screenHeight?: number;
+  language?: string;
+  userAgent?: string;
+}
+
 export interface BaseEvent {
   eventId: string;
   appKey: string;
@@ -33,6 +42,7 @@ export interface BaseEvent {
   release?: string;
   environment?: HealthGuardEnvironment;
   userId?: string;
+  deviceInfo?: DeviceInfo;
 }
 
 export interface ErrorEvent extends BaseEvent {
@@ -232,6 +242,7 @@ function createBaseEvent(
   | 'release'
   | 'environment'
   | 'userId'
+  | 'deviceInfo'
 > {
   return {
     eventId: createId('evt'),
@@ -243,8 +254,26 @@ function createBaseEvent(
     sdkVersion: SDK_VERSION,
     release: options.release,
     environment: options.environment,
-    userId: options.userId
+    userId: options.userId,
+    deviceInfo: getMiniProgramDeviceInfo(options.wx)
   };
+}
+
+function getMiniProgramDeviceInfo(wx: MiniProgramWxLike) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const info = (wx as any).getSystemInfoSync?.();
+    if (!info) return undefined;
+    return {
+      model: info.model,
+      system: info.system,
+      screenWidth: info.screenWidth,
+      screenHeight: info.screenHeight,
+      language: info.language
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function installRequestCapture(

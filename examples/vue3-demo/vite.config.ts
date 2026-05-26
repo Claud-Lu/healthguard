@@ -1,6 +1,8 @@
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 
+const proxyTarget = process.env.API_PROXY_TARGET || 'http://127.0.0.1:3100';
+
 export default defineConfig({
   define: {
     __VUE_OPTIONS_API__: true,
@@ -15,8 +17,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:3100',
-        changeOrigin: true
+        target: proxyTarget,
+        changeOrigin: true,
+        secure: false
       }
     }
   }

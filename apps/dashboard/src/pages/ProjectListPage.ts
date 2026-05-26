@@ -1,4 +1,4 @@
-import { h, onMounted, ref } from 'vue';
+import { h, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { store, messages, loadApps, logout, createApp, setLocale } from '../globalStore';
 import { apiUrl, formatTime, requestJson } from '../api';
@@ -39,10 +39,14 @@ export default {
       void loadDashboardData();
     });
 
-    async function loadDashboardData(): Promise<void> {
-      await loadApps();
-      if (!store.token) return;
+    watch(() => store.apps.length, (len) => {
+      if (len > 0) {
+        void loadOverviewData();
+      }
+    });
 
+    async function loadOverviewData(): Promise<void> {
+      if (!store.token || store.apps.length === 0) return;
       const loaded = await Promise.all(
         store.apps.map(async (app) => {
           try {
@@ -58,6 +62,11 @@ export default {
         })
       );
       summaries.value = loaded;
+    }
+
+    async function loadDashboardData(): Promise<void> {
+      await loadApps();
+      void loadOverviewData();
     }
 
     async function handleCreateApp(): Promise<void> {
@@ -105,6 +114,7 @@ export default {
             languageButton('EN', 'en-US', store.locale, setLocale),
             languageButton('中文', 'zh-CN', store.locale, setLocale)
           ]),
+          h('button', { type: 'button', class: 'wide logout-top', onClick: handleLogout }, t.logout),
           h('button', { type: 'button', class: 'wide', onClick: () => { void loadDashboardData(); }, disabled: store.loading }, t.refresh),
           h('div', { class: 'create-box' }, [
             h('h2', t.createApp),
@@ -126,7 +136,6 @@ export default {
               )
             )
           ),
-          h('button', { type: 'button', class: 'wide ghost', onClick: handleLogout }, t.logout)
         ]),
         h('section', { class: 'content' }, [
           h('section', { class: 'dashboard-hero' }, [

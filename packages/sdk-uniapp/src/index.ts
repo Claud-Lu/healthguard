@@ -90,6 +90,38 @@ function isH5(): boolean {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
 }
 
+function getUniAppDeviceInfo() {
+  // H5 / Browser
+  if (typeof navigator !== 'undefined' && typeof window !== 'undefined') {
+    return {
+      userAgent: navigator.userAgent,
+      language: navigator.language,
+      screenWidth: window.screen?.width,
+      screenHeight: window.screen?.height
+    };
+  }
+
+  // Mini-program or App runtime
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const uniGlobal = (globalThis as any).uni;
+    if (uniGlobal && typeof uniGlobal.getSystemInfoSync === 'function') {
+      const info = uniGlobal.getSystemInfoSync();
+      return {
+        model: info.model,
+        system: info.system,
+        screenWidth: info.screenWidth,
+        screenHeight: info.screenHeight,
+        language: info.language
+      };
+    }
+  } catch {
+    // ignore
+  }
+
+  return undefined;
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                 Storage helpers                            */
 /* -------------------------------------------------------------------------- */
@@ -219,6 +251,7 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
     | 'environment'
     | 'userId'
     | 'pageUrl'
+    | 'deviceInfo'
   > {
     return {
       eventId: createId('evt'),
@@ -231,7 +264,8 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
       release: options.release,
       environment: options.environment,
       userId: options.userId,
-      pageUrl: getCurrentPageUrl()
+      pageUrl: getCurrentPageUrl(),
+      deviceInfo: getUniAppDeviceInfo()
     };
   }
 

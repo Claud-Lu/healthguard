@@ -18,6 +18,15 @@ export const breadcrumbSchema = z.object({
   data: z.record(z.unknown()).optional()
 });
 
+export const deviceInfoSchema = z.object({
+  model: z.string().optional(),
+  system: z.string().optional(),
+  screenWidth: z.number().optional(),
+  screenHeight: z.number().optional(),
+  language: z.string().optional(),
+  userAgent: z.string().optional()
+});
+
 export const baseEventSchema = z.object({
   eventId: z.string().min(1),
   appKey: z.string().min(1),
@@ -40,7 +49,8 @@ export const baseEventSchema = z.object({
   release: z.string().optional(),
   environment: z.enum(['development', 'test', 'production']).optional(),
   pageUrl: z.string().optional(),
-  sdkVersion: z.string().min(1)
+  sdkVersion: z.string().min(1),
+  deviceInfo: deviceInfoSchema.optional()
 });
 
 export const errorEventSchema = baseEventSchema.extend({
