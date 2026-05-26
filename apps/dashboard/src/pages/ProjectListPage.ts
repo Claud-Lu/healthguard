@@ -47,21 +47,36 @@ export default {
 
     async function loadOverviewData(): Promise<void> {
       if (!store.token || store.apps.length === 0) return;
-      const loaded = await Promise.all(
-        store.apps.map(async (app) => {
-          try {
-            const response = await requestJson<{ totals: OverviewTotals }>(
-              apiUrl(`/overview?appKey=${encodeURIComponent(app.appKey)}`),
-              undefined,
-              store.token
-            );
-            return { app, totals: response.totals };
-          } catch {
-            return { app, totals: emptyTotals() };
-          }
-        })
-      );
-      summaries.value = loaded;
+
+      let map = new Map<string, OverviewTotals>();
+
+      try {
+        const appKeys = store.apps.map((app) => app.appKey).join(',');
+        const response = await requestJson<{ apps: Array<{ appKey: string; totals: OverviewTotals }> }>(
+          apiUrl(`/apps/overview?appKeys=${encodeURIComponent(appKeys)}`),
+          undefined,
+          store.token
+        );
+        map = new Map(response.apps.map((item) => [item.appKey, item.totals]));
+      } catch {
+        const results = await Promise.all(
+          store.apps.map(async (app) => {
+            try {
+              const response = await requestJson<{ totals: OverviewTotals }>(
+                apiUrl(`/overview?appKey=${encodeURIComponent(app.appKey)}`),
+                undefined,
+                store.token
+              );
+              return [app.appKey, response.totals] as const;
+            } catch {
+              return [app.appKey, emptyTotals()] as const;
+            }
+          })
+        );
+        map = new Map(results);
+      }
+
+      summaries.value = store.apps.map((app) => ({ app, totals: map.get(app.appKey) ?? emptyTotals() }));
     }
 
     async function loadDashboardData(): Promise<void> {

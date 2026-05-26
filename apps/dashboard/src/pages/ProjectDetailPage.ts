@@ -86,6 +86,62 @@ export default {
       return h('article', { class: 'metric' }, [h('span', label), h('strong', value.toLocaleString())]);
     }
 
+    function groupEventsByType(events: Array<Record<string, unknown>>) {
+      const groups: Record<string, Array<Record<string, unknown>>> = {};
+      for (const evt of events) {
+        const type = String(evt.type ?? 'unknown');
+        groups[type] = groups[type] ?? [];
+        groups[type].push(evt);
+      }
+      return groups;
+    }
+
+    function renderErrorEvent(evt: Record<string, unknown>) {
+      return h('div', { class: 'event-card error-card' }, [
+        h('div', { class: 'event-header' }, [
+          h('span', { class: 'event-badge error' }, 'ERROR'),
+          h('strong', String(evt.message ?? '-'))
+        ]),
+        evt.filename ? h('p', { class: 'event-meta' }, `${String(evt.filename)}:${String(evt.lineno ?? '-')}:${String(evt.colno ?? '-')}`) : null,
+        evt.stack ? h('pre', { class: 'event-stack' }, String(evt.stack)) : null
+      ]);
+    }
+
+    function renderHttpEvent(evt: Record<string, unknown>) {
+      return h('div', { class: 'event-card http-card' }, [
+        h('div', { class: 'event-header' }, [
+          h('span', { class: 'event-badge http' }, `${String(evt.method ?? 'GET')}`),
+          h('strong', String(evt.status ?? '-'))
+        ]),
+        h('p', { class: 'event-url' }, String(evt.url ?? '-')),
+        h('div', { class: 'event-meta-row' }, [
+          h('span', `Duration: ${String(evt.duration ?? '-')}ms`),
+          evt.errorMessage ? h('span', { class: 'event-error-msg' }, String(evt.errorMessage)) : null
+        ])
+      ]);
+    }
+
+    function renderEventGroup(type: string, events: Array<Record<string, unknown>>) {
+      const SAMPLE = 3;
+      const samples = events.slice(0, SAMPLE);
+      const remainder = events.length - SAMPLE;
+
+      const renderers: Record<string, (e: Record<string, unknown>) => unknown> = {
+        error: renderErrorEvent,
+        http: renderHttpEvent
+      };
+
+      return h('div', { class: 'event-group' }, [
+        h('h4', { class: 'event-group-title' }, [`${type.toUpperCase()} (${events.length})`]),
+        ...samples.map((evt) => (renderers[type] ?? renderRawEvent)(evt)),
+        remainder > 0 ? h('p', { class: 'event-more' }, `+ ${remainder} more events`) : null
+      ]);
+    }
+
+    function renderRawEvent(evt: Record<string, unknown>) {
+      return h('pre', { class: 'event-raw' }, JSON.stringify(evt, null, 2));
+    }
+
     return () => {
       const t = messages.value;
 
@@ -193,10 +249,7 @@ export default {
                 ? h('div', { class: 'detail-body' }, [
                     h('h3', selectedIssue.value.issue.message),
                     h('p', `${selectedIssue.value.issue.eventCount} ${t.events} since ${formatTime(selectedIssue.value.issue.firstSeenAt)}`),
-                    h(
-                      'pre',
-                      selectedIssue.value.events.map((evt: Record<string, unknown>) => JSON.stringify(evt, null, 2)).join('\n\n')
-                    )
+                    ...Object.entries(groupEventsByType(selectedIssue.value.events)).map(([type, events]) => renderEventGroup(type, events))
                   ])
                 : h('p', { class: 'empty' }, t.noIssueSelected)
             ])

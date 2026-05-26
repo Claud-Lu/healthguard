@@ -95,6 +95,27 @@ export function createMemoryStore(): Store {
       };
     },
 
+    async getAppsOverview(appKeys: string[]): Promise<Array<{ appKey: string; totals: OverviewTotals }>> {
+      if (appKeys.length === 0) return [];
+
+      return appKeys.map((appKey) => {
+        const events = filterEvents(state.events, appKey);
+        const issues = Array.from(state.issues.values()).filter((issue) => issue.appKey === appKey);
+        const affectedUsers = new Set(events.map((event) => event.userId ?? event.anonymousId));
+
+        return {
+          appKey,
+          totals: {
+            events: events.length,
+            errors: events.filter((event) => event.type === 'error').length,
+            failedRequests: events.filter((event) => event.type === 'http' && !event.success).length,
+            affectedUsers: affectedUsers.size,
+            issues: issues.length
+          }
+        };
+      });
+    },
+
     async getIssueDetail(id: string, platform?: string): Promise<IssueDetail> {
       const issue = state.issues.get(id) ?? null;
       if (!issue) {

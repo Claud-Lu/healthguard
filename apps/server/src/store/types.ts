@@ -57,5 +57,6 @@ export interface Store {
   ingestEvents(events: HealthGuardEvent[]): Promise<void>;
   listIssues(appKey?: string, platform?: string): Promise<IssueSummary[]>;
   getOverview(appKey?: string, platform?: string): Promise<OverviewTotals>;
+  getAppsOverview(appKeys: string[]): Promise<Array<{ appKey: string; totals: OverviewTotals }>>;
   getIssueDetail(id: string, platform?: string): Promise<IssueDetail>;
 }

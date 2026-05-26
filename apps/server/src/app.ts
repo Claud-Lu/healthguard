@@ -162,6 +162,18 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
     return { totals };
   });
 
+  app.get<{ Querystring: { appKeys?: string } }>('/api/apps/overview', async (request, reply) => {
+    const user = await authenticate(store, request.headers.authorization);
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const raw = request.query.appKeys;
+    const appKeys = raw ? raw.split(',').filter(Boolean) : [];
+    const apps = await store.getAppsOverview(appKeys);
+    return { apps };
+  });
+
   app.get<{ Params: { id: string }; Querystring: { platform?: string } }>('/api/issues/:id', async (request, reply) => {
     const detail = await store.getIssueDetail(request.params.id, request.query.platform);
 

@@ -197,6 +197,69 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       };
     },
 
+    async getAppsOverview(appKeys: string[]): Promise<Array<{ appKey: string; totals: OverviewTotals }>> {
+      if (appKeys.length === 0) return [];
+
+      const eventSql = `
+        SELECT app_key,
+               COUNT(*)::int as total,
+               COUNT(CASE WHEN type = $1 THEN 1 END)::int as errors,
+               COUNT(CASE WHEN type = $2 AND (payload->>'success')::boolean = false THEN 1 END)::int as failed_requests
+        FROM events
+        WHERE app_key = ANY($3)
+        GROUP BY app_key
+      `;
+      const eventResult = await client.query(eventSql, ['error', 'http', appKeys]);
+
+      const userSql = `
+        SELECT app_key, COUNT(DISTINCT COALESCE(user_id, anonymous_id))::int as affected_users
+        FROM events
+        WHERE app_key = ANY($1)
+        GROUP BY app_key
+      `;
+      const userResult = await client.query(userSql, [appKeys]);
+
+      const issueSql = `
+        SELECT app_key, COUNT(*)::int as issues
+        FROM issues
+        WHERE app_key = ANY($1)
+        GROUP BY app_key
+      `;
+      const issueResult = await client.query(issueSql, [appKeys]);
+
+      const userMap = new Map<string, number>();
+      for (const row of userResult.rows) {
+        userMap.set(String(row.app_key), Number(row.affected_users));
+      }
+
+      const issueMap = new Map<string, number>();
+      for (const row of issueResult.rows) {
+        issueMap.set(String(row.app_key), Number(row.issues));
+      }
+
+      const totalsMap = new Map<string, OverviewTotals>();
+      for (const row of eventResult.rows) {
+        const key = String(row.app_key);
+        totalsMap.set(key, {
+          events: Number(row.total),
+          errors: Number(row.errors),
+          failedRequests: Number(row.failed_requests),
+          affectedUsers: 0,
+          issues: 0
+        });
+      }
+
+      for (const [appKey, totals] of totalsMap) {
+        totals.affectedUsers = userMap.get(appKey) ?? 0;
+        totals.issues = issueMap.get(appKey) ?? 0;
+      }
+
+      return appKeys.map((appKey) => ({
+        appKey,
+        totals: totalsMap.get(appKey) ?? { events: 0, errors: 0, failedRequests: 0, affectedUsers: 0, issues: 0 }
+      }));
+    },
+
     async getIssueDetail(id: string, platform?: string): Promise<IssueDetail> {
       const issueResult = await client.query('SELECT * FROM issues WHERE id = $1', [id]);
       if (issueResult.rows.length === 0) {
