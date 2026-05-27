@@ -1,4 +1,4 @@
-import { computed, h, onMounted, reactive, ref, watch } from 'vue';
+import { computed, h, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { store, messages, loadApps } from '../globalStore';
 import { apiUrl, formatTime, requestJson } from '../api';
@@ -24,7 +24,6 @@ export default {
     const selectedPlatform = ref('');
     const searchQuery = ref('');
     const selectedMetricFilter = ref<'all' | 'error' | 'http'>('all');
-    const expandedRawEvents = reactive(new Set<string>());
 
     const selectedApp = computed(() => store.apps.find((item) => item.appKey === appKey.value) ?? null);
 
@@ -224,16 +223,7 @@ export default {
     }
 
     function renderOriginalJson(evt: Record<string, unknown>) {
-      const evtId = String(evt.eventId ?? '');
-      const isExpanded = expandedRawEvents.has(evtId);
-      return h('div', { class: 'event-raw-section' }, [
-        h('button', {
-          type: 'button',
-          class: 'event-raw-toggle',
-          onClick: () => { isExpanded ? expandedRawEvents.delete(evtId) : expandedRawEvents.add(evtId); }
-        }, isExpanded ? 'Hide Raw Data' : 'Show Raw Data'),
-        isExpanded ? h('pre', { class: 'event-raw' }, JSON.stringify(evt, null, 2)) : null
-      ]);
+      return h('pre', { class: 'event-raw' }, JSON.stringify(evt, null, 2));
     }
 
     function renderEventGroup(type: string, events: Array<Record<string, unknown>>) {
