@@ -1,7 +1,14 @@
 import type { Pool, PoolClient } from 'pg';
-import { createHttpFingerprint } from '@healthguard/core';
+import { createHttpFingerprint, extractPathname } from '@healthguard/core';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@healthguard/core';
 import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail } from './types';
+
+function httpIssueMessage(event: { method: string; url: string; errorMessage?: string }): string {
+  const pathname = extractPathname(event.url);
+  return event.errorMessage
+    ? `${event.method} ${pathname} - ${event.errorMessage}`
+    : `${event.method} ${pathname}`;
+}
 
 export interface PostgresStoreOptions {
   pool: Pool;
@@ -122,7 +129,6 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
         await client.query('COMMIT');
       } catch (err) {
         try { await client.query('ROLLBACK'); } catch { /* ignore rollback failure */ }
-        throw err;
         throw err;
       } finally {
         client.release();
@@ -499,7 +505,7 @@ async function upsertIssue(poolOrClient: Pool | PoolClient, event: ErrorEvent): 
 
 async function upsertHttpIssue(poolOrClient: Pool | PoolClient, event: HttpEvent & { fingerprint: string }): Promise<void> {
   const id = `${event.appKey}:${event.fingerprint}`;
-  const message = event.errorMessage ?? `${event.method} ${event.url}`;
+  const message = httpIssueMessage(event);
   const existing = await poolOrClient.query('SELECT event_count, last_seen_at, platform_distribution FROM issues WHERE id = $1', [id]);
 
   if (existing.rows.length === 0) {
@@ -533,7 +539,7 @@ async function upsertHttpIssueSnapshot(
 ): Promise<void> {
   const { event } = aggregate;
   const id = `${event.appKey}:${event.fingerprint}`;
-  const message = event.errorMessage ?? `${event.method} ${event.url}`;
+  const message = httpIssueMessage(event);
   const existing = await pool.query('SELECT event_count, last_seen_at, platform_distribution FROM issues WHERE id = $1', [id]);
 
   if (existing.rows.length === 0) {

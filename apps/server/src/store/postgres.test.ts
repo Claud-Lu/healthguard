@@ -149,7 +149,7 @@ describe('postgres store historical http issues', () => {
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({
       appKey: 'demo-app',
-      message: 'GET https://api.example.com/fail',
+      message: 'GET /fail',
       errorType: 'http',
       eventCount: 1,
       platformDistribution: { 'alipay-miniprogram': 1 }

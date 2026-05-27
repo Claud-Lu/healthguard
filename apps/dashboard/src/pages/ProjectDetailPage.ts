@@ -1,7 +1,8 @@
-import { computed, h, onMounted, ref, watch } from 'vue';
+import { computed, h, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { store, messages, loadApps } from '../globalStore';
 import { apiUrl, formatTime, requestJson } from '../api';
+import { extractPathname } from '@healthguard/core';
 import type { IssueSummary, OverviewTotals } from '../globalStore';
 
 const platforms = ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'uniapp-h5', 'uniapp-wechat', 'uniapp-alipay', 'uniapp-douyin', 'uniapp-app', 'uniapp'];
@@ -23,6 +24,7 @@ export default {
     const selectedPlatform = ref('');
     const searchQuery = ref('');
     const selectedMetricFilter = ref<'all' | 'error' | 'http'>('all');
+    const expandedRawEvents = reactive(new Set<string>());
 
     const selectedApp = computed(() => store.apps.find((item) => item.appKey === appKey.value) ?? null);
 
@@ -107,27 +109,130 @@ export default {
     }
 
     function renderErrorEvent(evt: Record<string, unknown>) {
+      const parsed = parseErrorPayload(evt);
+
       return h('div', { class: 'event-card error-card' }, [
         h('div', { class: 'event-header' }, [
           h('span', { class: 'event-badge error' }, 'ERROR'),
-          h('strong', String(evt.message ?? '-'))
+          h('strong', parsed.title)
+        ]),
+        parsed.url ? h('p', { class: 'event-url' }, `${String(parsed.method ?? 'GET')} ${String(parsed.url)}`) : null,
+        h('div', { class: 'event-meta-row' }, [
+          parsed.statusCode ? h('span', `Status: ${String(parsed.statusCode)}`) : null,
+          parsed.errorCode ? h('span', `Code: ${String(parsed.errorCode)}`) : null,
+          evt.errorType ? h('span', `Type: ${String(evt.errorType)}`) : null
+        ]),
+        h('div', { class: 'event-context-row' }, [
+          evt.page ? h('span', { class: 'context-tag' }, `Page: ${String(evt.page)}`) : null,
+          evt.scene ? h('span', { class: 'context-tag' }, `Scene: ${String(evt.scene)}`) : null,
+          evt.platform ? h('span', { class: 'context-tag' }, `Platform: ${String(evt.platform)}`) : null
         ]),
         evt.filename ? h('p', { class: 'event-meta' }, `${String(evt.filename)}:${String(evt.lineno ?? '-')}:${String(evt.colno ?? '-')}`) : null,
-        evt.stack ? h('pre', { class: 'event-stack' }, String(evt.stack)) : null
+        evt.stack ? h('pre', { class: 'event-stack' }, String(evt.stack)) : null,
+        renderBreadcrumbs(evt.breadcrumbs as Array<Record<string, unknown>> | undefined),
+        renderOriginalJson(evt)
       ]);
     }
 
+    function parseErrorPayload(evt: Record<string, unknown>) {
+      let title = String(evt.message ?? '-');
+      let url: string | undefined;
+      let method: string | undefined;
+      let statusCode: unknown;
+      let errorCode: unknown;
+
+      // If message is a JSON string, try to extract structured fields
+      if (typeof evt.message === 'string' && evt.message.startsWith('{')) {
+        try {
+          const obj = JSON.parse(evt.message) as Record<string, unknown>;
+          if (obj.errorMessage) title = String(obj.errorMessage);
+          else if (obj.message) title = String(obj.message);
+          if (obj.url) url = String(obj.url);
+          if (obj.method) method = String(obj.method);
+          if (obj.statusCode !== undefined) statusCode = obj.statusCode;
+          else if (obj.status !== undefined) statusCode = obj.status;
+          if (obj.error !== undefined) errorCode = obj.error;
+          else if (obj.code !== undefined) errorCode = obj.code;
+        } catch {
+          // ignore parse error
+        }
+      }
+
+      // Top-level fields take priority over parsed message JSON
+      if (evt.errorMessage && typeof evt.errorMessage === 'string') title = evt.errorMessage;
+      if (evt.url && typeof evt.url === 'string') url = evt.url;
+      if (evt.method && typeof evt.method === 'string') method = evt.method;
+      if (evt.statusCode !== undefined) statusCode = evt.statusCode;
+      if (evt.error !== undefined) errorCode = evt.error;
+
+      return {
+        title,
+        url,
+        method,
+        statusCode: statusCode !== null ? statusCode : undefined,
+        errorCode: errorCode !== null ? errorCode : undefined
+      };
+    }
+
     function renderHttpEvent(evt: Record<string, unknown>) {
+      const pathname = extractPathname(String(evt.url ?? '-'));
+
       return h('div', { class: 'event-card http-card' }, [
         h('div', { class: 'event-header' }, [
           h('span', { class: 'event-badge http' }, `${String(evt.method ?? 'GET')}`),
-          h('strong', String(evt.status ?? '-'))
+          h('strong', pathname),
+          h('span', { class: 'event-status' }, `Status ${String(evt.status ?? '-')}`)
         ]),
         h('p', { class: 'event-url' }, String(evt.url ?? '-')),
+        h('div', { class: 'event-context-row' }, [
+          evt.page ? h('span', { class: 'context-tag' }, `Page: ${String(evt.page)}`) : null,
+          evt.scene ? h('span', { class: 'context-tag' }, `Scene: ${String(evt.scene)}`) : null,
+          evt.platform ? h('span', { class: 'context-tag' }, `Platform: ${String(evt.platform)}`) : null
+        ]),
         h('div', { class: 'event-meta-row' }, [
           h('span', `Duration: ${String(evt.duration ?? '-')}ms`),
           evt.errorMessage ? h('span', { class: 'event-error-msg' }, String(evt.errorMessage)) : null
-        ])
+        ]),
+        renderRequestData(evt.requestData as Record<string, unknown> | undefined),
+        renderBreadcrumbs(evt.breadcrumbs as Array<Record<string, unknown>> | undefined),
+        renderOriginalJson(evt)
+      ]);
+    }
+
+    function renderRequestData(data: Record<string, unknown> | undefined) {
+      if (!data || Object.keys(data).length === 0) return null;
+      return h('div', { class: 'event-request-data' }, [
+        h('span', { class: 'event-request-data-label' }, 'Request Data:'),
+        h('pre', { class: 'event-request-data-content' }, JSON.stringify(data, null, 2))
+      ]);
+    }
+
+    function renderBreadcrumbs(breadcrumbs: Array<Record<string, unknown>> | undefined) {
+      if (!breadcrumbs || breadcrumbs.length === 0) return null;
+      const recent = breadcrumbs.slice(-10);
+      return h('div', { class: 'event-breadcrumbs' }, [
+        h('span', { class: 'event-breadcrumbs-label' }, 'Breadcrumbs:'),
+        h('ul', { class: 'event-breadcrumbs-list' },
+          recent.map((bc) =>
+            h('li', { class: 'breadcrumb-item' }, [
+              h('span', { class: 'breadcrumb-type' }, String(bc.type ?? '-')),
+              h('span', { class: 'breadcrumb-message' }, String(bc.message ?? '-'))
+            ])
+          )
+        )
+      ]);
+    }
+
+    function renderOriginalJson(evt: Record<string, unknown>) {
+      const evtId = String(evt.eventId ?? '');
+      const isExpanded = expandedRawEvents.has(evtId);
+      return h('div', { class: 'event-raw-section' }, [
+        h('button', {
+          type: 'button',
+          class: 'event-raw-toggle',
+          onClick: () => { isExpanded ? expandedRawEvents.delete(evtId) : expandedRawEvents.add(evtId); }
+        }, isExpanded ? 'Hide Raw Data' : 'Show Raw Data'),
+        isExpanded ? h('pre', { class: 'event-raw' }, JSON.stringify(evt, null, 2)) : null
       ]);
     }
 

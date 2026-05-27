@@ -62,7 +62,10 @@ export const errorEventSchema = baseEventSchema.extend({
   lineno: z.number().optional(),
   colno: z.number().optional(),
   fingerprint: z.string().min(1),
-  breadcrumbs: z.array(breadcrumbSchema)
+  breadcrumbs: z.array(breadcrumbSchema),
+  context: z.record(z.unknown()).refine((obj) => Object.keys(obj).length <= 20, { message: 'context must have at most 20 keys' }).optional(),
+  page: z.string().optional(),
+  scene: z.string().optional()
 });
 
 export const httpEventSchema = baseEventSchema.extend({
@@ -73,7 +76,11 @@ export const httpEventSchema = baseEventSchema.extend({
   duration: z.number().nonnegative(),
   success: z.boolean(),
   errorMessage: z.string().optional(),
-  fingerprint: z.string().optional()
+  fingerprint: z.string().optional(),
+  context: z.record(z.unknown()).refine((obj) => Object.keys(obj).length <= 20, { message: 'context must have at most 20 keys' }).optional(),
+  requestData: z.record(z.unknown()).refine((obj) => Object.keys(obj).length <= 20, { message: 'requestData must have at most 20 keys' }).optional(),
+  page: z.string().optional(),
+  scene: z.string().optional()
 });
 
 export const performanceEventSchema = baseEventSchema.extend({
@@ -122,6 +129,7 @@ export interface FingerprintInput {
   errorType: ErrorEvent['errorType'];
   message: string;
   stack?: string;
+  context?: Record<string, unknown>;
 }
 
 export function parseEventBatch(input: unknown): EventBatch {
@@ -156,14 +164,39 @@ export function sanitizeUrl(rawUrl: string): string {
 
 export function createIssueFingerprint(input: FingerprintInput): string {
   const stackHead = input.stack?.split('\n').slice(0, 2).join('\n').trim() ?? '';
-  const source = `${input.errorType}|${input.message}|${stackHead}`;
+  let source = `${input.errorType}|${input.message}|${stackHead}`;
+
+  if (input.context) {
+    if (input.context.url) {
+      let pathname: string;
+      try {
+        const urlObj = new URL(String(input.context.url), 'http://healthguard.local');
+        pathname = urlObj.pathname;
+      } catch {
+        pathname = String(input.context.url).split('?')[0] ?? String(input.context.url);
+      }
+      source += `|${pathname}`;
+    }
+    if (input.context.method) source += `|${input.context.method}`;
+    if (input.context.scene) source += `|${input.context.scene}`;
+    if (input.context.page) source += `|${input.context.page}`;
+  }
+
   return `${input.errorType}:${hashString(source)}`;
 }
 
-export function createHttpFingerprint(event: { method: string; url: string; status?: number }): string {
-  const sanitized = sanitizeUrl(event.url);
-  const source = `http|${event.method}|${event.status ?? 'unknown'}|${sanitized}`;
+export function createHttpFingerprint(event: { method: string; url: string; status?: number; platform?: string }): string {
+  const pathname = extractPathname(event.url);
+  const source = `http|${event.method}|${pathname}|${event.status ?? 'unknown'}|${event.platform ?? 'unknown'}`;
   return `http:${hashString(source)}`;
+}
+
+export function extractPathname(url: string): string {
+  try {
+    return new URL(url, 'http://healthguard.local').pathname || url;
+  } catch {
+    return url.split('?')[0] ?? url;
+  }
 }
 
 function hashString(value: string): string {

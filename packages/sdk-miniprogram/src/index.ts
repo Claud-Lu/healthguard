@@ -52,6 +52,9 @@ export interface ErrorEvent extends BaseEvent {
   stack?: string;
   fingerprint: string;
   breadcrumbs: Breadcrumb[];
+  context?: Record<string, unknown>;
+  page?: string;
+  scene?: string;
 }
 
 export interface HttpEvent extends BaseEvent {
@@ -62,6 +65,10 @@ export interface HttpEvent extends BaseEvent {
   duration: number;
   success: boolean;
   errorMessage?: string;
+  context?: Record<string, unknown>;
+  requestData?: Record<string, unknown>;
+  page?: string;
+  scene?: string;
 }
 
 export interface EventBatch {
@@ -101,8 +108,8 @@ export interface MiniProgramClientOptions {
 }
 
 export interface MiniProgramClient {
-  captureException(error: unknown): void;
-  captureHttp(input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string }): void;
+  captureException(error: unknown, errorType?: ErrorType, context?: Record<string, unknown>): void;
+  captureHttp(input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }): void;
   addBreadcrumb(breadcrumb: Omit<Breadcrumb, 'timestamp'> & { timestamp?: number }): void;
   wrapPage<T extends Record<string, any>>(route: string, definition: T): T;
   wrapApp<T extends Record<string, any>>(definition: T): T;
@@ -120,7 +127,7 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
     queue.push(event);
   }
 
-  function captureException(error: unknown, errorType: ErrorType = 'js'): void {
+  function captureException(error: unknown, errorType: ErrorType = 'js', context?: Record<string, unknown>): void {
     const normalized = normalizeError(error);
     const message = firstLine(normalized.message);
 
@@ -133,13 +140,17 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
       fingerprint: createIssueFingerprint({
         errorType,
         message,
-        stack: normalized.stack ?? normalized.message
+        stack: normalized.stack ?? normalized.message,
+        context: normalized.context
       }),
-      breadcrumbs: [...breadcrumbs]
+      breadcrumbs: [...breadcrumbs],
+      context: { ...normalized.context, ...context },
+      page: (normalized.context?.page as string) ?? (context?.page as string),
+      scene: (normalized.context?.scene as string) ?? (context?.scene as string)
     });
   }
 
-  function captureHttp(input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string }): void {
+  function captureHttp(input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }): void {
     enqueue({
       ...createBaseEvent(options, sessionId, anonymousId),
       type: 'http',
@@ -148,7 +159,11 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
       status: input.status,
       duration: input.duration,
       success: input.success,
-      errorMessage: input.errorMessage
+      errorMessage: input.errorMessage,
+      context: input.context,
+      requestData: input.requestData,
+      page: input.page,
+      scene: input.scene
     });
   }
 
@@ -157,11 +172,26 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
   });
 
   options.wx.onUnhandledRejection?.((event) => {
-    captureException(event.reason, 'promise');
+    const reason = event.reason;
+    const context: Record<string, unknown> = {};
+
+    if (reason && typeof reason === 'object') {
+      const err = reason as Record<string, unknown>;
+      if (err.url) context.url = err.url;
+      if (err.method) context.method = err.method;
+      if (err.page) context.page = err.page;
+      if (err.scene) context.scene = err.scene;
+      if (err.status !== undefined) context.status = err.status;
+      if (err.statusCode !== undefined) context.statusCode = err.statusCode;
+      if (err.errorCode !== undefined) context.errorCode = err.errorCode;
+      if (err.originalError) context.originalError = err.originalError;
+    }
+
+    captureException(event.reason, 'promise', context);
   });
 
   if (shouldCaptureRequest(options.autoCapture)) {
-    installRequestCapture(options.wx, captureHttp);
+    installRequestCapture(options.wx, captureHttp, options.endpoint);
   }
 
   return {
@@ -278,11 +308,16 @@ function getMiniProgramDeviceInfo(wx: MiniProgramWxLike) {
 
 function installRequestCapture(
   wx: MiniProgramWxLike,
-  captureHttp: (input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string }) => void
+  captureHttp: (input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }) => void,
+  endpoint: string
 ): void {
   const originalRequest = wx.request.bind(wx);
 
   wx.request = (options: WxRequestOptions) => {
+    if (isHealthGuardEndpoint(options.url, endpoint)) {
+      return originalRequest(options);
+    }
+
     const startedAt = Date.now();
     const method = options.method ?? 'GET';
 
@@ -300,18 +335,47 @@ function installRequestCapture(
         });
         options.success?.(response);
       },
-      fail(error: { errMsg?: string }) {
+      fail(error: Record<string, unknown>) {
         captureHttp({
           method,
           url: options.url,
+          status: getMiniProgramErrorStatus(error),
           duration: Date.now() - startedAt,
           success: false,
-          errorMessage: error.errMsg
+          errorMessage: getMiniProgramErrorMessage(error),
+          context: {
+            originalError: error
+          }
         });
-        options.fail?.(error);
+        options.fail?.(error as { errMsg?: string });
       }
     });
   };
+}
+
+function isHealthGuardEndpoint(url: string, endpoint: string): boolean {
+  try {
+    const urlObj = new URL(url, 'http://healthguard.local');
+    const endpointObj = new URL(endpoint, 'http://healthguard.local');
+    return urlObj.pathname === endpointObj.pathname;
+  } catch {
+    return false;
+  }
+}
+
+function getMiniProgramErrorMessage(error: Record<string, unknown>): string {
+  return String(
+    error.errorMessage ||
+    error.errMsg ||
+    error.message ||
+    JSON.stringify(error)
+  );
+}
+
+function getMiniProgramErrorStatus(error: Record<string, unknown>): number | undefined {
+  const candidates = [error.statusCode, error.status, error.error, error.errCode, error.code];
+  const value = candidates.find((item): item is number => typeof item === 'number');
+  return value;
 }
 
 function getRequestResult(response: { statusCode?: number; status?: number; data?: unknown }): {
@@ -391,17 +455,44 @@ function shouldCaptureRequest(autoCapture: MiniProgramClientOptions['autoCapture
   return autoCapture?.request ?? false;
 }
 
-function normalizeError(error: unknown): { message: string; stack?: string } {
+function normalizeError(error: unknown): { message: string; stack?: string; context?: Record<string, unknown> } {
   if (error instanceof Error) {
     return {
       message: error.message,
-      stack: error.stack
+      stack: error.stack,
+      context: extractOwnEnumerableFields(error as unknown as Record<string, unknown>)
+    };
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    const obj = error as Record<string, unknown>;
+    return {
+      message: getObjectErrorMessage(obj),
+      stack: typeof obj.stack === 'string' ? obj.stack : undefined,
+      context: obj
     };
   }
 
   return {
     message: typeof error === 'string' ? error : JSON.stringify(error)
   };
+}
+
+function extractOwnEnumerableFields(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(obj)) {
+    if (key !== 'stack' && key !== 'message') {
+      result[key] = obj[key];
+    }
+  }
+  return result;
+}
+
+function getObjectErrorMessage(obj: Record<string, unknown>): string {
+  if (typeof obj.errorMessage === 'string') return obj.errorMessage;
+  if (typeof obj.errMsg === 'string') return obj.errMsg;
+  if (typeof obj.message === 'string') return obj.message;
+  return JSON.stringify(obj);
 }
 
 function firstLine(message: string): string {
@@ -432,9 +523,24 @@ function sanitizeUrl(rawUrl: string): string {
   }
 }
 
-function createIssueFingerprint(input: { errorType: ErrorType; message: string; stack?: string }): string {
+function createIssueFingerprint(input: { errorType: ErrorType; message: string; stack?: string; context?: Record<string, unknown> }): string {
   const stackHead = input.stack?.split('\n').slice(0, 2).join('\n').trim() ?? '';
-  const source = `${input.errorType}|${input.message}|${stackHead}`;
+  let source = `${input.errorType}|${input.message}|${stackHead}`;
+
+  if (input.context) {
+    if (input.context.url) {
+      const rawUrl = String(input.context.url);
+      try {
+        source += `|${new URL(rawUrl, 'http://healthguard.local').pathname}`;
+      } catch {
+        source += `|${rawUrl.split('?')[0] ?? rawUrl}`;
+      }
+    }
+    if (input.context.method) source += `|${input.context.method}`;
+    if (input.context.scene) source += `|${input.context.scene}`;
+    if (input.context.page) source += `|${input.context.page}`;
+  }
+
   return `${input.errorType}:${hashString(source)}`;
 }
 
