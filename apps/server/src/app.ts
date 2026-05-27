@@ -2,6 +2,7 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
+import { nanoid } from 'nanoid';
 import { parseEventBatch, type EventBatch } from '@healthguard/core';
 import type { AppType, Store, UserRecord } from './store';
 
@@ -20,11 +21,6 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
   });
 
   app.get('/health', async () => ({
-    ok: true,
-    service: 'healthguard-server'
-  }));
-
-  app.get('/api/health', async () => ({
     ok: true,
     service: 'healthguard-server'
   }));
@@ -152,12 +148,22 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
     });
   });
 
-  app.get<{ Querystring: { appKey?: string; platform?: string } }>('/api/issues', async (request) => {
+  app.get<{ Querystring: { appKey?: string; platform?: string } }>('/api/issues', async (request, reply) => {
+    const user = await authenticate(store, request.headers.authorization);
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
     const issues = await store.listIssues(request.query.appKey, request.query.platform);
     return { issues };
   });
 
-  app.get<{ Querystring: { appKey?: string; platform?: string } }>('/api/overview', async (request) => {
+  app.get<{ Querystring: { appKey?: string; platform?: string } }>('/api/overview', async (request, reply) => {
+    const user = await authenticate(store, request.headers.authorization);
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
     const totals = await store.getOverview(request.query.appKey, request.query.platform);
     return { totals };
   });
@@ -175,6 +181,11 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
   });
 
   app.get<{ Params: { id: string }; Querystring: { platform?: string } }>('/api/issues/:id', async (request, reply) => {
+    const user = await authenticate(store, request.headers.authorization);
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
     const detail = await store.getIssueDetail(request.params.id, request.query.platform);
 
     if (!detail.issue) {
@@ -222,7 +233,7 @@ function isAppType(value: string): value is AppType {
 }
 
 function createId(prefix: string): string {
-  return `${prefix}_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+  return `${prefix}_${nanoid(21)}`;
 }
 
 type AuthErrorCode = 'INVALID_EMAIL' | 'PASSWORD_TOO_SHORT' | 'EMAIL_ALREADY_REGISTERED' | 'INVALID_CREDENTIALS';

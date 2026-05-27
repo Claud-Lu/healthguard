@@ -204,6 +204,14 @@ describe('collector api', () => {
   it('stores a batch and aggregates repeated errors into one issue', async () => {
     const app = createServerApp(createMemoryStore());
 
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const token = register.json().token;
+    const headers = { authorization: `Bearer ${token}` };
+
     const payload = {
       appKey: 'demo-app',
       events: [
@@ -245,7 +253,8 @@ describe('collector api', () => {
     });
     const issues = await app.inject({
       method: 'GET',
-      url: '/api/issues?appKey=demo-app'
+      url: '/api/issues?appKey=demo-app',
+      headers
     });
 
     expect(ingest.statusCode).toBe(202);
@@ -280,6 +289,15 @@ describe('collector api', () => {
 
   it('returns overview metrics and issue detail with recent events', async () => {
     const app = createServerApp(createMemoryStore());
+
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const token = register.json().token;
+    const headers = { authorization: `Bearer ${token}` };
+
     const payload = {
       appKey: 'demo-app',
       events: [
@@ -317,8 +335,8 @@ describe('collector api', () => {
     };
 
     await app.inject({ method: 'POST', url: '/api/events/batch', payload });
-    const overview = await app.inject({ method: 'GET', url: '/api/overview?appKey=demo-app' });
-    const detail = await app.inject({ method: 'GET', url: '/api/issues/demo-app%3Ajs%3Aboom' });
+    const overview = await app.inject({ method: 'GET', url: '/api/overview?appKey=demo-app', headers });
+    const detail = await app.inject({ method: 'GET', url: '/api/issues/demo-app%3Ajs%3Aboom', headers });
 
     expect(overview.statusCode).toBe(200);
     expect(overview.json()).toMatchObject({
@@ -342,7 +360,7 @@ describe('collector api', () => {
     });
 
     // Since we can't easily know the exact http fingerprint hash, query issues list instead
-    const issuesList = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app' });
+    const issuesList = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app', headers });
     expect(issuesList.statusCode).toBe(200);
     const issues = issuesList.json().issues;
     expect(issues).toHaveLength(2);
@@ -350,7 +368,7 @@ describe('collector api', () => {
     expect(httpIssue).toBeDefined();
     expect(httpIssue.message).toBe('GET https://api.example.com/fail');
 
-    const httpDetail = await app.inject({ method: 'GET', url: `/api/issues/${encodeURIComponent(httpIssue.id)}` });
+    const httpDetail = await app.inject({ method: 'GET', url: `/api/issues/${encodeURIComponent(httpIssue.id)}`, headers });
     expect(httpDetail.statusCode).toBe(200);
     expect(httpDetail.json().issue.errorType).toBe('http');
     expect(httpDetail.json().events).toHaveLength(1);
@@ -364,6 +382,14 @@ describe('collector api', () => {
 
   it('aggregates platform distribution and filters issues/events by platform', async () => {
     const app = createServerApp(createMemoryStore());
+
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const token = register.json().token;
+    const headers = { authorization: `Bearer ${token}` };
 
     const payload = {
       appKey: 'demo-app',
@@ -415,10 +441,10 @@ describe('collector api', () => {
 
     await app.inject({ method: 'POST', url: '/api/events/batch', payload });
 
-    const issuesAll = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app' });
-    const issuesH5 = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app&platform=uniapp-h5' });
-    const issuesWechat = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app&platform=uniapp-wechat' });
-    const issuesUnknown = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app&platform=unknown' });
+    const issuesAll = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app', headers });
+    const issuesH5 = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app&platform=uniapp-h5', headers });
+    const issuesWechat = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app&platform=uniapp-wechat', headers });
+    const issuesUnknown = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app&platform=unknown', headers });
 
     expect(issuesAll.json().issues).toHaveLength(1);
     expect(issuesAll.json().issues[0]).toMatchObject({
@@ -430,17 +456,17 @@ describe('collector api', () => {
     expect(issuesWechat.json().issues).toHaveLength(1);
     expect(issuesUnknown.json().issues).toHaveLength(0);
 
-    const overviewH5 = await app.inject({ method: 'GET', url: '/api/overview?appKey=demo-app&platform=uniapp-h5' });
+    const overviewH5 = await app.inject({ method: 'GET', url: '/api/overview?appKey=demo-app&platform=uniapp-h5', headers });
     expect(overviewH5.json().totals).toMatchObject({ events: 1, errors: 1, issues: 1 });
 
-    const overviewWechat = await app.inject({ method: 'GET', url: '/api/overview?appKey=demo-app&platform=uniapp-wechat' });
+    const overviewWechat = await app.inject({ method: 'GET', url: '/api/overview?appKey=demo-app&platform=uniapp-wechat', headers });
     expect(overviewWechat.json().totals).toMatchObject({ events: 2, errors: 2, issues: 1 });
 
-    const detailH5 = await app.inject({ method: 'GET', url: '/api/issues/demo-app%3Ajs%3Aboom?platform=uniapp-h5' });
+    const detailH5 = await app.inject({ method: 'GET', url: '/api/issues/demo-app%3Ajs%3Aboom?platform=uniapp-h5', headers });
     expect(detailH5.json().events).toHaveLength(1);
     expect(detailH5.json().events[0].platform).toBe('uniapp-h5');
 
-    const detailWechat = await app.inject({ method: 'GET', url: '/api/issues/demo-app%3Ajs%3Aboom?platform=uniapp-wechat' });
+    const detailWechat = await app.inject({ method: 'GET', url: '/api/issues/demo-app%3Ajs%3Aboom?platform=uniapp-wechat', headers });
     expect(detailWechat.json().events).toHaveLength(2);
 
     await app.close();

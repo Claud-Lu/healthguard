@@ -72,11 +72,12 @@ export function createMemoryStore(): Store {
       }
     },
 
-    async listIssues(appKey?: string, platform?: string): Promise<IssueSummary[]> {
+    async listIssues(appKey?: string, platform?: string, limit = 100, offset = 0): Promise<IssueSummary[]> {
       return Array.from(state.issues.values())
         .filter((issue) => (appKey ? issue.appKey === appKey : true))
         .filter((issue) => (platform ? (issue.platformDistribution[platform] ?? 0) > 0 : true))
-        .sort((left, right) => right.lastSeenAt - left.lastSeenAt);
+        .sort((left, right) => right.lastSeenAt - left.lastSeenAt)
+        .slice(offset, offset + limit);
     },
 
     async getOverview(appKey?: string, platform?: string): Promise<OverviewTotals> {
@@ -116,7 +117,7 @@ export function createMemoryStore(): Store {
       });
     },
 
-    async getIssueDetail(id: string, platform?: string): Promise<IssueDetail> {
+    async getIssueDetail(id: string, platform?: string, eventLimit = 50): Promise<IssueDetail> {
       const issue = state.issues.get(id) ?? null;
       if (!issue) {
         return { issue: null, events: [] };
@@ -125,7 +126,8 @@ export function createMemoryStore(): Store {
       const events = state.events
         .filter((event) => event.type === eventType && event.appKey === issue.appKey && 'fingerprint' in event && event.fingerprint === issue.fingerprint)
         .filter((event) => (platform ? event.platform === platform : true))
-        .sort((left, right) => right.timestamp - left.timestamp);
+        .sort((left, right) => right.timestamp - left.timestamp)
+        .slice(0, eventLimit);
 
       return { issue, events };
     }

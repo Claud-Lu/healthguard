@@ -55,8 +55,9 @@ export interface Store {
   listAppsByUser(userId: string): Promise<AppRecord[]>;
 
   ingestEvents(events: HealthGuardEvent[]): Promise<void>;
-  listIssues(appKey?: string, platform?: string): Promise<IssueSummary[]>;
+  listIssues(appKey?: string, platform?: string, limit?: number, offset?: number): Promise<IssueSummary[]>;
   getOverview(appKey?: string, platform?: string): Promise<OverviewTotals>;
   getAppsOverview(appKeys: string[]): Promise<Array<{ appKey: string; totals: OverviewTotals }>>;
-  getIssueDetail(id: string, platform?: string): Promise<IssueDetail>;
+  getIssueDetail(id: string, platform?: string, eventLimit?: number): Promise<IssueDetail>;
+  cleanup?(retentionDays?: number): Promise<{ deletedEvents: number; deletedSessions: number }>;
 }
