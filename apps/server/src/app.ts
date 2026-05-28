@@ -4,7 +4,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { nanoid } from 'nanoid';
 import { parseEventBatch, type EventBatch } from '@healthguard/core';
-import type { AppType, Store, UserRecord } from './store';
+import type { AppType, IssueQuery, IssueStatusFilter, Store, UserRecord } from './store';
 
 export function createServerApp(store: Store, options?: { corsOrigin?: string | boolean }): FastifyInstance {
   const app = Fastify({
@@ -148,23 +148,33 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
     });
   });
 
-  app.get<{ Querystring: { appKey?: string; platform?: string } }>('/api/issues', async (request, reply) => {
+  app.get<{ Querystring: IssueQuerystring }>('/api/issues', async (request, reply) => {
     const user = await authenticate(store, request.headers.authorization);
     if (!user) {
       return reply.status(401).send({ message: 'Unauthorized' });
     }
 
-    const issues = await store.listIssues(request.query.appKey, request.query.platform);
+    const issueQuery = parseIssueQuery(request.query);
+    if (!issueQuery.valid) {
+      return reply.status(400).send({ message: issueQuery.message });
+    }
+
+    const issues = await store.listIssues(issueQuery.query);
     return { issues };
   });
 
-  app.get<{ Querystring: { appKey?: string; platform?: string } }>('/api/overview', async (request, reply) => {
+  app.get<{ Querystring: IssueQuerystring }>('/api/overview', async (request, reply) => {
     const user = await authenticate(store, request.headers.authorization);
     if (!user) {
       return reply.status(401).send({ message: 'Unauthorized' });
     }
 
-    const totals = await store.getOverview(request.query.appKey, request.query.platform);
+    const issueQuery = parseIssueQuery(request.query);
+    if (!issueQuery.valid) {
+      return reply.status(400).send({ message: issueQuery.message });
+    }
+
+    const totals = await store.getOverview(issueQuery.query);
     return { totals };
   });
 
@@ -180,13 +190,52 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
     return { apps };
   });
 
-  app.get<{ Params: { id: string }; Querystring: { platform?: string } }>('/api/issues/:id', async (request, reply) => {
+  app.patch<{ Params: { id: string } }>('/api/issues/:id/archive', async (request, reply) => {
     const user = await authenticate(store, request.headers.authorization);
     if (!user) {
       return reply.status(401).send({ message: 'Unauthorized' });
     }
 
-    const detail = await store.getIssueDetail(request.params.id, request.query.platform);
+    const issue = await store.archiveIssue(request.params.id, Date.now());
+    if (!issue) {
+      return reply.status(404).send({ message: 'Issue not found' });
+    }
+
+    return { issue };
+  });
+
+  app.patch<{ Params: { id: string } }>('/api/issues/:id/reopen', async (request, reply) => {
+    const user = await authenticate(store, request.headers.authorization);
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const issue = await store.reopenIssue(request.params.id);
+    if (!issue) {
+      return reply.status(404).send({ message: 'Issue not found' });
+    }
+
+    return { issue };
+  });
+
+  app.get<{ Params: { id: string }; Querystring: IssueQuerystring }>('/api/issues/:id', async (request, reply) => {
+    const user = await authenticate(store, request.headers.authorization);
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const issueQuery = parseIssueQuery(request.query);
+    if (!issueQuery.valid) {
+      return reply.status(400).send({ message: issueQuery.message });
+    }
+
+    const detail = await store.getIssueDetail(
+      request.params.id,
+      issueQuery.query.platform,
+      undefined,
+      issueQuery.query.startTime,
+      issueQuery.query.endTime
+    );
 
     if (!detail.issue) {
       return reply.status(404).send({ message: 'Issue not found' });
@@ -238,6 +287,14 @@ function createId(prefix: string): string {
 
 type AuthErrorCode = 'INVALID_EMAIL' | 'PASSWORD_TOO_SHORT' | 'EMAIL_ALREADY_REGISTERED' | 'INVALID_CREDENTIALS';
 
+interface IssueQuerystring {
+  appKey?: string;
+  platform?: string;
+  status?: string;
+  start?: string;
+  end?: string;
+}
+
 type CredentialsResult =
   | { valid: true; email: string; password: string }
   | { valid: false; code: Extract<AuthErrorCode, 'INVALID_EMAIL' | 'PASSWORD_TOO_SHORT'>; email: string };
@@ -266,6 +323,43 @@ function authError(code: AuthErrorCode): { code: AuthErrorCode; message: string 
   };
 
   return { code, message: messages[code] };
+}
+
+function parseIssueQuery(query: IssueQuerystring): { valid: true; query: IssueQuery } | { valid: false; message: string } {
+  const status = query.status ?? 'open';
+  if (!isIssueStatus(status)) {
+    return { valid: false, message: 'Unsupported issue status' };
+  }
+
+  const startTime = parseOptionalTimestamp(query.start);
+  const endTime = parseOptionalTimestamp(query.end);
+  if (startTime === 'invalid' || endTime === 'invalid') {
+    return { valid: false, message: 'Invalid time range' };
+  }
+  if (startTime !== undefined && endTime !== undefined && startTime > endTime) {
+    return { valid: false, message: 'Invalid time range' };
+  }
+
+  return {
+    valid: true,
+    query: {
+      appKey: query.appKey,
+      platform: query.platform,
+      status,
+      startTime,
+      endTime
+    }
+  };
+}
+
+function isIssueStatus(value: string): value is IssueStatusFilter {
+  return value === 'open' || value === 'archived' || value === 'all';
+}
+
+function parseOptionalTimestamp(value: string | undefined): number | undefined | 'invalid' {
+  if (value === undefined || value === '') return undefined;
+  const timestamp = Number(value);
+  return Number.isFinite(timestamp) ? timestamp : 'invalid';
 }
 
 function hashPassword(password: string): string {

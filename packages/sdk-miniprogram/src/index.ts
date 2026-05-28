@@ -80,6 +80,7 @@ export interface MiniProgramWxLike {
   onError?: (handler: (message: string) => void) => void;
   onUnhandledRejection?: (handler: (event: { reason: unknown }) => void) => void;
   request: (options: WxRequestOptions) => unknown;
+  getCurrentPages?: () => Array<{ route?: string; __route__?: string }>;
 }
 
 export interface WxRequestOptions {
@@ -88,6 +89,12 @@ export interface WxRequestOptions {
   success?: (response: { statusCode?: number; status?: number; data?: unknown }) => void;
   fail?: (error: { errMsg?: string }) => void;
   complete?: (response: unknown) => void;
+  healthGuard?: {
+    page?: string;
+    scene?: string;
+    context?: Record<string, unknown>;
+    requestData?: Record<string, unknown>;
+  };
   [key: string]: unknown;
 }
 
@@ -130,6 +137,7 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
   function captureException(error: unknown, errorType: ErrorType = 'js', context?: Record<string, unknown>): void {
     const normalized = normalizeError(error);
     const message = firstLine(normalized.message);
+    const eventContext = sanitizeContext({ ...normalized.context, ...context });
 
     enqueue({
       ...createBaseEvent(options, sessionId, anonymousId),
@@ -141,12 +149,12 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
         errorType,
         message,
         stack: normalized.stack ?? normalized.message,
-        context: normalized.context
+        context: eventContext
       }),
       breadcrumbs: [...breadcrumbs],
-      context: { ...normalized.context, ...context },
-      page: (normalized.context?.page as string) ?? (context?.page as string),
-      scene: (normalized.context?.scene as string) ?? (context?.scene as string)
+      context: eventContext,
+      page: (eventContext?.page as string) ?? undefined,
+      scene: (eventContext?.scene as string) ?? undefined
     });
   }
 
@@ -160,8 +168,8 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
       duration: input.duration,
       success: input.success,
       errorMessage: input.errorMessage,
-      context: input.context,
-      requestData: input.requestData,
+      context: sanitizeContext(input.context),
+      requestData: sanitizeRecord(input.requestData),
       page: input.page,
       scene: input.scene
     });
@@ -320,6 +328,11 @@ function installRequestCapture(
 
     const startedAt = Date.now();
     const method = options.method ?? 'GET';
+    const metadata = options.healthGuard ?? {};
+    const page = metadata.page ?? getCurrentPageRoute(wx);
+    const scene = metadata.scene;
+    const requestData = sanitizeRecord(metadata.requestData ?? getRequestData(options.data));
+    const context = sanitizeContext(metadata.context);
 
     return originalRequest({
       ...options,
@@ -331,7 +344,11 @@ function installRequestCapture(
           status: result.status,
           duration: Date.now() - startedAt,
           success: result.success,
-          errorMessage: result.errorMessage
+          errorMessage: result.errorMessage,
+          context,
+          requestData,
+          page,
+          scene
         });
         options.success?.(response);
       },
@@ -344,8 +361,12 @@ function installRequestCapture(
           success: false,
           errorMessage: getMiniProgramErrorMessage(error),
           context: {
+            ...context,
             originalError: error
-          }
+          },
+          requestData,
+          page,
+          scene
         });
         options.fail?.(error as { errMsg?: string });
       }
@@ -360,6 +381,16 @@ function isHealthGuardEndpoint(url: string, endpoint: string): boolean {
     return urlObj.pathname === endpointObj.pathname;
   } catch {
     return false;
+  }
+}
+
+function getCurrentPageRoute(wx: MiniProgramWxLike): string | undefined {
+  try {
+    const pages = wx.getCurrentPages?.();
+    const current = pages?.[pages.length - 1];
+    return current?.route ?? current?.__route__;
+  } catch {
+    return undefined;
   }
 }
 
@@ -493,6 +524,57 @@ function getObjectErrorMessage(obj: Record<string, unknown>): string {
   if (typeof obj.errMsg === 'string') return obj.errMsg;
   if (typeof obj.message === 'string') return obj.message;
   return JSON.stringify(obj);
+}
+
+function getRequestData(data: unknown): Record<string, unknown> | undefined {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return undefined;
+  }
+
+  return data as Record<string, unknown>;
+}
+
+function sanitizeContext(context: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!context) return undefined;
+  return sanitizeRecord(context);
+}
+
+function sanitizeRecord(record: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!record) return undefined;
+
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (sensitiveQueryKeys.has(key.toLowerCase())) {
+      result[key] = '[Filtered]';
+      continue;
+    }
+
+    if (key === 'url' && typeof value === 'string') {
+      result[key] = sanitizeUrl(value);
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      result[key] = value.map((item) => sanitizeValue(item));
+      continue;
+    }
+
+    result[key] = sanitizeValue(value);
+  }
+
+  return result;
+}
+
+function sanitizeValue(value: unknown): unknown {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeValue(item));
+  }
+
+  return sanitizeRecord(value as Record<string, unknown>);
 }
 
 function firstLine(message: string): string {

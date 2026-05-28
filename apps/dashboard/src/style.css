@@ -352,20 +352,60 @@ h1 {
   font-weight: 700;
 }
 
-.platform-filter {
+.project-filters {
+  align-items: end;
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   justify-content: flex-end;
 }
 
-.platform-filter .field {
+.project-filters .field {
   align-items: center;
   display: flex;
   flex-direction: row;
   gap: 10px;
 }
 
-.platform-filter select {
+.project-filters select,
+.project-filters input {
   min-width: 180px;
+}
+
+.segmented-control {
+  align-items: center;
+  background: #dfe8ed;
+  border: 1px solid #c9d5dd;
+  border-radius: 8px;
+  display: flex;
+  padding: 3px;
+}
+
+.segment {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #405565;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 32px;
+  padding: 6px 12px;
+}
+
+.segment.active {
+  background: #ffffff;
+  color: #0f1d28;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 12%);
+}
+
+.custom-date-range {
+  display: flex;
+  gap: 10px;
+}
+
+.compact-field input {
+  min-width: 145px;
 }
 
 .platform-tags {
@@ -785,7 +825,9 @@ h1 {
 }
 
 .detail-actions {
+  align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 8px 0;
 }
@@ -803,6 +845,26 @@ h1 {
 
 .copy-for-ai-button:hover {
   opacity: 0.9;
+}
+
+.detail-action-button {
+  min-height: 34px;
+  padding: 8px 14px;
+}
+
+.danger-action {
+  border-color: #fecaca;
+  color: #b42318;
+}
+
+.badge-archived,
+.issue-archived-at {
+  background: #f1f5f9;
+  border-radius: 4px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
 }
 
 pre {

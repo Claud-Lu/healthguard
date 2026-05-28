@@ -329,7 +329,8 @@ describe('collector api', () => {
           url: 'https://api.example.com/fail',
           status: 500,
           duration: 120,
-          success: false
+          success: false,
+          errorMessage: 'Internal Server Error'
         }
       ]
     };
@@ -366,7 +367,7 @@ describe('collector api', () => {
     expect(issues).toHaveLength(2);
     const httpIssue = issues.find((i: { errorType: string }) => i.errorType === 'http');
     expect(httpIssue).toBeDefined();
-    expect(httpIssue.message).toBe('GET https://api.example.com/fail');
+    expect(httpIssue.message).toBe('GET /fail - Internal Server Error');
 
     const httpDetail = await app.inject({ method: 'GET', url: `/api/issues/${encodeURIComponent(httpIssue.id)}`, headers });
     expect(httpDetail.statusCode).toBe(200);
@@ -468,6 +469,171 @@ describe('collector api', () => {
 
     const detailWechat = await app.inject({ method: 'GET', url: '/api/issues/demo-app%3Ajs%3Aboom?platform=uniapp-wechat', headers });
     expect(detailWechat.json().events).toHaveLength(2);
+
+    await app.close();
+  });
+
+  it('archives issues, keeps them searchable in history, and reopens them when the fingerprint recurs', async () => {
+    const app = createServerApp(createMemoryStore());
+
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const headers = { authorization: `Bearer ${register.json().token}` };
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/events/batch',
+      payload: {
+        appKey: 'demo-app',
+        events: [
+          {
+            eventId: 'evt_1',
+            appKey: 'demo-app',
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710000000000,
+            sessionId: 'session-1',
+            anonymousId: 'anon-1',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'boom',
+            fingerprint: 'js:boom',
+            breadcrumbs: []
+          }
+        ]
+      }
+    });
+
+    const archive = await app.inject({
+      method: 'PATCH',
+      url: '/api/issues/demo-app%3Ajs%3Aboom/archive',
+      headers
+    });
+    const openIssues = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app', headers });
+    const archivedIssues = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app&status=archived', headers });
+    const openOverview = await app.inject({ method: 'GET', url: '/api/overview?appKey=demo-app', headers });
+    const archivedOverview = await app.inject({ method: 'GET', url: '/api/overview?appKey=demo-app&status=archived', headers });
+
+    expect(archive.statusCode).toBe(200);
+    expect(archive.json().issue).toMatchObject({
+      id: 'demo-app:js:boom',
+      archived: true
+    });
+    expect(archive.json().issue.archivedAt).toEqual(expect.any(Number));
+    expect(openIssues.json().issues).toHaveLength(0);
+    expect(archivedIssues.json().issues).toHaveLength(1);
+    expect(archivedIssues.json().issues[0]).toMatchObject({
+      id: 'demo-app:js:boom',
+      archived: true
+    });
+    expect(openOverview.json().totals.issues).toBe(0);
+    expect(archivedOverview.json().totals.issues).toBe(1);
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/events/batch',
+      payload: {
+        appKey: 'demo-app',
+        events: [
+          {
+            eventId: 'evt_2',
+            appKey: 'demo-app',
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710000005000,
+            sessionId: 'session-2',
+            anonymousId: 'anon-2',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'boom',
+            fingerprint: 'js:boom',
+            breadcrumbs: []
+          }
+        ]
+      }
+    });
+
+    const reopenedIssues = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app', headers });
+    const archivedAfterRecurrence = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app&status=archived', headers });
+
+    expect(reopenedIssues.json().issues).toHaveLength(1);
+    expect(reopenedIssues.json().issues[0]).toMatchObject({
+      id: 'demo-app:js:boom',
+      archived: false,
+      archivedAt: null,
+      eventCount: 2
+    });
+    expect(archivedAfterRecurrence.json().issues).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it('filters overview and issues by recent time range', async () => {
+    const app = createServerApp(createMemoryStore());
+
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const headers = { authorization: `Bearer ${register.json().token}` };
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/events/batch',
+      payload: {
+        appKey: 'demo-app',
+        events: [
+          {
+            eventId: 'evt_old',
+            appKey: 'demo-app',
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710000000000,
+            sessionId: 'session-1',
+            anonymousId: 'anon-1',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'old boom',
+            fingerprint: 'js:old',
+            breadcrumbs: []
+          },
+          {
+            eventId: 'evt_new',
+            appKey: 'demo-app',
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710604800000,
+            sessionId: 'session-2',
+            anonymousId: 'anon-2',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'new boom',
+            fingerprint: 'js:new',
+            breadcrumbs: []
+          }
+        ]
+      }
+    });
+
+    const url = '/api/issues?appKey=demo-app&start=1710500000000&end=1710700000000';
+    const issues = await app.inject({ method: 'GET', url, headers });
+    const overview = await app.inject({ method: 'GET', url: '/api/overview?appKey=demo-app&start=1710500000000&end=1710700000000', headers });
+
+    expect(issues.statusCode).toBe(200);
+    expect(issues.json().issues).toHaveLength(1);
+    expect(issues.json().issues[0]).toMatchObject({
+      id: 'demo-app:js:new',
+      message: 'new boom'
+    });
+    expect(overview.json().totals).toMatchObject({
+      events: 1,
+      errors: 1,
+      issues: 1
+    });
 
     await app.close();
   });

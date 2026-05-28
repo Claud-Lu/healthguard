@@ -12,6 +12,9 @@ interface IssueDetailResponse {
   events: Array<Record<string, unknown>>;
 }
 
+type IssueStatus = 'open' | 'archived';
+type TimePreset = 'all' | '1d' | '7d' | '30d' | 'custom';
+
 export default {
   setup() {
     const route = useRoute();
@@ -24,6 +27,10 @@ export default {
     const selectedPlatform = ref('');
     const searchQuery = ref('');
     const selectedMetricFilter = ref<'all' | 'error' | 'http'>('all');
+    const issueStatus = ref<IssueStatus>('open');
+    const timePreset = ref<TimePreset>('all');
+    const customStartDate = ref('');
+    const customEndDate = ref('');
 
     const selectedApp = computed(() => store.apps.find((item) => item.appKey === appKey.value) ?? null);
 
@@ -44,7 +51,7 @@ export default {
       void loadProjectData();
     });
 
-    watch(selectedPlatform, () => {
+    watch([selectedPlatform, issueStatus, timePreset, customStartDate, customEndDate], () => {
       void loadProjectData();
       if (selectedIssue.value) {
         void openIssue(selectedIssue.value.issue);
@@ -63,12 +70,11 @@ export default {
 
     async function loadProjectData(): Promise<void> {
       if (!store.token || !appKey.value) return;
-      const query = encodeURIComponent(appKey.value);
-      const platformQuery = selectedPlatform.value ? `&platform=${encodeURIComponent(selectedPlatform.value)}` : '';
+      const query = buildIssueQuery();
       try {
         const [overviewResponse, issueResponse] = await Promise.all([
-          requestJson<{ totals: OverviewTotals }>(apiUrl(`/overview?appKey=${query}${platformQuery}`), undefined, store.token),
-          requestJson<{ issues: IssueSummary[] }>(apiUrl(`/issues?appKey=${query}${platformQuery}`), undefined, store.token)
+          requestJson<{ totals: OverviewTotals }>(apiUrl(`/overview?${query}`), undefined, store.token),
+          requestJson<{ issues: IssueSummary[] }>(apiUrl(`/issues?${query}`), undefined, store.token)
         ]);
         overview.value = overviewResponse.totals;
         issues.value = issueResponse.issues;
@@ -81,8 +87,44 @@ export default {
     }
 
     async function openIssue(issue: IssueSummary): Promise<void> {
-      const platformQuery = selectedPlatform.value ? `?platform=${encodeURIComponent(selectedPlatform.value)}` : '';
-      selectedIssue.value = await requestJson<IssueDetailResponse>(apiUrl(`/issues/${encodeURIComponent(issue.id)}${platformQuery}`), undefined, store.token);
+      selectedIssue.value = await requestJson<IssueDetailResponse>(apiUrl(`/issues/${encodeURIComponent(issue.id)}?${buildIssueQuery(false)}`), undefined, store.token);
+    }
+
+    async function archiveIssue(issue: IssueSummary): Promise<void> {
+      await requestJson<{ issue: IssueSummary }>(apiUrl(`/issues/${encodeURIComponent(issue.id)}/archive`), { method: 'PATCH', body: JSON.stringify({}) }, store.token);
+      selectedIssue.value = null;
+      await loadProjectData();
+    }
+
+    async function reopenIssue(issue: IssueSummary): Promise<void> {
+      await requestJson<{ issue: IssueSummary }>(apiUrl(`/issues/${encodeURIComponent(issue.id)}/reopen`), { method: 'PATCH', body: JSON.stringify({}) }, store.token);
+      issueStatus.value = 'open';
+      selectedIssue.value = null;
+      await loadProjectData();
+    }
+
+    function buildIssueQuery(includeAppKey = true): string {
+      const params: string[] = [];
+      if (includeAppKey) params.push(`appKey=${encodeURIComponent(appKey.value)}`);
+      if (selectedPlatform.value) params.push(`platform=${encodeURIComponent(selectedPlatform.value)}`);
+      params.push(`status=${encodeURIComponent(issueStatus.value)}`);
+      const range = getSelectedTimeRange();
+      if (range.start !== undefined) params.push(`start=${encodeURIComponent(String(range.start))}`);
+      if (range.end !== undefined) params.push(`end=${encodeURIComponent(String(range.end))}`);
+      return params.join('&');
+    }
+
+    function getSelectedTimeRange(): { start?: number; end?: number } {
+      const now = Date.now();
+      if (timePreset.value === '1d') return { start: now - 24 * 60 * 60 * 1000, end: now };
+      if (timePreset.value === '7d') return { start: now - 7 * 24 * 60 * 60 * 1000, end: now };
+      if (timePreset.value === '30d') return { start: now - 30 * 24 * 60 * 60 * 1000, end: now };
+      if (timePreset.value !== 'custom') return {};
+
+      return {
+        start: customStartDate.value ? new Date(`${customStartDate.value}T00:00:00`).getTime() : undefined,
+        end: customEndDate.value ? new Date(`${customEndDate.value}T23:59:59.999`).getTime() : undefined
+      };
     }
 
     function metricCard(label: string, value: number, filterType?: 'error' | 'http') {
@@ -109,6 +151,7 @@ export default {
 
     function renderErrorEvent(evt: Record<string, unknown>) {
       const parsed = parseErrorPayload(evt);
+      const context = getEventContext(evt);
 
       return h('div', { class: 'event-card error-card' }, [
         h('div', { class: 'event-header' }, [
@@ -122,12 +165,13 @@ export default {
           evt.errorType ? h('span', `Type: ${String(evt.errorType)}`) : null
         ]),
         h('div', { class: 'event-context-row' }, [
-          evt.page ? h('span', { class: 'context-tag' }, `Page: ${String(evt.page)}`) : null,
-          evt.scene ? h('span', { class: 'context-tag' }, `Scene: ${String(evt.scene)}`) : null,
+          getEventPage(evt, context) ? h('span', { class: 'context-tag' }, `Page: ${String(getEventPage(evt, context))}`) : null,
+          getEventScene(evt, context) ? h('span', { class: 'context-tag' }, `Scene: ${String(getEventScene(evt, context))}`) : null,
           evt.platform ? h('span', { class: 'context-tag' }, `Platform: ${String(evt.platform)}`) : null
         ]),
         evt.filename ? h('p', { class: 'event-meta' }, `${String(evt.filename)}:${String(evt.lineno ?? '-')}:${String(evt.colno ?? '-')}`) : null,
         evt.stack ? h('pre', { class: 'event-stack' }, String(evt.stack)) : null,
+        renderRequestData(getEventRequestData(evt, context)),
         renderBreadcrumbs(evt.breadcrumbs as Array<Record<string, unknown>> | undefined),
         renderOriginalJson(evt)
       ]);
@@ -139,6 +183,7 @@ export default {
       let method: string | undefined;
       let statusCode: unknown;
       let errorCode: unknown;
+      const context = getEventContext(evt);
 
       // If message is a JSON string, try to extract structured fields
       if (typeof evt.message === 'string' && evt.message.startsWith('{')) {
@@ -159,10 +204,17 @@ export default {
 
       // Top-level fields take priority over parsed message JSON
       if (evt.errorMessage && typeof evt.errorMessage === 'string') title = evt.errorMessage;
+      if (context.errorMessage && typeof context.errorMessage === 'string') title = context.errorMessage;
+      if (context.url && typeof context.url === 'string') url = context.url;
       if (evt.url && typeof evt.url === 'string') url = evt.url;
+      if (context.method && typeof context.method === 'string') method = context.method;
       if (evt.method && typeof evt.method === 'string') method = evt.method;
+      if (context.statusCode !== undefined) statusCode = context.statusCode;
+      if (context.status !== undefined) statusCode = context.status;
       if (evt.statusCode !== undefined) statusCode = evt.statusCode;
       if (evt.error !== undefined) errorCode = evt.error;
+      if (context.error !== undefined) errorCode = context.error;
+      if (context.code !== undefined) errorCode = context.code;
 
       return {
         title,
@@ -175,6 +227,7 @@ export default {
 
     function renderHttpEvent(evt: Record<string, unknown>) {
       const pathname = extractPathname(String(evt.url ?? '-'));
+      const context = getEventContext(evt);
 
       return h('div', { class: 'event-card http-card' }, [
         h('div', { class: 'event-header' }, [
@@ -184,18 +237,38 @@ export default {
         ]),
         h('p', { class: 'event-url' }, String(evt.url ?? '-')),
         h('div', { class: 'event-context-row' }, [
-          evt.page ? h('span', { class: 'context-tag' }, `Page: ${String(evt.page)}`) : null,
-          evt.scene ? h('span', { class: 'context-tag' }, `Scene: ${String(evt.scene)}`) : null,
+          getEventPage(evt, context) ? h('span', { class: 'context-tag' }, `Page: ${String(getEventPage(evt, context))}`) : null,
+          getEventScene(evt, context) ? h('span', { class: 'context-tag' }, `Scene: ${String(getEventScene(evt, context))}`) : null,
           evt.platform ? h('span', { class: 'context-tag' }, `Platform: ${String(evt.platform)}`) : null
         ]),
         h('div', { class: 'event-meta-row' }, [
           h('span', `Duration: ${String(evt.duration ?? '-')}ms`),
           evt.errorMessage ? h('span', { class: 'event-error-msg' }, String(evt.errorMessage)) : null
         ]),
-        renderRequestData(evt.requestData as Record<string, unknown> | undefined),
+        renderRequestData(getEventRequestData(evt, context)),
         renderBreadcrumbs(evt.breadcrumbs as Array<Record<string, unknown>> | undefined),
         renderOriginalJson(evt)
       ]);
+    }
+
+    function getEventContext(evt: Record<string, unknown>): Record<string, unknown> {
+      const context = evt.context;
+      if (!context || typeof context !== 'object' || Array.isArray(context)) return {};
+      return context as Record<string, unknown>;
+    }
+
+    function getEventPage(evt: Record<string, unknown>, context: Record<string, unknown>): unknown {
+      return evt.page ?? context.page;
+    }
+
+    function getEventScene(evt: Record<string, unknown>, context: Record<string, unknown>): unknown {
+      return evt.scene ?? context.scene;
+    }
+
+    function getEventRequestData(evt: Record<string, unknown>, context: Record<string, unknown>): Record<string, unknown> | undefined {
+      const requestData = evt.requestData ?? context.requestData;
+      if (!requestData || typeof requestData !== 'object' || Array.isArray(requestData)) return undefined;
+      return requestData as Record<string, unknown>;
     }
 
     function renderRequestData(data: Record<string, unknown> | undefined) {
@@ -271,21 +344,27 @@ export default {
       const sampleEvents = events.slice(0, 3);
       for (let i = 0; i < sampleEvents.length; i++) {
         const evt = sampleEvents[i];
+        const context = getEventContext(evt);
+        const requestData = getEventRequestData(evt, context);
+        const method = String(evt.method ?? context.method ?? 'GET');
+        const url = evt.url ?? context.url;
+        const status = evt.status ?? evt.statusCode ?? context.statusCode ?? context.status;
+        const page = getEventPage(evt, context);
+        const scene = getEventScene(evt, context);
         lines.push(`### 事件 ${i + 1}`);
         lines.push(`- **平台:** ${String(evt.platform ?? '-')}`);
         lines.push(`- **时间:** ${formatTime(Number(evt.timestamp ?? 0))}`);
 
-        if (evt.type === 'http') {
-          lines.push(`- **接口:** ${String(evt.method ?? 'GET')} ${String(evt.url ?? '-')}`);
-          lines.push(`- **状态码:** ${String(evt.status ?? '-')}`);
+        if (evt.type === 'http' || url) {
+          lines.push(`- **接口:** ${method} ${String(url ?? '-')}`);
+          lines.push(`- **状态码:** ${String(status ?? '-')}`);
           lines.push(`- **耗时:** ${String(evt.duration ?? '-')}ms`);
         }
 
-        if (evt.page) lines.push(`- **页面:** ${String(evt.page)}`);
-        if (evt.scene) lines.push(`- **场景:** ${String(evt.scene)}`);
-        if (evt.errorMessage) lines.push(`- **错误信息:** ${String(evt.errorMessage)}`);
-        if (evt.errorCode !== undefined) lines.push(`- **错误码:** ${String(evt.errorCode)}`);
-        if (evt.statusCode !== undefined) lines.push(`- **状态码:** ${String(evt.statusCode)}`);
+        if (page) lines.push(`- **页面:** ${String(page)}`);
+        if (scene) lines.push(`- **场景:** ${String(scene)}`);
+        if (evt.errorMessage ?? context.errorMessage) lines.push(`- **错误信息:** ${String(evt.errorMessage ?? context.errorMessage)}`);
+        if (evt.errorCode !== undefined || context.error !== undefined || context.code !== undefined) lines.push(`- **错误码:** ${String(evt.errorCode ?? context.error ?? context.code)}`);
 
         if (evt.stack) {
           lines.push('');
@@ -295,11 +374,11 @@ export default {
           lines.push('```');
         }
 
-        if (evt.requestData && typeof evt.requestData === 'object' && Object.keys(evt.requestData as Record<string, unknown>).length > 0) {
+        if (requestData && Object.keys(requestData).length > 0) {
           lines.push('');
           lines.push('**请求参数:**');
           lines.push('```json');
-          lines.push(JSON.stringify(evt.requestData, null, 2));
+          lines.push(JSON.stringify(requestData, null, 2));
           lines.push('```');
         }
 
@@ -383,7 +462,23 @@ export default {
             store.errorMessage ? h('p', { class: 'error' }, store.errorMessage) : null
           ]),
 
-          h('section', { class: 'platform-filter' }, [
+          h('section', { class: 'project-filters' }, [
+            h('div', { class: 'segmented-control', role: 'tablist', 'aria-label': t.issues }, [
+              h('button', {
+                type: 'button',
+                class: issueStatus.value === 'open' ? 'segment active' : 'segment',
+                onClick: () => {
+                  issueStatus.value = 'open';
+                }
+              }, t.currentIssues),
+              h('button', {
+                type: 'button',
+                class: issueStatus.value === 'archived' ? 'segment active' : 'segment',
+                onClick: () => {
+                  issueStatus.value = 'archived';
+                }
+              }, t.archivedIssues)
+            ]),
             h('label', { class: 'field' }, [
               h('span', t.platform),
               h(
@@ -396,7 +491,50 @@ export default {
                 },
                 [h('option', { value: '' }, t.allPlatforms), ...platforms.map((p) => h('option', { value: p }, p))]
               )
-            ])
+            ]),
+            h('label', { class: 'field' }, [
+              h('span', t.timeRange),
+              h(
+                'select',
+                {
+                  value: timePreset.value,
+                  onChange: (event: Event) => {
+                    timePreset.value = (event.target as HTMLSelectElement).value as TimePreset;
+                  }
+                },
+                [
+                  h('option', { value: 'all' }, t.allTime),
+                  h('option', { value: '1d' }, t.lastDay),
+                  h('option', { value: '7d' }, t.lastWeek),
+                  h('option', { value: '30d' }, t.lastMonth),
+                  h('option', { value: 'custom' }, t.customRange)
+                ]
+              )
+            ]),
+            timePreset.value === 'custom'
+              ? h('div', { class: 'custom-date-range' }, [
+                  h('label', { class: 'field compact-field' }, [
+                    h('span', t.startDate),
+                    h('input', {
+                      type: 'date',
+                      value: customStartDate.value,
+                      onInput: (event: Event) => {
+                        customStartDate.value = (event.target as HTMLInputElement).value;
+                      }
+                    })
+                  ]),
+                  h('label', { class: 'field compact-field' }, [
+                    h('span', t.endDate),
+                    h('input', {
+                      type: 'date',
+                      value: customEndDate.value,
+                      onInput: (event: Event) => {
+                        customEndDate.value = (event.target as HTMLInputElement).value;
+                      }
+                    })
+                  ])
+                ])
+              : null
           ]),
 
           h('section', { class: 'metrics' }, [
@@ -417,7 +555,7 @@ export default {
                   return true;
                 });
                 return [
-                  h('div', { class: 'panel-head' }, [h('h2', t.issues), h('span', `${filteredIssues.length} ${t.groups}`)]),
+                  h('div', { class: 'panel-head' }, [h('h2', issueStatus.value === 'archived' ? t.issueHistory : t.issues), h('span', `${filteredIssues.length} ${t.groups}`)]),
                   h('div', { class: 'issue-search' }, [
                     h('input', {
                       type: 'text',
@@ -444,6 +582,7 @@ export default {
                             [
                               h('strong', issue.message),
                               h('span', `${issue.errorType} / ${issue.eventCount} ${t.events}`),
+                              issue.archived && issue.archivedAt ? h('span', { class: 'issue-archived-at' }, `${t.archivedAt} ${formatTime(issue.archivedAt)}`) : null,
                               Object.keys(issue.platformDistribution).length > 0
                                 ? h(
                                     'div',
@@ -474,8 +613,10 @@ export default {
                       h('h3', issue.message),
                       h('div', { class: 'detail-info-bar' }, [
                         h('span', { class: issue.errorType === 'http' || issue.errorType === 'request' ? 'badge-http' : 'badge-error' }, issue.errorType.toUpperCase()),
+                        issue.archived ? h('span', { class: 'badge-archived' }, t.archivedIssues) : null,
                         h('span', `${t.firstSeen} ${formatTime(issue.firstSeenAt)}`),
                         h('span', `${t.lastSeen} ${formatTime(issue.lastSeenAt)}`),
+                        issue.archived && issue.archivedAt ? h('span', `${t.archivedAt} ${formatTime(issue.archivedAt)}`) : null,
                         h('span', { class: 'detail-fingerprint' }, issue.fingerprint),
                         Object.keys(issue.platformDistribution).length > 0
                           ? h(
@@ -496,7 +637,22 @@ export default {
                             const text = buildCopyForAI(issue, selectedIssue.value?.events ?? []);
                             void copyToClipboard(text);
                           }
-                        }, '复制给 AI')
+                        }, '复制给 AI'),
+                        issue.archived
+                          ? h('button', {
+                              type: 'button',
+                              class: 'outline-button detail-action-button',
+                              onClick: () => {
+                                void reopenIssue(issue);
+                              }
+                            }, t.reopenIssue)
+                          : h('button', {
+                              type: 'button',
+                              class: 'outline-button detail-action-button danger-action',
+                              onClick: () => {
+                                void archiveIssue(issue);
+                              }
+                            }, t.archiveIssue)
                       ]),
                       ...Object.entries(groupEventsByType(selectedIssue.value.events)).map(([type, events]) => renderEventGroup(type, events))
                     ]);

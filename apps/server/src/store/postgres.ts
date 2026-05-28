@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { createHttpFingerprint, extractPathname } from '@healthguard/core';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@healthguard/core';
-import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail } from './types';
+import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery } from './types';
 
 function httpIssueMessage(event: { method: string; url: string; errorMessage?: string }): string {
   const pathname = extractPathname(event.url);
@@ -135,7 +135,16 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       }
     },
 
-    async listIssues(appKey?: string, platform?: string, limit = 100, offset = 0): Promise<IssueSummary[]> {
+    async listIssues(query: IssueQuery = {}): Promise<IssueSummary[]> {
+      const {
+        appKey,
+        platform,
+        status = 'open',
+        startTime,
+        endTime,
+        limit = 100,
+        offset = 0
+      } = query;
       let sql = 'SELECT * FROM issues';
       const params: (string | number)[] = [];
       const conditions: string[] = [];
@@ -150,6 +159,9 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
         params.push(platform);
       }
 
+      addIssueStatusCondition(conditions, status);
+      addTimeRangeConditions(conditions, params, 'last_seen_at', startTime, endTime);
+
       if (conditions.length > 0) {
         sql += ' WHERE ' + conditions.join(' AND ');
       }
@@ -161,7 +173,8 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       return result.rows.map(rowToIssue);
     },
 
-    async getOverview(appKey?: string, platform?: string): Promise<OverviewTotals> {
+    async getOverview(query: IssueQuery = {}): Promise<OverviewTotals> {
+      const { appKey, platform, status = 'open', startTime, endTime } = query;
       let eventSql = 'SELECT COUNT(*)::int as total, COUNT(CASE WHEN type = $1 THEN 1 END)::int as errors, COUNT(CASE WHEN type = $2 AND (payload->>\'success\')::boolean = false THEN 1 END)::int as failed_requests FROM events';
       const eventParams: (string | number)[] = ['error', 'http'];
       const conditions: string[] = [];
@@ -175,6 +188,8 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
         conditions.push(`platform = $${eventParams.length + 1}`);
         eventParams.push(platform);
       }
+
+      addTimeRangeConditions(conditions, eventParams, 'timestamp', startTime, endTime);
 
       if (conditions.length > 0) {
         eventSql += ' WHERE ' + conditions.join(' AND ');
@@ -195,6 +210,7 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
         userConditions.push(`platform = $${userParams.length + 1}`);
         userParams.push(platform);
       }
+      addTimeRangeConditions(userConditions, userParams, 'timestamp', startTime, endTime);
       if (userConditions.length > 0) {
         userSql += ' WHERE ' + userConditions.join(' AND ');
       }
@@ -214,6 +230,8 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
         issueConditions.push(`platform_distribution->>$${issueParams.length + 1} IS NOT NULL`);
         issueParams.push(platform);
       }
+      addIssueStatusCondition(issueConditions, status);
+      addTimeRangeConditions(issueConditions, issueParams, 'last_seen_at', startTime, endTime);
 
       if (issueConditions.length > 0) {
         issueSql += ' WHERE ' + issueConditions.join(' AND ');
@@ -255,7 +273,7 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       const issueSql = `
         SELECT app_key, COUNT(*)::int as issues
         FROM issues
-        WHERE app_key = ANY($1)
+        WHERE app_key = ANY($1) AND archived_at IS NULL
         GROUP BY app_key
       `;
       const issueResult = await pool.query(issueSql, [appKeys]);
@@ -293,7 +311,7 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       }));
     },
 
-    async getIssueDetail(id: string, platform?: string, eventLimit = 50): Promise<IssueDetail> {
+    async getIssueDetail(id: string, platform?: string, eventLimit = 50, startTime?: number, endTime?: number): Promise<IssueDetail> {
       const issueResult = await pool.query('SELECT * FROM issues WHERE id = $1', [id]);
       if (issueResult.rows.length === 0) {
         return { issue: null, events: [] };
@@ -310,6 +328,8 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
         params.push(platform);
       }
 
+      addTimeRangeConditionsToSql();
+
       sql += ` ORDER BY timestamp DESC LIMIT $${params.length + 1}`;
       params.push(eventLimit);
 
@@ -317,6 +337,29 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       const events = eventResult.rows.map((row) => parsePayload(row.payload));
 
       return { issue, events };
+
+      function addTimeRangeConditionsToSql(): void {
+        if (startTime !== undefined) {
+          sql += ` AND timestamp >= $${params.length + 1}`;
+          params.push(startTime);
+        }
+        if (endTime !== undefined) {
+          sql += ` AND timestamp <= $${params.length + 1}`;
+          params.push(endTime);
+        }
+      }
+    },
+
+    async archiveIssue(id: string, archivedAt: number): Promise<IssueSummary | null> {
+      const result = await pool.query('UPDATE issues SET archived_at = $1 WHERE id = $2 RETURNING *', [archivedAt, id]);
+      if (result.rows.length === 0) return null;
+      return rowToIssue(result.rows[0]);
+    },
+
+    async reopenIssue(id: string): Promise<IssueSummary | null> {
+      const result = await pool.query('UPDATE issues SET archived_at = NULL WHERE id = $1 RETURNING *', [id]);
+      if (result.rows.length === 0) return null;
+      return rowToIssue(result.rows[0]);
     },
 
     async cleanup(retentionDays = 30): Promise<{ deletedEvents: number; deletedSessions: number }> {
@@ -406,8 +449,20 @@ async function ensureSchema(pool: Pool): Promise<void> {
       event_count INTEGER NOT NULL DEFAULT 0,
       first_seen_at BIGINT NOT NULL,
       last_seen_at BIGINT NOT NULL,
-      platform_distribution JSONB NOT NULL DEFAULT '{}'
+      platform_distribution JSONB NOT NULL DEFAULT '{}',
+      archived_at BIGINT
     )
+  `);
+
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'issues' AND column_name = 'archived_at'
+      ) THEN
+        ALTER TABLE issues ADD COLUMN archived_at BIGINT;
+      END IF;
+    END $$;
   `);
 
   // Migrate existing sessions table to add expires_at if missing
@@ -498,7 +553,7 @@ async function upsertIssue(poolOrClient: Pool | PoolClient, event: ErrorEvent): 
   distribution[event.platform] = (distribution[event.platform] ?? 0) + 1;
 
   await poolOrClient.query(
-    `UPDATE issues SET event_count = $1, last_seen_at = $2, platform_distribution = $3 WHERE id = $4`,
+    `UPDATE issues SET event_count = $1, last_seen_at = $2, platform_distribution = $3, archived_at = NULL WHERE id = $4`,
     [(row.event_count as number) + 1, Math.max(Number(row.last_seen_at), event.timestamp), JSON.stringify(distribution), id]
   );
 }
@@ -522,7 +577,7 @@ async function upsertHttpIssue(poolOrClient: Pool | PoolClient, event: HttpEvent
   distribution[event.platform] = (distribution[event.platform] ?? 0) + 1;
 
   await poolOrClient.query(
-    `UPDATE issues SET event_count = $1, last_seen_at = $2, platform_distribution = $3 WHERE id = $4`,
+    `UPDATE issues SET event_count = $1, last_seen_at = $2, platform_distribution = $3, archived_at = NULL WHERE id = $4`,
     [(row.event_count as number) + 1, Math.max(Number(row.last_seen_at), event.timestamp), JSON.stringify(distribution), id]
   );
 }
@@ -567,6 +622,28 @@ async function upsertHttpIssueSnapshot(
   );
 }
 
+function addIssueStatusCondition(conditions: string[], status: IssueQuery['status'] = 'open'): void {
+  if (status === 'all') return;
+  conditions.push(status === 'archived' ? 'archived_at IS NOT NULL' : 'archived_at IS NULL');
+}
+
+function addTimeRangeConditions(
+  conditions: string[],
+  params: (string | number)[],
+  column: string,
+  startTime?: number,
+  endTime?: number
+): void {
+  if (startTime !== undefined) {
+    conditions.push(`${column} >= $${params.length + 1}`);
+    params.push(startTime);
+  }
+  if (endTime !== undefined) {
+    conditions.push(`${column} <= $${params.length + 1}`);
+    params.push(endTime);
+  }
+}
+
 function parsePayload(payload: unknown): HealthGuardEvent {
   if (typeof payload === 'string') {
     return JSON.parse(payload) as HealthGuardEvent;
@@ -604,6 +681,8 @@ function rowToIssue(row: Record<string, unknown>): IssueSummary {
     eventCount: Number(row.event_count),
     firstSeenAt: Number(row.first_seen_at),
     lastSeenAt: Number(row.last_seen_at),
-    platformDistribution: (row.platform_distribution as Record<string, number>) ?? {}
+    platformDistribution: (row.platform_distribution as Record<string, number>) ?? {},
+    archived: row.archived_at !== null && row.archived_at !== undefined,
+    archivedAt: row.archived_at === null || row.archived_at === undefined ? null : Number(row.archived_at)
   };
 }

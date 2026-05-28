@@ -145,7 +145,7 @@ describe('postgres store historical http issues', () => {
 
     const store = await createPostgresStore({ pool: pool as never });
 
-    const issues = await store.listIssues('demo-app');
+    const issues = await store.listIssues({ appKey: 'demo-app' });
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({
       appKey: 'demo-app',
@@ -183,7 +183,7 @@ describe('postgres store historical http issues', () => {
     ]);
 
     const store = await createPostgresStore({ pool: pool as never });
-    const [issue] = await store.listIssues('demo-app');
+    const [issue] = await store.listIssues({ appKey: 'demo-app' });
     const detail = await store.getIssueDetail(issue.id);
 
     expect(detail.events).toHaveLength(1);

@@ -28,6 +28,8 @@ export interface IssueSummary {
   firstSeenAt: number;
   lastSeenAt: number;
   platformDistribution: Record<string, number>;
+  archived: boolean;
+  archivedAt: number | null;
 }
 
 export interface OverviewTotals {

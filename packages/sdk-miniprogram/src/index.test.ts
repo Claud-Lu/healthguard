@@ -141,6 +141,148 @@ describe('sdk-miniprogram client', () => {
     });
   });
 
+  it('captures request context from auto-captured mini-program requests', async () => {
+    const transport = vi.fn().mockResolvedValue(undefined);
+    const wx = {
+      onError: vi.fn(),
+      onUnhandledRejection: vi.fn(),
+      request: vi.fn((options: any) => {
+        options.fail?.({
+          error: 19,
+          errorMessage: 'http status error',
+          status: 404,
+          statusCode: 404
+        });
+      })
+    };
+    const client = createMiniProgramClient({
+      appKey: 'mini-app',
+      endpoint: '/api/events/batch',
+      wx,
+      transport,
+      autoCapture: { request: true }
+    });
+
+    wx.request({
+      url: 'https://sharebus.lemonbus.cn/sharebusapi/passenger/vehicles/nearby?latitude=30.49&longitude=114.18&token=secret',
+      method: 'GET',
+      data: { latitude: 30.49, longitude: 114.18, token: 'secret' },
+      healthGuard: {
+        page: 'pages/index/index',
+        scene: 'home.loadNearbyVehicles'
+      }
+    });
+    await client.flush();
+
+    expect(transport.mock.calls[0][0].events[0]).toMatchObject({
+      type: 'http',
+      method: 'GET',
+      url: 'https://sharebus.lemonbus.cn/sharebusapi/passenger/vehicles/nearby?latitude=30.49&longitude=114.18&token=%5BFiltered%5D',
+      status: 404,
+      success: false,
+      errorMessage: 'http status error',
+      page: 'pages/index/index',
+      scene: 'home.loadNearbyVehicles',
+      requestData: {
+        latitude: 30.49,
+        longitude: 114.18,
+        token: '[Filtered]'
+      },
+      context: {
+        originalError: {
+          error: 19,
+          statusCode: 404
+        }
+      }
+    });
+  });
+
+  it('infers the current page for auto-captured requests when page is not provided', async () => {
+    const transport = vi.fn().mockResolvedValue(undefined);
+    const wx = {
+      onError: vi.fn(),
+      onUnhandledRejection: vi.fn(),
+      request: vi.fn((options: any) => {
+        options.fail?.({ errMsg: 'request:fail timeout' });
+      }),
+      getCurrentPages: vi.fn(() => [
+        { route: 'pages/login/login' },
+        { route: 'pages/index/index' }
+      ])
+    };
+    const client = createMiniProgramClient({
+      appKey: 'mini-app',
+      endpoint: '/api/events/batch',
+      wx,
+      transport,
+      autoCapture: { request: true }
+    });
+
+    wx.request({
+      url: 'https://api.example.com/vehicles/nearby',
+      method: 'GET'
+    });
+    await client.flush();
+
+    expect(transport.mock.calls[0][0].events[0]).toMatchObject({
+      type: 'http',
+      page: 'pages/index/index',
+      scene: undefined
+    });
+  });
+
+  it('keeps structured mini-program promise rejection context', async () => {
+    let rejectionHandler: ((event: { reason: unknown }) => void) | undefined;
+    const transport = vi.fn().mockResolvedValue(undefined);
+    const wx = {
+      onError: vi.fn(),
+      onUnhandledRejection: vi.fn((handler: (event: { reason: unknown }) => void) => {
+        rejectionHandler = handler;
+      }),
+      request: vi.fn()
+    };
+    const client = createMiniProgramClient({
+      appKey: 'mini-app',
+      endpoint: '/api/events/batch',
+      wx,
+      transport,
+      platform: 'alipay-miniprogram'
+    });
+
+    rejectionHandler?.({
+      reason: {
+        error: 12,
+        errorMessage: '未能找到使用指定主机名的服务器或者没有网络连接。',
+        status: -1003,
+        statusCode: -1003,
+        method: 'GET',
+        url: 'https://bad.example.com/api?token=secret',
+        page: 'pages/index/index',
+        scene: 'home.loadNearbyVehicles',
+        requestData: { token: 'secret', radius: 3000 }
+      }
+    });
+    await client.flush();
+
+    expect(transport.mock.calls[0][0].events[0]).toMatchObject({
+      type: 'error',
+      errorType: 'promise',
+      platform: 'alipay-miniprogram',
+      message: '未能找到使用指定主机名的服务器或者没有网络连接。',
+      page: 'pages/index/index',
+      scene: 'home.loadNearbyVehicles',
+      context: {
+        method: 'GET',
+        url: 'https://bad.example.com/api?token=%5BFiltered%5D',
+        statusCode: -1003,
+        requestData: {
+          token: '[Filtered]',
+          radius: 3000
+        }
+      }
+    });
+  });
+
   it('uses the configured mini-program platform for captured events', async () => {
     const transport = vi.fn().mockResolvedValue(undefined);
     const wx = {

@@ -28,6 +28,8 @@ export interface IssueSummary {
   firstSeenAt: number;
   lastSeenAt: number;
   platformDistribution: Record<string, number>;
+  archived: boolean;
+  archivedAt: number | null;
 }
 
 export interface OverviewTotals {
@@ -43,6 +45,18 @@ export interface IssueDetail {
   events: HealthGuardEvent[];
 }
 
+export type IssueStatusFilter = 'open' | 'archived' | 'all';
+
+export interface IssueQuery {
+  appKey?: string;
+  platform?: string;
+  status?: IssueStatusFilter;
+  startTime?: number;
+  endTime?: number;
+  limit?: number;
+  offset?: number;
+}
+
 export interface Store {
   createUser(user: UserRecord): Promise<void>;
   findUserByEmail(email: string): Promise<UserRecord | null>;
@@ -55,9 +69,11 @@ export interface Store {
   listAppsByUser(userId: string): Promise<AppRecord[]>;
 
   ingestEvents(events: HealthGuardEvent[]): Promise<void>;
-  listIssues(appKey?: string, platform?: string, limit?: number, offset?: number): Promise<IssueSummary[]>;
-  getOverview(appKey?: string, platform?: string): Promise<OverviewTotals>;
+  listIssues(query?: IssueQuery): Promise<IssueSummary[]>;
+  getOverview(query?: IssueQuery): Promise<OverviewTotals>;
   getAppsOverview(appKeys: string[]): Promise<Array<{ appKey: string; totals: OverviewTotals }>>;
-  getIssueDetail(id: string, platform?: string, eventLimit?: number): Promise<IssueDetail>;
+  getIssueDetail(id: string, platform?: string, eventLimit?: number, startTime?: number, endTime?: number): Promise<IssueDetail>;
+  archiveIssue(id: string, archivedAt: number): Promise<IssueSummary | null>;
+  reopenIssue(id: string): Promise<IssueSummary | null>;
   cleanup?(retentionDays?: number): Promise<{ deletedEvents: number; deletedSessions: number }>;
 }

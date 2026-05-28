@@ -3,6 +3,7 @@ export type Locale = 'en-US' | 'zh-CN';
 export type MessageKey =
   | 'affectedUsers'
   | 'allPlatforms'
+  | 'allTime'
   | 'appName'
   | 'appType'
   | 'applicationHealth'
@@ -33,6 +34,12 @@ export type MessageKey =
   | 'invalidCredentials'
   | 'invalidEmail'
   | 'issueDetail'
+  | 'issueHistory'
+  | 'currentIssues'
+  | 'archivedIssues'
+  | 'archiveIssue'
+  | 'reopenIssue'
+  | 'archivedAt'
   | 'issues'
   | 'latestActivity'
   | 'language'
@@ -46,6 +53,13 @@ export type MessageKey =
   | 'passwordHelp'
   | 'passwordTooShort'
   | 'platform'
+  | 'timeRange'
+  | 'lastDay'
+  | 'lastWeek'
+  | 'lastMonth'
+  | 'customRange'
+  | 'startDate'
+  | 'endDate'
   | 'projectList'
   | 'projectDetail'
   | 'refresh'
@@ -67,6 +81,7 @@ const messages: Record<Locale, Messages> = {
   'en-US': {
     affectedUsers: 'Affected Users',
     allPlatforms: 'All Platforms',
+    allTime: 'All time',
     appName: 'App name',
     cancel: 'Cancel',
     confirm: 'Confirm',
@@ -97,6 +112,12 @@ const messages: Record<Locale, Messages> = {
     invalidCredentials: 'Email or password is incorrect.',
     invalidEmail: 'Please enter a valid email address.',
     issueDetail: 'Issue Detail',
+    issueHistory: 'History',
+    currentIssues: 'Current',
+    archivedIssues: 'Archived',
+    archiveIssue: 'Archive',
+    reopenIssue: 'Reopen',
+    archivedAt: 'Archived:',
     issues: 'Issues',
     latestActivity: 'Latest Activity',
     language: 'Language',
@@ -110,6 +131,13 @@ const messages: Record<Locale, Messages> = {
     passwordHelp: 'At least 8 characters.',
     passwordTooShort: 'Password must be at least 8 characters.',
     platform: 'Platform',
+    timeRange: 'Time',
+    lastDay: '1 day',
+    lastWeek: '1 week',
+    lastMonth: '1 month',
+    customRange: 'Custom',
+    startDate: 'Start',
+    endDate: 'End',
     projectList: 'Projects',
     projectDetail: 'Project Detail',
     refresh: 'Refresh',
@@ -128,6 +156,7 @@ const messages: Record<Locale, Messages> = {
   'zh-CN': {
     affectedUsers: '影响用户',
     allPlatforms: '全部平台',
+    allTime: '全部时间',
     appName: '项目名称',
     cancel: '取消',
     confirm: '确定',
@@ -158,6 +187,12 @@ const messages: Record<Locale, Messages> = {
     invalidCredentials: '邮箱或密码不正确。',
     invalidEmail: '请输入正确的邮箱地址。',
     issueDetail: 'Issue 详情',
+    issueHistory: '历史错误',
+    currentIssues: '当前错误',
+    archivedIssues: '已归档',
+    archiveIssue: '归档',
+    reopenIssue: '恢复',
+    archivedAt: '归档:',
     issues: 'Issues',
     latestActivity: '最近活动',
     language: '语言',
@@ -171,6 +206,13 @@ const messages: Record<Locale, Messages> = {
     passwordHelp: '至少 8 位。',
     passwordTooShort: '密码至少需要 8 位。',
     platform: '平台',
+    timeRange: '时间',
+    lastDay: '1 天',
+    lastWeek: '1 周',
+    lastMonth: '1 个月',
+    customRange: '自定义',
+    startDate: '开始',
+    endDate: '结束',
     projectList: '项目列表',
     projectDetail: '项目详情',
     refresh: '刷新',

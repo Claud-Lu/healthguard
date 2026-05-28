@@ -1,6 +1,6 @@
-import { createHttpFingerprint } from '@healthguard/core';
+import { createHttpFingerprint, extractPathname } from '@healthguard/core';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@healthguard/core';
-import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail } from './types';
+import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery } from './types';
 
 export interface MemoryStoreState {
   users: UserRecord[];
@@ -72,25 +72,40 @@ export function createMemoryStore(): Store {
       }
     },
 
-    async listIssues(appKey?: string, platform?: string, limit = 100, offset = 0): Promise<IssueSummary[]> {
+    async listIssues(query: IssueQuery = {}): Promise<IssueSummary[]> {
+      const {
+        appKey,
+        platform,
+        status = 'open',
+        startTime,
+        endTime,
+        limit = 100,
+        offset = 0
+      } = query;
       return Array.from(state.issues.values())
         .filter((issue) => (appKey ? issue.appKey === appKey : true))
         .filter((issue) => (platform ? (issue.platformDistribution[platform] ?? 0) > 0 : true))
+        .filter((issue) => matchesIssueStatus(issue, status))
+        .filter((issue) => matchesTimeRange(issue.lastSeenAt, startTime, endTime))
         .sort((left, right) => right.lastSeenAt - left.lastSeenAt)
         .slice(offset, offset + limit);
     },
 
-    async getOverview(appKey?: string, platform?: string): Promise<OverviewTotals> {
+    async getOverview(query: IssueQuery = {}): Promise<OverviewTotals> {
+      const { appKey, platform, status = 'open', startTime, endTime } = query;
       const events = filterEvents(state.events, appKey, platform);
       const issues = Array.from(state.issues.values())
         .filter((issue) => (appKey ? issue.appKey === appKey : true))
-        .filter((issue) => (platform ? (issue.platformDistribution[platform] ?? 0) > 0 : true));
-      const affectedUsers = new Set(events.map((event) => event.userId ?? event.anonymousId));
+        .filter((issue) => (platform ? (issue.platformDistribution[platform] ?? 0) > 0 : true))
+        .filter((issue) => matchesIssueStatus(issue, status))
+        .filter((issue) => matchesTimeRange(issue.lastSeenAt, startTime, endTime));
+      const rangedEvents = events.filter((event) => matchesTimeRange(event.timestamp, startTime, endTime));
+      const affectedUsers = new Set(rangedEvents.map((event) => event.userId ?? event.anonymousId));
 
       return {
-        events: events.length,
-        errors: events.filter((event) => event.type === 'error').length,
-        failedRequests: events.filter((event) => event.type === 'http' && !event.success).length,
+        events: rangedEvents.length,
+        errors: rangedEvents.filter((event) => event.type === 'error').length,
+        failedRequests: rangedEvents.filter((event) => event.type === 'http' && !event.success).length,
         affectedUsers: affectedUsers.size,
         issues: issues.length
       };
@@ -101,7 +116,7 @@ export function createMemoryStore(): Store {
 
       return appKeys.map((appKey) => {
         const events = filterEvents(state.events, appKey);
-        const issues = Array.from(state.issues.values()).filter((issue) => issue.appKey === appKey);
+        const issues = Array.from(state.issues.values()).filter((issue) => issue.appKey === appKey).filter((issue) => !issue.archived);
         const affectedUsers = new Set(events.map((event) => event.userId ?? event.anonymousId));
 
         return {
@@ -117,7 +132,7 @@ export function createMemoryStore(): Store {
       });
     },
 
-    async getIssueDetail(id: string, platform?: string, eventLimit = 50): Promise<IssueDetail> {
+    async getIssueDetail(id: string, platform?: string, eventLimit = 50, startTime?: number, endTime?: number): Promise<IssueDetail> {
       const issue = state.issues.get(id) ?? null;
       if (!issue) {
         return { issue: null, events: [] };
@@ -126,12 +141,41 @@ export function createMemoryStore(): Store {
       const events = state.events
         .filter((event) => event.type === eventType && event.appKey === issue.appKey && 'fingerprint' in event && event.fingerprint === issue.fingerprint)
         .filter((event) => (platform ? event.platform === platform : true))
+        .filter((event) => matchesTimeRange(event.timestamp, startTime, endTime))
         .sort((left, right) => right.timestamp - left.timestamp)
         .slice(0, eventLimit);
 
       return { issue, events };
+    },
+
+    async archiveIssue(id: string, archivedAt: number): Promise<IssueSummary | null> {
+      const issue = state.issues.get(id) ?? null;
+      if (!issue) return null;
+      issue.archived = true;
+      issue.archivedAt = archivedAt;
+      return issue;
+    },
+
+    async reopenIssue(id: string): Promise<IssueSummary | null> {
+      const issue = state.issues.get(id) ?? null;
+      if (!issue) return null;
+      issue.archived = false;
+      issue.archivedAt = null;
+      return issue;
     }
   };
+}
+
+function matchesIssueStatus(issue: IssueSummary, status: IssueQuery['status'] = 'open'): boolean {
+  if (status === 'all') return true;
+  if (status === 'archived') return issue.archived;
+  return !issue.archived;
+}
+
+function matchesTimeRange(timestamp: number, startTime?: number, endTime?: number): boolean {
+  if (startTime !== undefined && timestamp < startTime) return false;
+  if (endTime !== undefined && timestamp > endTime) return false;
+  return true;
 }
 
 function aggregateError(state: MemoryStoreState, event: ErrorEvent): void {
@@ -142,6 +186,8 @@ function aggregateError(state: MemoryStoreState, event: ErrorEvent): void {
     existing.eventCount += 1;
     existing.lastSeenAt = Math.max(existing.lastSeenAt, event.timestamp);
     existing.platformDistribution[event.platform] = (existing.platformDistribution[event.platform] ?? 0) + 1;
+    existing.archived = false;
+    existing.archivedAt = null;
     return;
   }
 
@@ -154,19 +200,26 @@ function aggregateError(state: MemoryStoreState, event: ErrorEvent): void {
     eventCount: 1,
     firstSeenAt: event.timestamp,
     lastSeenAt: event.timestamp,
-    platformDistribution: { [event.platform]: 1 }
+    platformDistribution: { [event.platform]: 1 },
+    archived: false,
+    archivedAt: null
   });
 }
 
 function aggregateHttpIssue(state: MemoryStoreState, event: HttpEvent & { fingerprint: string }): void {
   const key = `${event.appKey}:${event.fingerprint}`;
   const existing = state.issues.get(key);
-  const message = event.errorMessage ?? `${event.method} ${event.url}`;
+  const pathname = extractPathname(event.url);
+  const message = event.errorMessage
+    ? `${event.method} ${pathname} - ${event.errorMessage}`
+    : `${event.method} ${pathname}`;
 
   if (existing) {
     existing.eventCount += 1;
     existing.lastSeenAt = Math.max(existing.lastSeenAt, event.timestamp);
     existing.platformDistribution[event.platform] = (existing.platformDistribution[event.platform] ?? 0) + 1;
+    existing.archived = false;
+    existing.archivedAt = null;
     return;
   }
 
@@ -179,7 +232,9 @@ function aggregateHttpIssue(state: MemoryStoreState, event: HttpEvent & { finger
     eventCount: 1,
     firstSeenAt: event.timestamp,
     lastSeenAt: event.timestamp,
-    platformDistribution: { [event.platform]: 1 }
+    platformDistribution: { [event.platform]: 1 },
+    archived: false,
+    archivedAt: null
   });
 }
 
