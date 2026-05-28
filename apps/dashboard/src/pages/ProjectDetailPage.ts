@@ -253,6 +253,93 @@ export default {
       return 'severity-normal';
     }
 
+    function buildCopyForAI(issue: IssueSummary, events: Array<Record<string, unknown>>): string {
+      const lines: string[] = [];
+      lines.push('## 错误报告');
+      lines.push('');
+      lines.push(`**Issue ID:** ${issue.id}`);
+      lines.push(`**错误类型:** ${issue.errorType}`);
+      lines.push(`**错误信息:** ${issue.message}`);
+      lines.push(`**出现次数:** ${issue.eventCount}`);
+      lines.push(`**首次出现:** ${formatTime(issue.firstSeenAt)}`);
+      lines.push(`**最近出现:** ${formatTime(issue.lastSeenAt)}`);
+      lines.push(`**平台分布:** ${Object.entries(issue.platformDistribution).map(([p, c]) => `${p}(${c})`).join(', ')}`);
+      lines.push('');
+      lines.push('## 错误事件详情');
+      lines.push('');
+
+      const sampleEvents = events.slice(0, 3);
+      for (let i = 0; i < sampleEvents.length; i++) {
+        const evt = sampleEvents[i];
+        lines.push(`### 事件 ${i + 1}`);
+        lines.push(`- **平台:** ${String(evt.platform ?? '-')}`);
+        lines.push(`- **时间:** ${formatTime(Number(evt.timestamp ?? 0))}`);
+
+        if (evt.type === 'http') {
+          lines.push(`- **接口:** ${String(evt.method ?? 'GET')} ${String(evt.url ?? '-')}`);
+          lines.push(`- **状态码:** ${String(evt.status ?? '-')}`);
+          lines.push(`- **耗时:** ${String(evt.duration ?? '-')}ms`);
+        }
+
+        if (evt.page) lines.push(`- **页面:** ${String(evt.page)}`);
+        if (evt.scene) lines.push(`- **场景:** ${String(evt.scene)}`);
+        if (evt.errorMessage) lines.push(`- **错误信息:** ${String(evt.errorMessage)}`);
+        if (evt.errorCode !== undefined) lines.push(`- **错误码:** ${String(evt.errorCode)}`);
+        if (evt.statusCode !== undefined) lines.push(`- **状态码:** ${String(evt.statusCode)}`);
+
+        if (evt.stack) {
+          lines.push('');
+          lines.push('**调用栈:**');
+          lines.push('```');
+          lines.push(String(evt.stack));
+          lines.push('```');
+        }
+
+        if (evt.requestData && typeof evt.requestData === 'object' && Object.keys(evt.requestData as Record<string, unknown>).length > 0) {
+          lines.push('');
+          lines.push('**请求参数:**');
+          lines.push('```json');
+          lines.push(JSON.stringify(evt.requestData, null, 2));
+          lines.push('```');
+        }
+
+        if (evt.breadcrumbs && Array.isArray(evt.breadcrumbs) && evt.breadcrumbs.length > 0) {
+          lines.push('');
+          lines.push('**操作轨迹:**');
+          const recent = evt.breadcrumbs.slice(-10);
+          for (const bc of recent) {
+            const bcObj = bc as Record<string, unknown>;
+            lines.push(`- [${String(bcObj.type ?? '-')}] ${String(bcObj.message ?? '-')}`);
+          }
+        }
+
+        lines.push('');
+      }
+
+      lines.push('## 请帮我分析');
+      lines.push('');
+      lines.push('1. 这个错误的根本原因是什么？');
+      lines.push('2. 如何修复这个问题？');
+      lines.push('3. 有什么预防措施可以避免类似问题？');
+
+      return lines.join('\n');
+    }
+
+    async function copyToClipboard(text: string): Promise<void> {
+      try {
+        await navigator.clipboard.writeText(text);
+        alert('已复制到剪贴板，可直接粘贴给 AI');
+      } catch {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        alert('已复制到剪贴板，可直接粘贴给 AI');
+      }
+    }
+
     return () => {
       const t = messages.value;
 
@@ -376,7 +463,10 @@ export default {
               })()
             ]),
             h('div', { class: 'panel detail' }, [
-              h('div', { class: 'panel-head' }, [h('h2', t.issueDetail), selectedIssue.value ? h('span', selectedIssue.value.issue.id) : null]),
+              h('div', { class: 'panel-head' }, [
+                h('h2', t.issueDetail),
+                selectedIssue.value ? h('span', { class: 'issue-id', title: selectedIssue.value.issue.id }, selectedIssue.value.issue.id.slice(0, 12) + '...') : null
+              ]),
               selectedIssue.value
                 ? (() => {
                     const issue = selectedIssue.value.issue;
@@ -398,6 +488,16 @@ export default {
                           : null
                       ]),
                       h('p', `${issue.eventCount} ${t.events} since ${formatTime(issue.firstSeenAt)}`),
+                      h('div', { class: 'detail-actions' }, [
+                        h('button', {
+                          type: 'button',
+                          class: 'copy-for-ai-button',
+                          onClick: () => {
+                            const text = buildCopyForAI(issue, selectedIssue.value?.events ?? []);
+                            void copyToClipboard(text);
+                          }
+                        }, '复制给 AI')
+                      ]),
                       ...Object.entries(groupEventsByType(selectedIssue.value.events)).map(([type, events]) => renderEventGroup(type, events))
                     ]);
                   })()

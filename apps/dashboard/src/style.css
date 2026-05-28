@@ -778,6 +778,33 @@ h1 {
   white-space: nowrap;
 }
 
+.issue-id {
+  cursor: help;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.copy-for-ai-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 8px 16px;
+  transition: opacity 0.2s;
+}
+
+.copy-for-ai-button:hover {
+  opacity: 0.9;
+}
+
 pre {
   background: #101820;
   border-radius: 6px;
