@@ -63,6 +63,17 @@ select {
   padding: 22px;
 }
 
+.sidebar-version {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-version small {
+  color: #60717d;
+  font-size: 11px;
+}
+
 .brand {
   display: grid;
   gap: 4px;

@@ -1,4 +1,8 @@
 import { defineConfig, loadEnv } from 'vite';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+
+const packageJson = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf-8'));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -10,7 +14,8 @@ export default defineConfig(({ mode }) => {
     define: {
       __VUE_OPTIONS_API__: true,
       __VUE_PROD_DEVTOOLS__: false,
-      __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false
+      __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false,
+      __APP_VERSION__: JSON.stringify(packageJson.version)
     },
     server: {
       proxy: {

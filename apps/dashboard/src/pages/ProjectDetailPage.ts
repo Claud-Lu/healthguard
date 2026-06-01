@@ -449,6 +449,9 @@ export default {
             h('div', { class: 'panel-title' }, t.sdkIntegration),
             h('small', appKey.value),
             h('pre', sdkSnippet.value)
+          ]),
+          h('div', { class: 'sidebar-version' }, [
+            h('small', `v${__APP_VERSION__}`)
           ])
         ]),
 
