@@ -80,7 +80,7 @@ describe('sdk-uniapp client', () => {
     });
 
     client.captureException(new Error('retry me'));
-    await expect(client.flush()).rejects.toThrow('network down');
+    await client.flush();
     await client.flush();
 
     expect(transport).toHaveBeenCalledTimes(2);

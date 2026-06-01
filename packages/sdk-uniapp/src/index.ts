@@ -189,6 +189,17 @@ function getCurrentPageUrl(): string | undefined {
   return undefined;
 }
 
+function isSdkInternalError(message: string | undefined): boolean {
+  if (!message) {
+    return false;
+  }
+  return (
+    message.includes('Failed to fetch') ||
+    message.includes('NetworkError') ||
+    message.includes('healthguard')
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /*                               Default transport                            */
 /* -------------------------------------------------------------------------- */
@@ -214,12 +225,16 @@ async function defaultTransport(batch: EventBatch, endpoint: string): Promise<vo
   }
 
   // Fallback for pure H5 environments
-  await fetch(endpoint, {
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(batch),
     keepalive: true
   });
+
+  if (!response.ok) {
+    throw new Error(`Transport failed: ${response.status}`);
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -237,6 +252,7 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
   const h5 = isH5();
 
   let timer: ReturnType<typeof setInterval> | undefined;
+  let isFlushing = false;
 
   function createBaseEvent(): Pick<
     ErrorEvent,
@@ -270,16 +286,18 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
   }
 
   async function flush(): Promise<void> {
-    if (queue.length === 0) {
+    if (queue.length === 0 || isFlushing) {
       return;
     }
 
+    isFlushing = true;
     const events = queue.splice(0, maxBatchSize);
     try {
       await transport({ appKey: options.appKey, events }, options.endpoint);
     } catch (error) {
       queue.unshift(...events);
-      throw error;
+    } finally {
+      isFlushing = false;
     }
   }
 
@@ -287,7 +305,7 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
     queue.push(event);
 
     if (queue.length >= maxBatchSize) {
-      void flush();
+      void flush().catch(() => {});
     }
   }
 
@@ -299,6 +317,10 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
     const normalized = normalizeError(error);
     const message = metadata.message ?? normalized.message;
     const stack = metadata.stack ?? normalized.stack;
+
+    if (isFlushing || isSdkInternalError(message)) {
+      return;
+    }
 
     enqueue({
       ...createBaseEvent(),
@@ -457,7 +479,13 @@ function installAutoCapture(
     if (autoCapture.unhandledRejections && typeof window !== 'undefined') {
       window.addEventListener('unhandledrejection', ((event: Event) => {
         const rejectionEvent = event as PromiseRejectionEvent;
-        captureError(rejectionEvent.reason, 'promise');
+        const reason = rejectionEvent.reason;
+        
+        if (reason instanceof Error && isSdkInternalError(reason.message)) {
+          return;
+        }
+        
+        captureError(reason, 'promise');
       }) as EventListener);
     }
   } else {

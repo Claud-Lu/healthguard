@@ -71,18 +71,21 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
   const target = options.target ?? getDefaultTarget();
 
   let timer: ReturnType<typeof setInterval> | undefined;
+  let isFlushing = false;
 
   async function flush(): Promise<void> {
-    if (queue.length === 0) {
+    if (queue.length === 0 || isFlushing) {
       return;
     }
 
+    isFlushing = true;
     const events = queue.splice(0, maxBatchSize);
     try {
       await transport({ appKey: options.appKey, events }, options.endpoint);
     } catch (error) {
       queue.unshift(...events);
-      throw error;
+    } finally {
+      isFlushing = false;
     }
   }
 
@@ -90,7 +93,7 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
     queue.push(event);
 
     if (queue.length >= maxBatchSize) {
-      void flush();
+      void flush().catch(() => {});
     }
   }
 
@@ -98,6 +101,10 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
     const normalized = normalizeError(error);
     const message = metadata.message ?? normalized.message;
     const stack = metadata.stack ?? normalized.stack;
+
+    if (isFlushing || isSdkInternalError(message)) {
+      return;
+    }
 
     enqueue({
       ...createBaseEvent(options, sessionId, anonymousId, target),
@@ -248,8 +255,19 @@ function normalizeError(error: unknown): { message: string; stack?: string } {
   };
 }
 
+function isSdkInternalError(message: string | undefined): boolean {
+  if (!message) {
+    return false;
+  }
+  return (
+    message.includes('Failed to fetch') ||
+    message.includes('NetworkError') ||
+    message.includes('healthguard')
+  );
+}
+
 async function defaultTransport(batch: EventBatch, endpoint: string): Promise<void> {
-  await fetch(endpoint, {
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'content-type': 'application/json'
@@ -257,6 +275,10 @@ async function defaultTransport(batch: EventBatch, endpoint: string): Promise<vo
     body: JSON.stringify(batch),
     keepalive: true
   });
+
+  if (!response.ok) {
+    throw new Error(`Transport failed: ${response.status}`);
+  }
 }
 
 function getAnonymousId(): string {
@@ -356,7 +378,13 @@ function installAutoCapture(
   if (autoCapture.unhandledRejections && target.addEventListener) {
     target.addEventListener('unhandledrejection', ((event: Event) => {
       const rejectionEvent = event as PromiseRejectionEvent;
-      captureError(rejectionEvent.reason, 'promise');
+      const reason = rejectionEvent.reason;
+      
+      if (reason instanceof Error && isSdkInternalError(reason.message)) {
+        return;
+      }
+      
+      captureError(reason, 'promise');
     }) as EventListener);
   }
 
