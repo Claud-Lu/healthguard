@@ -1,7 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
+import { nanoid } from 'nanoid';
 import { createHttpFingerprint, extractPathname } from '@healthguard/core';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@healthguard/core';
-import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery } from './types';
+import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskNote } from './types';
 
 function httpIssueMessage(event: { method: string; url: string; errorMessage?: string }): string {
   const pathname = extractPathname(event.url);
@@ -362,6 +363,87 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       return rowToIssue(result.rows[0]);
     },
 
+    async createRepairTask(input: CreateRepairTaskInput): Promise<RepairTask> {
+      const client = await pool.connect();
+      const taskId = createId('repair');
+      const noteId = createId('repair_note');
+      try {
+        await client.query('BEGIN');
+        const taskResult = await client.query(
+          `INSERT INTO repair_tasks (
+            id, issue_id, app_key, owner_user_id, status, agent, repo_url, base_branch, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          RETURNING *`,
+          [
+            taskId,
+            input.issueId,
+            input.appKey,
+            input.ownerUserId,
+            'pending',
+            input.agent,
+            input.repoUrl,
+            input.baseBranch,
+            input.createdAt,
+            input.createdAt
+          ]
+        );
+        await client.query(
+          `INSERT INTO repair_task_notes (id, task_id, actor, message, metadata, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [noteId, taskId, 'healthguard', 'Repair task created.', null, input.createdAt]
+        );
+        await client.query('COMMIT');
+        return rowToRepairTask(taskResult.rows[0]);
+      } catch (err) {
+        try { await client.query('ROLLBACK'); } catch { /* ignore rollback failure */ }
+        throw err;
+      } finally {
+        client.release();
+      }
+    },
+
+    async listRepairTasks(appKey: string, ownerUserId: string): Promise<RepairTask[]> {
+      const result = await pool.query(
+        'SELECT * FROM repair_tasks WHERE app_key = $1 AND owner_user_id = $2 ORDER BY updated_at DESC',
+        [appKey, ownerUserId]
+      );
+      return result.rows.map(rowToRepairTask);
+    },
+
+    async getRepairTaskDetail(id: string, ownerUserId: string): Promise<{ task: RepairTask | null; notes: RepairTaskNote[] }> {
+      const taskResult = await pool.query('SELECT * FROM repair_tasks WHERE id = $1 AND owner_user_id = $2', [id, ownerUserId]);
+      if (taskResult.rows.length === 0) {
+        return { task: null, notes: [] };
+      }
+
+      const notesResult = await pool.query('SELECT * FROM repair_task_notes WHERE task_id = $1 ORDER BY created_at ASC', [id]);
+      return {
+        task: rowToRepairTask(taskResult.rows[0]),
+        notes: notesResult.rows.map(rowToRepairTaskNote)
+      };
+    },
+
+    async cancelRepairTask(id: string, ownerUserId: string, canceledAt: number): Promise<RepairTask | null> {
+      const existing = await pool.query('SELECT * FROM repair_tasks WHERE id = $1 AND owner_user_id = $2', [id, ownerUserId]);
+      if (existing.rows.length === 0) return null;
+
+      const current = rowToRepairTask(existing.rows[0]);
+      if (!['pending', 'claimed', 'running'].includes(current.status)) {
+        return current;
+      }
+
+      const result = await pool.query(
+        'UPDATE repair_tasks SET status = $1, updated_at = $2, completed_at = $2 WHERE id = $3 AND owner_user_id = $4 RETURNING *',
+        ['canceled', canceledAt, id, ownerUserId]
+      );
+      await pool.query(
+        `INSERT INTO repair_task_notes (id, task_id, actor, message, metadata, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [createId('repair_note'), id, 'user', 'Repair task canceled.', null, canceledAt]
+      );
+      return result.rows.length === 0 ? null : rowToRepairTask(result.rows[0]);
+    },
+
     async cleanup(retentionDays = 30): Promise<{ deletedEvents: number; deletedSessions: number }> {
       const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
       const eventResult = await pool.query('DELETE FROM events WHERE timestamp < $1', [cutoff]);
@@ -452,6 +534,55 @@ async function ensureSchema(pool: Pool): Promise<void> {
       platform_distribution JSONB NOT NULL DEFAULT '{}',
       archived_at BIGINT
     )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS repair_tasks (
+      id VARCHAR(64) PRIMARY KEY,
+      issue_id VARCHAR(255) NOT NULL,
+      app_key VARCHAR(64) NOT NULL,
+      owner_user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status VARCHAR(32) NOT NULL,
+      agent VARCHAR(32) NOT NULL,
+      repo_url TEXT NOT NULL,
+      base_branch VARCHAR(255) NOT NULL,
+      repair_branch VARCHAR(255),
+      pr_url TEXT,
+      commit_sha VARCHAR(64),
+      summary TEXT,
+      failure_reason TEXT,
+      created_at BIGINT NOT NULL,
+      updated_at BIGINT NOT NULL,
+      claimed_at BIGINT,
+      completed_at BIGINT
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_repair_tasks_app_key ON repair_tasks(app_key)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_repair_tasks_owner_user_id ON repair_tasks(owner_user_id)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_repair_tasks_status ON repair_tasks(status)
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS repair_task_notes (
+      id VARCHAR(64) PRIMARY KEY,
+      task_id VARCHAR(64) NOT NULL REFERENCES repair_tasks(id) ON DELETE CASCADE,
+      actor VARCHAR(32) NOT NULL,
+      message TEXT NOT NULL,
+      metadata JSONB,
+      created_at BIGINT NOT NULL
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_repair_task_notes_task_id ON repair_task_notes(task_id)
   `);
 
   await pool.query(`
@@ -685,4 +816,41 @@ function rowToIssue(row: Record<string, unknown>): IssueSummary {
     archived: row.archived_at !== null && row.archived_at !== undefined,
     archivedAt: row.archived_at === null || row.archived_at === undefined ? null : Number(row.archived_at)
   };
+}
+
+function rowToRepairTask(row: Record<string, unknown>): RepairTask {
+  return {
+    id: String(row.id),
+    issueId: String(row.issue_id),
+    appKey: String(row.app_key),
+    ownerUserId: String(row.owner_user_id),
+    status: String(row.status) as RepairTask['status'],
+    agent: String(row.agent) as RepairTask['agent'],
+    repoUrl: String(row.repo_url),
+    baseBranch: String(row.base_branch),
+    repairBranch: row.repair_branch === null || row.repair_branch === undefined ? undefined : String(row.repair_branch),
+    prUrl: row.pr_url === null || row.pr_url === undefined ? undefined : String(row.pr_url),
+    commitSha: row.commit_sha === null || row.commit_sha === undefined ? undefined : String(row.commit_sha),
+    summary: row.summary === null || row.summary === undefined ? undefined : String(row.summary),
+    failureReason: row.failure_reason === null || row.failure_reason === undefined ? undefined : String(row.failure_reason),
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
+    claimedAt: row.claimed_at === null || row.claimed_at === undefined ? undefined : Number(row.claimed_at),
+    completedAt: row.completed_at === null || row.completed_at === undefined ? undefined : Number(row.completed_at)
+  };
+}
+
+function rowToRepairTaskNote(row: Record<string, unknown>): RepairTaskNote {
+  return {
+    id: String(row.id),
+    taskId: String(row.task_id),
+    actor: String(row.actor) as RepairTaskNote['actor'],
+    message: String(row.message),
+    metadata: row.metadata === null || row.metadata === undefined ? undefined : row.metadata as Record<string, unknown>,
+    createdAt: Number(row.created_at)
+  };
+}
+
+function createId(prefix: string): string {
+  return `${prefix}_${nanoid(21)}`;
 }

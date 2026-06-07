@@ -4,7 +4,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { nanoid } from 'nanoid';
 import { parseEventBatch, type EventBatch } from '@healthguard/core';
-import type { AppType, IssueQuery, IssueStatusFilter, Store, UserRecord } from './store';
+import type { AppType, IssueQuery, IssueStatusFilter, RepairTaskAgent, Store, UserRecord } from './store';
 
 export function createServerApp(store: Store, options?: { corsOrigin?: string | boolean }): FastifyInstance {
   const app = Fastify({
@@ -218,6 +218,88 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
     return { issue };
   });
 
+  app.post<{ Body: CreateRepairTaskBody }>('/api/repair-tasks', async (request, reply) => {
+    const user = await authenticate(store, request.headers.authorization);
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const body = parseCreateRepairTaskBody(request.body);
+    if (!body.valid) {
+      return reply.status(400).send({ message: body.message });
+    }
+
+    const detail = await store.getIssueDetail(body.input.issueId, undefined, 1);
+    if (!detail.issue) {
+      return reply.status(404).send({ message: 'Issue not found' });
+    }
+
+    const owned = await userOwnsAppKey(store, user.id, detail.issue.appKey);
+    if (!owned) {
+      return reply.status(404).send({ message: 'Issue not found' });
+    }
+
+    const task = await store.createRepairTask({
+      issueId: detail.issue.id,
+      appKey: detail.issue.appKey,
+      ownerUserId: user.id,
+      agent: body.input.agent,
+      repoUrl: body.input.repoUrl,
+      baseBranch: body.input.baseBranch,
+      createdAt: Date.now()
+    });
+
+    return reply.status(201).send({ task });
+  });
+
+  app.get<{ Querystring: { appKey?: string } }>('/api/repair-tasks', async (request, reply) => {
+    const user = await authenticate(store, request.headers.authorization);
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const appKey = request.query.appKey?.trim();
+    if (!appKey) {
+      return reply.status(400).send({ message: 'appKey is required' });
+    }
+
+    const owned = await userOwnsAppKey(store, user.id, appKey);
+    if (!owned) {
+      return reply.status(404).send({ message: 'App not found' });
+    }
+
+    const tasks = await store.listRepairTasks(appKey, user.id);
+    return { tasks };
+  });
+
+  app.get<{ Params: { id: string } }>('/api/repair-tasks/:id', async (request, reply) => {
+    const user = await authenticate(store, request.headers.authorization);
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const detail = await store.getRepairTaskDetail(request.params.id, user.id);
+    if (!detail.task) {
+      return reply.status(404).send({ message: 'Repair task not found' });
+    }
+
+    return detail;
+  });
+
+  app.post<{ Params: { id: string } }>('/api/repair-tasks/:id/cancel', async (request, reply) => {
+    const user = await authenticate(store, request.headers.authorization);
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const task = await store.cancelRepairTask(request.params.id, user.id, Date.now());
+    if (!task) {
+      return reply.status(404).send({ message: 'Repair task not found' });
+    }
+
+    return { task };
+  });
+
   app.get<{ Params: { id: string }; Querystring: IssueQuerystring }>('/api/issues/:id', async (request, reply) => {
     const user = await authenticate(store, request.headers.authorization);
     if (!user) {
@@ -295,6 +377,13 @@ interface IssueQuerystring {
   end?: string;
 }
 
+interface CreateRepairTaskBody {
+  issueId?: string;
+  agent?: string;
+  repoUrl?: string;
+  baseBranch?: string;
+}
+
 type CredentialsResult =
   | { valid: true; email: string; password: string }
   | { valid: false; code: Extract<AuthErrorCode, 'INVALID_EMAIL' | 'PASSWORD_TOO_SHORT'>; email: string };
@@ -350,6 +439,37 @@ function parseIssueQuery(query: IssueQuerystring): { valid: true; query: IssueQu
       endTime
     }
   };
+}
+
+function parseCreateRepairTaskBody(body: CreateRepairTaskBody | undefined): { valid: true; input: { issueId: string; agent: RepairTaskAgent; repoUrl: string; baseBranch: string } } | { valid: false; message: string } {
+  const issueId = body?.issueId?.trim();
+  const agent = body?.agent?.trim() || 'hermes';
+  const repoUrl = body?.repoUrl?.trim();
+  const baseBranch = body?.baseBranch?.trim() || 'main';
+
+  if (!issueId) return { valid: false, message: 'issueId is required' };
+  if (!isRepairTaskAgent(agent)) return { valid: false, message: 'Unsupported repair agent' };
+  if (!repoUrl) return { valid: false, message: 'repoUrl is required' };
+  if (!baseBranch) return { valid: false, message: 'baseBranch is required' };
+
+  return {
+    valid: true,
+    input: {
+      issueId,
+      agent,
+      repoUrl,
+      baseBranch
+    }
+  };
+}
+
+function isRepairTaskAgent(value: string): value is RepairTaskAgent {
+  return value === 'hermes' || value === 'codex' || value === 'claude-code' || value === 'manual';
+}
+
+async function userOwnsAppKey(store: Store, userId: string, appKey: string): Promise<boolean> {
+  const apps = await store.listAppsByUser(userId);
+  return apps.some((app) => app.appKey === appKey);
 }
 
 function isIssueStatus(value: string): value is IssueStatusFilter {

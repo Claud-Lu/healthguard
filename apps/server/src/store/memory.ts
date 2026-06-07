@@ -1,6 +1,6 @@
 import { createHttpFingerprint, extractPathname } from '@healthguard/core';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@healthguard/core';
-import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery } from './types';
+import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskNote } from './types';
 
 export interface MemoryStoreState {
   users: UserRecord[];
@@ -8,6 +8,8 @@ export interface MemoryStoreState {
   apps: AppRecord[];
   events: HealthGuardEvent[];
   issues: Map<string, IssueSummary>;
+  repairTasks: RepairTask[];
+  repairTaskNotes: RepairTaskNote[];
 }
 
 export function createMemoryStore(): Store {
@@ -16,7 +18,9 @@ export function createMemoryStore(): Store {
     sessions: new Map(),
     apps: [],
     events: [],
-    issues: new Map()
+    issues: new Map(),
+    repairTasks: [],
+    repairTaskNotes: []
   };
 
   return {
@@ -162,6 +166,68 @@ export function createMemoryStore(): Store {
       issue.archived = false;
       issue.archivedAt = null;
       return issue;
+    },
+
+    async createRepairTask(input: CreateRepairTaskInput): Promise<RepairTask> {
+      const task: RepairTask = {
+        id: `repair_${state.repairTasks.length + 1}`,
+        issueId: input.issueId,
+        appKey: input.appKey,
+        ownerUserId: input.ownerUserId,
+        status: 'pending',
+        agent: input.agent,
+        repoUrl: input.repoUrl,
+        baseBranch: input.baseBranch,
+        createdAt: input.createdAt,
+        updatedAt: input.createdAt
+      };
+      const note: RepairTaskNote = {
+        id: `repair_note_${state.repairTaskNotes.length + 1}`,
+        taskId: task.id,
+        actor: 'healthguard',
+        message: 'Repair task created.',
+        createdAt: input.createdAt
+      };
+
+      state.repairTasks.push(task);
+      state.repairTaskNotes.push(note);
+
+      return task;
+    },
+
+    async listRepairTasks(appKey: string, ownerUserId: string): Promise<RepairTask[]> {
+      return state.repairTasks
+        .filter((task) => task.appKey === appKey && task.ownerUserId === ownerUserId)
+        .sort((left, right) => right.updatedAt - left.updatedAt);
+    },
+
+    async getRepairTaskDetail(id: string, ownerUserId: string): Promise<{ task: RepairTask | null; notes: RepairTaskNote[] }> {
+      const task = state.repairTasks.find((record) => record.id === id && record.ownerUserId === ownerUserId) ?? null;
+      if (!task) return { task: null, notes: [] };
+      const notes = state.repairTaskNotes
+        .filter((note) => note.taskId === id)
+        .sort((left, right) => left.createdAt - right.createdAt);
+
+      return { task, notes };
+    },
+
+    async cancelRepairTask(id: string, ownerUserId: string, canceledAt: number): Promise<RepairTask | null> {
+      const task = state.repairTasks.find((record) => record.id === id && record.ownerUserId === ownerUserId) ?? null;
+      if (!task) return null;
+      if (!['pending', 'claimed', 'running'].includes(task.status)) return task;
+
+      task.status = 'canceled';
+      task.updatedAt = canceledAt;
+      task.completedAt = canceledAt;
+      state.repairTaskNotes.push({
+        id: `repair_note_${state.repairTaskNotes.length + 1}`,
+        taskId: task.id,
+        actor: 'user',
+        message: 'Repair task canceled.',
+        createdAt: canceledAt
+      });
+
+      return task;
     }
   };
 }

@@ -40,6 +40,29 @@ export interface OverviewTotals {
   issues: number;
 }
 
+export type RepairTaskStatus = 'pending' | 'claimed' | 'running' | 'pr_created' | 'failed' | 'canceled' | 'closed';
+export type RepairTaskAgent = 'hermes' | 'codex' | 'claude-code' | 'manual';
+
+export interface RepairTask {
+  id: string;
+  issueId: string;
+  appKey: string;
+  ownerUserId: string;
+  status: RepairTaskStatus;
+  agent: RepairTaskAgent;
+  repoUrl: string;
+  baseBranch: string;
+  repairBranch?: string;
+  prUrl?: string;
+  commitSha?: string;
+  summary?: string;
+  failureReason?: string;
+  createdAt: number;
+  updatedAt: number;
+  claimedAt?: number;
+  completedAt?: number;
+}
+
 function initialLocale(): Locale {
   const saved = localStorage.getItem('healthguard_locale');
   if (saved === 'en-US' || saved === 'zh-CN') {

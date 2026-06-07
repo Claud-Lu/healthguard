@@ -3,7 +3,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { store, messages, loadApps } from '../globalStore';
 import { apiUrl, formatTime, requestJson } from '../api';
 import { extractPathname } from '@healthguard/core';
-import type { IssueSummary, OverviewTotals } from '../globalStore';
+import type { IssueSummary, OverviewTotals, RepairTask, RepairTaskAgent } from '../globalStore';
 
 const platforms = ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'uniapp-h5', 'uniapp-wechat', 'uniapp-alipay', 'uniapp-douyin', 'uniapp-app', 'uniapp'];
 
@@ -31,6 +31,10 @@ export default {
     const timePreset = ref<TimePreset>('all');
     const customStartDate = ref('');
     const customEndDate = ref('');
+    const repairTasks = ref<RepairTask[]>([]);
+    const repairRepoUrl = ref('');
+    const repairBaseBranch = ref('main');
+    const repairAgent = ref<RepairTaskAgent>('hermes');
 
     const selectedApp = computed(() => store.apps.find((item) => item.appKey === appKey.value) ?? null);
 
@@ -48,6 +52,7 @@ export default {
     watch(() => route.params.appKey, (newKey) => {
       appKey.value = String(newKey);
       selectedIssue.value = null;
+      repairTasks.value = [];
       void loadProjectData();
     });
 
@@ -78,6 +83,7 @@ export default {
         ]);
         overview.value = overviewResponse.totals;
         issues.value = issueResponse.issues;
+        await loadRepairTasks();
         if (selectedIssue.value && !issues.value.some((issue) => issue.id === selectedIssue.value?.issue.id)) {
           selectedIssue.value = null;
         }
@@ -101,6 +107,47 @@ export default {
       issueStatus.value = 'open';
       selectedIssue.value = null;
       await loadProjectData();
+    }
+
+    async function loadRepairTasks(): Promise<void> {
+      if (!store.token || !appKey.value) return;
+      const response = await requestJson<{ tasks: RepairTask[] }>(
+        apiUrl(`/repair-tasks?appKey=${encodeURIComponent(appKey.value)}`),
+        undefined,
+        store.token
+      );
+      repairTasks.value = response.tasks;
+    }
+
+    async function createRepairTask(issue: IssueSummary): Promise<void> {
+      if (!repairRepoUrl.value.trim()) {
+        store.errorMessage = 'Repository URL is required.';
+        return;
+      }
+
+      const response = await requestJson<{ task: RepairTask }>(
+        apiUrl('/repair-tasks'),
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            issueId: issue.id,
+            agent: repairAgent.value,
+            repoUrl: repairRepoUrl.value.trim(),
+            baseBranch: repairBaseBranch.value.trim() || 'main'
+          })
+        },
+        store.token
+      );
+      repairTasks.value = [response.task, ...repairTasks.value.filter((task) => task.id !== response.task.id)];
+    }
+
+    async function cancelRepairTask(task: RepairTask): Promise<void> {
+      const response = await requestJson<{ task: RepairTask }>(
+        apiUrl(`/repair-tasks/${encodeURIComponent(task.id)}/cancel`),
+        { method: 'POST', body: JSON.stringify({}) },
+        store.token
+      );
+      repairTasks.value = repairTasks.value.map((item) => (item.id === response.task.id ? response.task : item));
     }
 
     function buildIssueQuery(includeAppKey = true): string {
@@ -318,6 +365,76 @@ export default {
 
     function renderRawEvent(evt: Record<string, unknown>) {
       return h('pre', { class: 'event-raw' }, JSON.stringify(evt, null, 2));
+    }
+
+    function renderRepairTaskList() {
+      return h('div', { class: 'repair-task-panel' }, [
+        h('div', { class: 'panel-head' }, [h('h2', 'Repair Tasks'), h('span', `${repairTasks.value.length}`)]),
+        repairTasks.value.length === 0
+          ? h('p', { class: 'empty' }, 'No repair tasks yet.')
+          : h(
+              'div',
+              { class: 'repair-task-list' },
+              repairTasks.value.map((task) =>
+                h('article', { class: 'repair-task-row' }, [
+                  h('div', { class: 'repair-task-main' }, [
+                    h('strong', task.issueId),
+                    h('span', `${task.agent} / ${task.baseBranch}`),
+                    h('small', formatTime(task.updatedAt))
+                  ]),
+                  h('span', { class: `repair-status repair-status-${task.status}` }, task.status),
+                  task.prUrl ? h('a', { href: task.prUrl, target: '_blank', rel: 'noreferrer' }, 'PR') : null,
+                  ['pending', 'claimed', 'running'].includes(task.status)
+                    ? h('button', { type: 'button', class: 'outline-button detail-action-button', onClick: () => void cancelRepairTask(task) }, 'Cancel')
+                    : null
+                ])
+              )
+            )
+      ]);
+    }
+
+    function renderRepairTaskCreator(issue: IssueSummary) {
+      return h('section', { class: 'repair-task-create' }, [
+        h('h4', 'Create repair task'),
+        h('div', { class: 'repair-task-form' }, [
+          h('label', { class: 'field' }, [
+            h('span', 'Agent'),
+            h('select', {
+              value: repairAgent.value,
+              onChange: (event: Event) => {
+                repairAgent.value = (event.target as HTMLSelectElement).value as RepairTaskAgent;
+              }
+            }, [
+              h('option', { value: 'hermes' }, 'Hermes'),
+              h('option', { value: 'codex' }, 'Codex'),
+              h('option', { value: 'claude-code' }, 'Claude Code'),
+              h('option', { value: 'manual' }, 'Manual')
+            ])
+          ]),
+          h('label', { class: 'field' }, [
+            h('span', 'Repository URL'),
+            h('input', {
+              type: 'text',
+              placeholder: 'git@github.com:owner/repo.git',
+              value: repairRepoUrl.value,
+              onInput: (event: Event) => {
+                repairRepoUrl.value = (event.target as HTMLInputElement).value;
+              }
+            })
+          ]),
+          h('label', { class: 'field compact-field' }, [
+            h('span', 'Base branch'),
+            h('input', {
+              type: 'text',
+              value: repairBaseBranch.value,
+              onInput: (event: Event) => {
+                repairBaseBranch.value = (event.target as HTMLInputElement).value;
+              }
+            })
+          ]),
+          h('button', { type: 'button', class: 'copy-for-ai-button', onClick: () => void createRepairTask(issue) }, 'Create repair task')
+        ])
+      ]);
     }
 
     function getSeverityClass(count: number) {
@@ -604,6 +721,9 @@ export default {
                 ];
               })()
             ]),
+            h('div', { class: 'panel' }, [
+              renderRepairTaskList()
+            ]),
             h('div', { class: 'panel detail' }, [
               h('div', { class: 'panel-head' }, [
                 h('h2', t.issueDetail),
@@ -657,6 +777,7 @@ export default {
                               }
                             }, t.archiveIssue)
                       ]),
+                      renderRepairTaskCreator(issue),
                       ...Object.entries(groupEventsByType(selectedIssue.value.events)).map(([type, events]) => renderEventGroup(type, events))
                     ]);
                   })()

@@ -637,4 +637,224 @@ describe('collector api', () => {
 
     await app.close();
   });
+
+  it('creates and lists repair tasks for an owned issue', async () => {
+    const app = createServerApp(createMemoryStore());
+
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const headers = { authorization: `Bearer ${register.json().token}` };
+
+    const createdApp = await app.inject({
+      method: 'POST',
+      url: '/api/apps',
+      headers,
+      payload: { name: 'Demo App', type: 'web' }
+    });
+    const appKey = createdApp.json().app.appKey;
+    await app.inject({
+      method: 'POST',
+      url: '/api/events/batch',
+      payload: {
+        appKey,
+        events: [
+          {
+            eventId: 'evt_repair',
+            appKey,
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710000000000,
+            sessionId: 'session-1',
+            anonymousId: 'anon-1',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'repair me',
+            fingerprint: 'js:repair',
+            breadcrumbs: []
+          }
+        ]
+      }
+    });
+
+    const create = await app.inject({
+      method: 'POST',
+      url: '/api/repair-tasks',
+      headers,
+      payload: {
+        issueId: `${appKey}:js:repair`,
+        agent: 'hermes',
+        repoUrl: 'git@github.com:example/demo.git',
+        baseBranch: 'main'
+      }
+    });
+    const list = await app.inject({
+      method: 'GET',
+      url: `/api/repair-tasks?appKey=${encodeURIComponent(appKey)}`,
+      headers
+    });
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/repair-tasks/${create.json().task?.id}`,
+      headers
+    });
+
+    expect(create.statusCode).toBe(201);
+    expect(create.json().task).toMatchObject({
+      issueId: `${appKey}:js:repair`,
+      appKey,
+      status: 'pending',
+      agent: 'hermes',
+      repoUrl: 'git@github.com:example/demo.git',
+      baseBranch: 'main'
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().tasks).toHaveLength(1);
+    expect(list.json().tasks[0]).toMatchObject({
+      id: create.json().task.id,
+      issueId: `${appKey}:js:repair`
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().notes).toMatchObject([
+      {
+        actor: 'healthguard',
+        message: 'Repair task created.'
+      }
+    ]);
+
+    await app.close();
+  });
+
+  it('prevents users from creating repair tasks for issues they do not own', async () => {
+    const app = createServerApp(createMemoryStore());
+
+    const owner = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const other = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'other@example.com', password: 'secret123' }
+    });
+    const ownerHeaders = { authorization: `Bearer ${owner.json().token}` };
+    const otherHeaders = { authorization: `Bearer ${other.json().token}` };
+
+    const createdApp = await app.inject({
+      method: 'POST',
+      url: '/api/apps',
+      headers: ownerHeaders,
+      payload: { name: 'Demo App', type: 'web' }
+    });
+    const appKey = createdApp.json().app.appKey;
+    await app.inject({
+      method: 'POST',
+      url: '/api/events/batch',
+      payload: {
+        appKey,
+        events: [
+          {
+            eventId: 'evt_forbidden',
+            appKey,
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710000000000,
+            sessionId: 'session-1',
+            anonymousId: 'anon-1',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'private boom',
+            fingerprint: 'js:private',
+            breadcrumbs: []
+          }
+        ]
+      }
+    });
+
+    const create = await app.inject({
+      method: 'POST',
+      url: '/api/repair-tasks',
+      headers: otherHeaders,
+      payload: {
+        issueId: `${appKey}:js:private`,
+        agent: 'hermes',
+        repoUrl: 'git@github.com:example/demo.git',
+        baseBranch: 'main'
+      }
+    });
+
+    expect(create.statusCode).toBe(404);
+
+    await app.close();
+  });
+
+  it('cancels a pending repair task', async () => {
+    const app = createServerApp(createMemoryStore());
+
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const headers = { authorization: `Bearer ${register.json().token}` };
+
+    const createdApp = await app.inject({
+      method: 'POST',
+      url: '/api/apps',
+      headers,
+      payload: { name: 'Demo App', type: 'web' }
+    });
+    const appKey = createdApp.json().app.appKey;
+    await app.inject({
+      method: 'POST',
+      url: '/api/events/batch',
+      payload: {
+        appKey,
+        events: [
+          {
+            eventId: 'evt_cancel',
+            appKey,
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710000000000,
+            sessionId: 'session-1',
+            anonymousId: 'anon-1',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'cancel me',
+            fingerprint: 'js:cancel',
+            breadcrumbs: []
+          }
+        ]
+      }
+    });
+    const create = await app.inject({
+      method: 'POST',
+      url: '/api/repair-tasks',
+      headers,
+      payload: {
+        issueId: `${appKey}:js:cancel`,
+        agent: 'hermes',
+        repoUrl: 'git@github.com:example/demo.git',
+        baseBranch: 'main'
+      }
+    });
+
+    const cancel = await app.inject({
+      method: 'POST',
+      url: `/api/repair-tasks/${create.json().task?.id}/cancel`,
+      headers
+    });
+
+    expect(cancel.statusCode).toBe(200);
+    expect(cancel.json().task).toMatchObject({
+      id: create.json().task.id,
+      status: 'canceled'
+    });
+
+    await app.close();
+  });
 });

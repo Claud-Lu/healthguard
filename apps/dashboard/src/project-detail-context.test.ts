@@ -30,4 +30,14 @@ describe('project detail mini-program context rendering', () => {
     expect(source).toContain("`/issues/${encodeURIComponent(issue.id)}/archive`");
     expect(source).toContain("`/issues/${encodeURIComponent(issue.id)}/reopen`");
   });
+
+  it('exposes manual repair task creation from issue detail', () => {
+    expect(source).toContain('repairTasks = ref<RepairTask[]>([])');
+    expect(source).toContain('function loadRepairTasks');
+    expect(source).toContain('function createRepairTask');
+    expect(source).toContain("apiUrl(`/repair-tasks?appKey=${encodeURIComponent(appKey.value)}`)");
+    expect(source).toContain("apiUrl('/repair-tasks')");
+    expect(source).toContain('Create repair task');
+    expect(source).toContain('Repair Tasks');
+  });
 });

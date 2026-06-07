@@ -27,13 +27,48 @@ interface StoredIssue {
   platform_distribution: Record<string, number>;
 }
 
+interface StoredRepairTask {
+  id: string;
+  issue_id: string;
+  app_key: string;
+  owner_user_id: string;
+  status: string;
+  agent: string;
+  repo_url: string;
+  base_branch: string;
+  repair_branch: string | null;
+  pr_url: string | null;
+  commit_sha: string | null;
+  summary: string | null;
+  failure_reason: string | null;
+  created_at: number;
+  updated_at: number;
+  claimed_at: number | null;
+  completed_at: number | null;
+}
+
+interface StoredRepairTaskNote {
+  id: string;
+  task_id: string;
+  actor: string;
+  message: string;
+  metadata: Record<string, unknown> | null;
+  created_at: number;
+}
+
 function createFakePostgresPool(events: StoredEvent[]) {
   const issues = new Map<string, StoredIssue>();
+  const repairTasks = new Map<string, StoredRepairTask>();
+  const repairTaskNotes: StoredRepairTaskNote[] = [];
 
   const fakePool = {
     issues,
     async query(sql: string, params: unknown[] = []): Promise<QueryResult> {
       if (sql.includes('CREATE TABLE') || sql.includes('CREATE INDEX') || sql.includes('DO $$') || sql.includes('ALTER TABLE')) {
+        return { rows: [] };
+      }
+
+      if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
         return { rows: [] };
       }
 
@@ -91,6 +126,74 @@ function createFakePostgresPool(events: StoredEvent[]) {
         return { rows: Array.from(issues.values()) };
       }
 
+      if (sql.startsWith('INSERT INTO repair_tasks')) {
+        const [id, issueId, appKey, ownerUserId, status, agent, repoUrl, baseBranch, createdAt, updatedAt] = params;
+        const row: StoredRepairTask = {
+          id: String(id),
+          issue_id: String(issueId),
+          app_key: String(appKey),
+          owner_user_id: String(ownerUserId),
+          status: String(status),
+          agent: String(agent),
+          repo_url: String(repoUrl),
+          base_branch: String(baseBranch),
+          repair_branch: null,
+          pr_url: null,
+          commit_sha: null,
+          summary: null,
+          failure_reason: null,
+          created_at: Number(createdAt),
+          updated_at: Number(updatedAt),
+          claimed_at: null,
+          completed_at: null
+        };
+        repairTasks.set(row.id, row);
+        return { rows: [row] };
+      }
+
+      if (sql.startsWith('INSERT INTO repair_task_notes')) {
+        const [id, taskId, actor, message, metadata, createdAt] = params;
+        repairTaskNotes.push({
+          id: String(id),
+          task_id: String(taskId),
+          actor: String(actor),
+          message: String(message),
+          metadata: metadata ? JSON.parse(String(metadata)) as Record<string, unknown> : null,
+          created_at: Number(createdAt)
+        });
+        return { rows: [] };
+      }
+
+      if (sql.startsWith('SELECT * FROM repair_tasks WHERE app_key = $1 AND owner_user_id = $2')) {
+        return {
+          rows: Array.from(repairTasks.values())
+            .filter((task) => task.app_key === params[0] && task.owner_user_id === params[1])
+            .sort((left, right) => right.updated_at - left.updated_at)
+        };
+      }
+
+      if (sql.startsWith('SELECT * FROM repair_tasks WHERE id = $1 AND owner_user_id = $2')) {
+        const task = repairTasks.get(String(params[0]));
+        return { rows: task && task.owner_user_id === params[1] ? [task] : [] };
+      }
+
+      if (sql.startsWith('SELECT * FROM repair_task_notes WHERE task_id = $1')) {
+        return {
+          rows: repairTaskNotes
+            .filter((note) => note.task_id === params[0])
+            .sort((left, right) => left.created_at - right.created_at)
+        };
+      }
+
+      if (sql.startsWith('UPDATE repair_tasks SET status = $1')) {
+        const task = repairTasks.get(String(params[2]));
+        if (!task || task.owner_user_id !== params[3]) return { rows: [] };
+        task.status = String(params[0]);
+        task.updated_at = Number(params[1]);
+        task.completed_at = Number(params[1]);
+        return { rows: [task] };
+      }
+
       if (sql.startsWith('SELECT payload FROM events')) {
         return {
           rows: events
@@ -113,7 +216,7 @@ function createFakePostgresPool(events: StoredEvent[]) {
     }
   };
 
-  return { issues, pool: fakePool };
+  return { issues, pool: fakePool, repairTasks, repairTaskNotes };
 }
 
 describe('postgres store historical http issues', () => {
@@ -191,6 +294,43 @@ describe('postgres store historical http issues', () => {
       eventId: 'evt_http_1',
       type: 'http',
       status: 500
+    });
+  });
+
+  it('persists repair tasks and notes', async () => {
+    const { pool } = createFakePostgresPool([]);
+    const store = await createPostgresStore({ pool: pool as never });
+
+    const task = await store.createRepairTask({
+      issueId: 'demo-app:js:boom',
+      appKey: 'demo-app',
+      ownerUserId: 'user_1',
+      agent: 'hermes',
+      repoUrl: 'git@github.com:example/demo.git',
+      baseBranch: 'main',
+      createdAt: 1710000000000
+    });
+    const tasks = await store.listRepairTasks('demo-app', 'user_1');
+    const detail = await store.getRepairTaskDetail(task.id, 'user_1');
+    const canceled = await store.cancelRepairTask(task.id, 'user_1', 1710000001000);
+
+    expect(task).toMatchObject({
+      issueId: 'demo-app:js:boom',
+      appKey: 'demo-app',
+      status: 'pending',
+      agent: 'hermes'
+    });
+    expect(tasks).toHaveLength(1);
+    expect(detail.notes).toMatchObject([
+      {
+        actor: 'healthguard',
+        message: 'Repair task created.'
+      }
+    ]);
+    expect(canceled).toMatchObject({
+      id: task.id,
+      status: 'canceled',
+      completedAt: 1710000001000
     });
   });
 });
