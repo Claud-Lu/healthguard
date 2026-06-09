@@ -3,6 +3,23 @@ import { createServerApp } from './app';
 import { createMemoryStore } from './store';
 
 describe('collector api', () => {
+  it('exposes a health check under the api prefix for reverse proxies', async () => {
+    const app = createServerApp(createMemoryStore());
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/health'
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      ok: true,
+      service: 'healthguard-server'
+    });
+
+    await app.close();
+  });
+
   it('registers a local user, returns a session token, and exposes the profile', async () => {
     const app = createServerApp(createMemoryStore());
 

@@ -20,10 +20,13 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
     timeWindow: '1 minute'
   });
 
-  app.get('/health', async () => ({
+  const healthPayload = {
     ok: true,
     service: 'healthguard-server'
-  }));
+  };
+
+  app.get('/health', async () => healthPayload);
+  app.get('/api/health', async () => healthPayload);
 
   app.post<{ Body: { email?: string; password?: string } }>('/api/auth/register', async (request, reply) => {
     const credentials = normalizeCredentials(request.body);
