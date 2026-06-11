@@ -567,15 +567,14 @@ export default {
             h('small', appKey.value),
             h('pre', sdkSnippet.value)
           ]),
-          h('div', { class: 'sidebar-version' }, [
-            h('small', `v${__APP_VERSION__}`)
-          ])
+          h('div', { class: 'sidebar-version' }, [])
         ]),
 
         h('section', { class: 'content detail-content' }, [
           h('header', { class: 'topbar' }, [
             h('div', [h('h1', selectedApp.value.name), h('p', t.inspectSubtitle)]),
             h('div', { class: 'topbar-actions' }, [
+              h('span', { class: 'version-badge' }, `v${__APP_VERSION__}`),
               h('button', { type: 'button', class: 'outline-button', onClick: () => { void loadProjectData(); }, disabled: store.loading }, t.refresh),
               h('button', { type: 'button', class: 'outline-button', onClick: () => router.push('/projects') }, t.projectList)
             ]),
