@@ -11,7 +11,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@healthguard/sdk-web': fileURLToPath(new URL('../../packages/sdk-web/src/index.ts', import.meta.url))
+      '@health-guard/sdk-web': fileURLToPath(new URL('../../packages/sdk-web/src/index.ts', import.meta.url))
     }
   },
   server: {

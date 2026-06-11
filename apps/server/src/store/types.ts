@@ -1,4 +1,4 @@
-import type { ErrorEvent, HealthGuardEvent } from '@healthguard/core';
+import type { ErrorEvent, HealthGuardEvent } from '@health-guard/core';
 
 export type AppType = 'web' | 'wechat-miniprogram' | 'alipay-miniprogram' | 'flutter' | 'uni-app' | 'other';
 

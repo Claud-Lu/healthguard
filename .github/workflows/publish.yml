@@ -1,0 +1,43 @@
+name: Publish npm packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.14.0'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Use latest npm
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Verify
+        run: |
+          yarn test
+          yarn type-check
+          yarn lint
+          yarn build
+
+      - name: Publish packages
+        run: |
+          npm publish ./packages/core --access public --provenance
+          npm publish ./packages/sdk-web --access public --provenance
+          npm publish ./packages/sdk-miniprogram --access public --provenance
+          npm publish ./packages/sdk-uniapp --access public --provenance

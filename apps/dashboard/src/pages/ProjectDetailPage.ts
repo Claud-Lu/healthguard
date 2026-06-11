@@ -2,7 +2,7 @@ import { computed, h, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { store, messages, loadApps } from '../globalStore';
 import { apiUrl, formatTime, requestJson } from '../api';
-import { extractPathname } from '@healthguard/core';
+import { extractPathname } from '@health-guard/core';
 import type { IssueSummary, OverviewTotals, RepairTask, RepairTaskAgent } from '../globalStore';
 
 const platforms = ['web', 'wechat-miniprogram', 'alipay-miniprogram', 'flutter', 'uniapp-h5', 'uniapp-wechat', 'uniapp-alipay', 'uniapp-douyin', 'uniapp-app', 'uniapp'];
@@ -41,7 +41,7 @@ export default {
     const sdkSnippet = computed(() => {
       const endpoint = apiUrl('/events/batch');
       if (selectedApp.value?.type === 'uni-app') {
-        return `import { createUniAppClient } from '@healthguard/sdk-uniapp';\n\nconst client = createUniAppClient({\n  appKey: '${appKey.value}',\n  endpoint: '${endpoint}',\n  autoCapture: true\n});`;
+        return `import { createUniAppClient } from '@health-guard/sdk-uniapp';\n\nconst client = createUniAppClient({\n  appKey: '${appKey.value}',\n  endpoint: '${endpoint}',\n  autoCapture: true\n});`;
       }
       if (selectedApp.value?.type === 'flutter') {
         return `flutter build apk --release \\\n  --dart-define=HEALTHGUARD_ENDPOINT=${endpoint} \\\n  --dart-define=HEALTHGUARD_APP_KEY=${appKey.value} \\\n  --dart-define=HEALTHGUARD_ENV=production`;

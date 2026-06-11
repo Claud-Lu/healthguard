@@ -54,11 +54,11 @@ docker-compose up -d
 ### H5 / 浏览器
 
 ```bash
-npm install @healthguard/sdk-web
+npm install @health-guard/sdk-web
 ```
 
 ```ts
-import { createHealthGuardClient } from '@healthguard/sdk-web';
+import { createHealthGuardClient } from '@health-guard/sdk-web';
 
 const client = createHealthGuardClient({
   appKey: 'your-app-key',
@@ -70,7 +70,7 @@ const client = createHealthGuardClient({
 ### 微信小程序
 
 ```ts
-import { createMiniProgramClient } from '@healthguard/sdk-miniprogram';
+import { createMiniProgramClient } from '@health-guard/sdk-miniprogram';
 
 const client = createMiniProgramClient({
   appKey: 'your-app-key',
@@ -83,7 +83,7 @@ const client = createMiniProgramClient({
 ### uni-app（一端接入，多端运行）
 
 ```ts
-import { createUniAppClient } from '@healthguard/sdk-uniapp';
+import { createUniAppClient } from '@health-guard/sdk-uniapp';
 
 const client = createUniAppClient({
   appKey: 'your-app-key',

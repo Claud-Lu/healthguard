@@ -14,8 +14,8 @@ describe('sdk-miniprogram bundle boundary', () => {
       module?: string;
     };
 
-    expect(source).not.toContain("from '@healthguard/core'");
-    expect(manifest.dependencies ?? {}).not.toHaveProperty('@healthguard/core');
+    expect(source).not.toContain("from '@health-guard/core'");
+    expect(manifest.dependencies ?? {}).not.toHaveProperty('@health-guard/core');
     expect(manifest.main).toBe('dist/index.cjs');
     expect(manifest.exports?.['.']?.require).toBe('./dist/index.cjs');
     expect(manifest.exports?.['.']?.default).toBe('./dist/index.cjs');

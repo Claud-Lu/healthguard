@@ -4,5 +4,5 @@ export default defineConfig({
   entry: ['src/index.ts'],
   format: ['esm', 'cjs'],
   dts: true,
-  noExternal: ['@healthguard/core']
+  noExternal: ['@health-guard/core']
 });

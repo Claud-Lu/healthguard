@@ -36,17 +36,17 @@
 ## [0.1.0] - 2026-05-01
 
 ### 新增
-- H5/Web SDK（`@healthguard/sdk-web`）
+- H5/Web SDK（`@health-guard/sdk-web`）
   - JavaScript 错误自动捕获
   - HTTP 请求失败监控（fetch + XHR）
   - Promise rejection 捕获
   - 性能指标采集
-- 微信小程序 SDK（`@healthguard/sdk-miniprogram`）
+- 微信小程序 SDK（`@health-guard/sdk-miniprogram`）
   - 运行时错误捕获
   - Promise rejection 捕获
   - `wx.request` 请求监控
   - 页面生命周期面包屑
-- uni-app 多端 SDK（`@healthguard/sdk-uniapp`）
+- uni-app 多端 SDK（`@health-guard/sdk-uniapp`）
   - 支持 H5、微信、支付宝、抖音、App 等平台
   - 自动检测运行环境并适配
   - 设备信息和页面 URL 检测

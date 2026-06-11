@@ -4,7 +4,7 @@ import {
   type Breadcrumb,
   type ErrorEvent as HealthGuardErrorEvent,
   type EventBatch
-} from '@healthguard/core';
+} from '@health-guard/core';
 
 const SDK_VERSION = '0.1.0';
 

@@ -3,7 +3,7 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { nanoid } from 'nanoid';
-import { parseEventBatch, type EventBatch } from '@healthguard/core';
+import { parseEventBatch, type EventBatch } from '@health-guard/core';
 import type { AppType, IssueQuery, IssueStatusFilter, RepairTaskAgent, Store, UserRecord } from './store';
 
 export function createServerApp(store: Store, options?: { corsOrigin?: string | boolean }): FastifyInstance {

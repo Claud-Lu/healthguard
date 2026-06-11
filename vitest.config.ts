@@ -7,9 +7,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@healthguard/core': '/packages/core/src/index.ts',
-      '@healthguard/sdk-web': '/packages/sdk-web/src/index.ts',
-      '@healthguard/sdk-uniapp': '/packages/sdk-uniapp/src/index.ts',
+      '@health-guard/core': '/packages/core/src/index.ts',
+      '@health-guard/sdk-web': '/packages/sdk-web/src/index.ts',
+      '@health-guard/sdk-uniapp': '/packages/sdk-uniapp/src/index.ts',
       '@healthguard/server': '/apps/server/src/index.ts'
     }
   }

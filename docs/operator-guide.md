@@ -52,10 +52,10 @@ Refreshing the dashboard keeps the current project detail only when a project is
 
 ## Integrate The Web SDK
 
-Install or link `@healthguard/sdk-web`, then initialize the client in the target web application:
+Install `@health-guard/sdk-web`, then initialize the client in the target web application:
 
 ```ts
-import { createHealthGuardClient } from '@healthguard/sdk-web';
+import { createHealthGuardClient } from '@health-guard/sdk-web';
 
 createHealthGuardClient({
   appKey: '<PROJECT_APP_KEY>',

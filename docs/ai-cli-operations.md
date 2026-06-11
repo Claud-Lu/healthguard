@@ -94,6 +94,12 @@ yarn workspace @healthguard/server build
 
 Deployment paths, hostnames, SSH aliases, and real app keys are environment-specific. Do not add them to this repository.
 
+## npm Publishing Pattern
+
+Public SDK packages use the `@health-guard` npm organization scope. See `docs/npm-publishing.md` for the full publishing checklist.
+
+Never commit npm tokens. The GitHub Actions workflow `.github/workflows/publish.yml` is designed for npm Trusted Publishing and only runs on `v*` tags from the trusted repository.
+
 ## Integration Pattern For A Consuming Web App
 
 Use environment variables in the consuming app:
@@ -106,7 +112,7 @@ VITE_HEALTHGUARD_APP_KEY=<PROJECT_APP_KEY>
 Initialize the SDK:
 
 ```ts
-import { createHealthGuardClient } from '@healthguard/sdk-web';
+import { createHealthGuardClient } from '@health-guard/sdk-web';
 
 createHealthGuardClient({
   appKey: import.meta.env.VITE_HEALTHGUARD_APP_KEY,

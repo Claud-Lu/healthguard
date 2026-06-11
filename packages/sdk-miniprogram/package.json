@@ -1,7 +1,8 @@
 {
-  "name": "@healthguard/sdk-miniprogram",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@health-guard/sdk-miniprogram",
+  "version": "0.2.0",
+  "description": "HealthGuard SDK for mini program runtimes.",
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -14,6 +15,20 @@
       "default": "./dist/index.cjs"
     }
   },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Claud-Lu/healthguard.git",
+    "directory": "packages/sdk-miniprogram"
+  },
+  "homepage": "https://github.com/Claud-Lu/healthguard#readme",
   "scripts": {
     "build": "tsup",
     "test": "vitest run --root ../.. packages/sdk-miniprogram/src/index.test.ts packages/sdk-miniprogram/src/bundle-boundary.test.ts"

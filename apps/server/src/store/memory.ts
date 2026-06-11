@@ -1,5 +1,5 @@
-import { createHttpFingerprint, extractPathname } from '@healthguard/core';
-import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@healthguard/core';
+import { createHttpFingerprint, extractPathname } from '@health-guard/core';
+import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@health-guard/core';
 import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskNote } from './types';
 
 export interface MemoryStoreState {

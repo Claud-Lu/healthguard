@@ -1,10 +1,34 @@
 {
-  "name": "@healthguard/core",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@health-guard/core",
+  "version": "0.2.0",
+  "description": "Shared event schema and helpers for HealthGuard.",
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Claud-Lu/healthguard.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/Claud-Lu/healthguard#readme",
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts",
     "test": "vitest run"

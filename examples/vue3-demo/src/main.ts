@@ -1,5 +1,5 @@
 import { createApp, h, ref } from 'vue';
-import { createHealthGuardClient } from '@healthguard/sdk-web';
+import { createHealthGuardClient } from '@health-guard/sdk-web';
 import './style.css';
 
 const appKey = 'demo-web';

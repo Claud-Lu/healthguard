@@ -8,7 +8,7 @@
     "dev": "vite --host 0.0.0.0 --port 5174"
   },
   "dependencies": {
-    "@healthguard/sdk-web": "0.1.0"
+    "@health-guard/sdk-web": "0.2.0"
   },
   "devDependencies": {}
 }
