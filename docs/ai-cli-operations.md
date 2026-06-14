@@ -94,6 +94,15 @@ yarn workspace @healthguard/server build
 
 Deployment paths, hostnames, SSH aliases, and real app keys are environment-specific. Do not add them to this repository.
 
+Configure repair-agent access with a deployment secret:
+
+```bash
+export HEALTHGUARD_AGENT_TOKEN='<STRONG_RANDOM_TOKEN>'
+docker compose up -d
+```
+
+Agents must call `/api/agent/repair-tasks/*` with `Authorization: Bearer <HEALTHGUARD_AGENT_TOKEN>`. The token is for trusted repair runners only; never commit real values, paste them into issues, or add them to public examples.
+
 ## npm Publishing Pattern
 
 Public SDK packages use the `@health-guard` npm organization scope. See `docs/npm-publishing.md` for the full publishing checklist.
@@ -128,6 +137,8 @@ If the consuming app is served over HTTPS, use an HTTPS collector endpoint or an
 ## Troubleshooting
 
 - `Request failed: 400` during auth: read the response `code`; the dashboard should map it to a localized message.
+- Agent repair APIs return `401`: confirm `HEALTHGUARD_AGENT_TOKEN` is set on the server and the agent sends the same value as a bearer token.
+- Agent claim returns `409`: another agent already claimed the task or the task is no longer pending.
 - Project list is empty: the logged-in user has not created a project yet, or the in-memory collector restarted.
 - Dashboard refresh shows the project list: this is expected when no project is selected. Select a project to inspect its detail data.
 - No events appear: confirm endpoint, app key, browser mixed-content rules, and network requests to `/events/batch`.

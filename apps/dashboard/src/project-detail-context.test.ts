@@ -39,5 +39,7 @@ describe('project detail mini-program context rendering', () => {
     expect(source).toContain("apiUrl('/repair-tasks')");
     expect(source).toContain('Create repair task');
     expect(source).toContain('Repair Tasks');
+    expect(source).toContain('task.summary');
+    expect(source).toContain('task.failureReason');
   });
 });

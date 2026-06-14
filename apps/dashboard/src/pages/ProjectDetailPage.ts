@@ -380,6 +380,8 @@ export default {
                   h('div', { class: 'repair-task-main' }, [
                     h('strong', task.issueId),
                     h('span', `${task.agent} / ${task.baseBranch}`),
+                    task.summary ? h('p', { class: 'repair-task-summary' }, task.summary) : null,
+                    task.failureReason ? h('p', { class: 'repair-task-failure' }, task.failureReason) : null,
                     h('small', formatTime(task.updatedAt))
                   ]),
                   h('span', { class: `repair-status repair-status-${task.status}` }, task.status),

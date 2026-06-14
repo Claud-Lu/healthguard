@@ -7,8 +7,16 @@
 
 ## [Unreleased]
 
+### 新增
+- 补齐 Repair Task Agent API：支持 Agent token 鉴权、pending 轮询、原子 claim、结构化 payload 读取和状态回写。
+- Dashboard 修复任务列表展示 Agent 回写的 summary 与 failureReason。
+
 ### 修复
 - 补充 `/api/health` 兼容健康检查端点，适配公司 21 环境的 `/healthguard-api/health` 反向代理。
+- 修复已注册项目的 Issue 详情可被其他登录用户读取的租户隔离问题。
+
+### 文档
+- 增加 `HEALTHGUARD_AGENT_TOKEN` 部署配置和 Agent API 排障说明。
 
 ## [0.2.0] - 2026-06-09
 

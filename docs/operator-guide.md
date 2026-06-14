@@ -77,6 +77,16 @@ Do not hard-code private company domains, internal IPs, business project names, 
 5. Refresh the dashboard.
 6. Confirm that event, error, failed request, or issue counts update.
 
+## Configure Repair Agents
+
+Repair agent APIs use a separate server-side bearer token instead of a dashboard session token.
+
+1. Generate a strong random token in your private deployment secret store.
+2. Set `HEALTHGUARD_AGENT_TOKEN` in the server environment.
+3. Configure Hermes, Codex, or another trusted agent runner to call `/api/agent/repair-tasks/*` with `Authorization: Bearer <HEALTHGUARD_AGENT_TOKEN>`.
+
+Do not commit the real token. The repository `docker-compose.yml` reads `HEALTHGUARD_AGENT_TOKEN` from the shell environment and leaves it blank when unset.
+
 ## Current Limitations
 
 - Metadata and events are in-memory only.
@@ -89,3 +99,4 @@ Do not hard-code private company domains, internal IPs, business project names, 
 
 - The default `docker-compose.yml` uses hardcoded database credentials (`healthguard:healthguard`) for development convenience. **Before deploying to production, change `POSTGRES_PASSWORD` and the corresponding `DATABASE_URL` to strong, unique passwords.**
 - `CORS_ORIGIN` is set to `*` by default. Restrict it to your actual domain in production.
+- `HEALTHGUARD_AGENT_TOKEN` protects repair-agent polling, claim, payload, and status update APIs. Keep it in deployment secrets and rotate it if an agent machine is compromised.

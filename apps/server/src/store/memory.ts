@@ -1,6 +1,8 @@
 import { createHttpFingerprint, extractPathname } from '@health-guard/core';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@health-guard/core';
-import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskNote } from './types';
+import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskAgent, RepairTaskNote, UpdateRepairTaskInput } from './types';
+
+const TERMINAL_REPAIR_STATUSES = ['closed', 'failed', 'canceled'] as const;
 
 export interface MemoryStoreState {
   users: UserRecord[];
@@ -48,6 +50,10 @@ export function createMemoryStore(): Store {
 
     async createApp(app: AppRecord): Promise<void> {
       state.apps.push(app);
+    },
+
+    async findAppByKey(appKey: string): Promise<AppRecord | null> {
+      return state.apps.find((record) => record.appKey === appKey) ?? null;
     },
 
     async listAppsByUser(userId: string): Promise<AppRecord[]> {
@@ -211,6 +217,16 @@ export function createMemoryStore(): Store {
       return { task, notes };
     },
 
+    async getRepairTaskForAgent(id: string): Promise<{ task: RepairTask | null; notes: RepairTaskNote[] }> {
+      const task = state.repairTasks.find((record) => record.id === id) ?? null;
+      if (!task) return { task: null, notes: [] };
+      const notes = state.repairTaskNotes
+        .filter((note) => note.taskId === id)
+        .sort((left, right) => left.createdAt - right.createdAt);
+
+      return { task, notes };
+    },
+
     async cancelRepairTask(id: string, ownerUserId: string, canceledAt: number): Promise<RepairTask | null> {
       const task = state.repairTasks.find((record) => record.id === id && record.ownerUserId === ownerUserId) ?? null;
       if (!task) return null;
@@ -226,6 +242,60 @@ export function createMemoryStore(): Store {
         message: 'Repair task canceled.',
         createdAt: canceledAt
       });
+
+      return task;
+    },
+
+    async listPendingRepairTasks(agent?: RepairTaskAgent, limit = 20): Promise<RepairTask[]> {
+      return state.repairTasks
+        .filter((task) => task.status === 'pending' && (agent === undefined || task.agent === agent))
+        .sort((left, right) => left.createdAt - right.createdAt)
+        .slice(0, limit);
+    },
+
+    async claimRepairTask(id: string, _agentRunId: string | undefined, claimedAt: number): Promise<RepairTask | null> {
+      const task = state.repairTasks.find((record) => record.id === id) ?? null;
+      if (!task || task.status !== 'pending') return null;
+
+      task.status = 'claimed';
+      task.claimedAt = claimedAt;
+      task.updatedAt = claimedAt;
+      state.repairTaskNotes.push({
+        id: `repair_note_${state.repairTaskNotes.length + 1}`,
+        taskId: task.id,
+        actor: task.agent,
+        message: 'Repair task claimed by agent.',
+        createdAt: claimedAt
+      });
+
+      return task;
+    },
+
+    async updateRepairTask(input: UpdateRepairTaskInput): Promise<RepairTask | null> {
+      const task = state.repairTasks.find((record) => record.id === input.id) ?? null;
+      if (!task) return null;
+
+      if (input.status !== undefined) task.status = input.status;
+      if (input.repairBranch !== undefined) task.repairBranch = input.repairBranch;
+      if (input.prUrl !== undefined) task.prUrl = input.prUrl;
+      if (input.commitSha !== undefined) task.commitSha = input.commitSha;
+      if (input.summary !== undefined) task.summary = input.summary;
+      if (input.failureReason !== undefined) task.failureReason = input.failureReason;
+      task.updatedAt = input.updatedAt;
+      if (input.status !== undefined && (TERMINAL_REPAIR_STATUSES as readonly string[]).includes(input.status)) {
+        task.completedAt = input.completedAt ?? input.updatedAt;
+      }
+
+      if (input.note) {
+        state.repairTaskNotes.push({
+          id: `repair_note_${state.repairTaskNotes.length + 1}`,
+          taskId: task.id,
+          actor: input.note.actor,
+          message: input.note.message,
+          metadata: input.note.metadata,
+          createdAt: input.updatedAt
+        });
+      }
 
       return task;
     }

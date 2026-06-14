@@ -874,4 +874,217 @@ describe('collector api', () => {
 
     await app.close();
   });
+
+  it('lets an agent list, claim, inspect payload, and update a repair task', async () => {
+    const app = createServerApp(createMemoryStore(), { agentToken: 'test-agent-token' });
+
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const headers = { authorization: `Bearer ${register.json().token}` };
+
+    const createdApp = await app.inject({
+      method: 'POST',
+      url: '/api/apps',
+      headers,
+      payload: { name: 'Agent Demo', type: 'web' }
+    });
+    const appKey = createdApp.json().app.appKey;
+    await app.inject({
+      method: 'POST',
+      url: '/api/events/batch',
+      payload: {
+        appKey,
+        events: [
+          {
+            eventId: 'evt_agent',
+            appKey,
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710000000000,
+            sessionId: 'session-1',
+            anonymousId: 'anon-1',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'agent repair me',
+            fingerprint: 'js:agent',
+            breadcrumbs: []
+          }
+        ]
+      }
+    });
+    const create = await app.inject({
+      method: 'POST',
+      url: '/api/repair-tasks',
+      headers,
+      payload: {
+        issueId: `${appKey}:js:agent`,
+        agent: 'codex',
+        repoUrl: 'git@github.com:example/agent-demo.git',
+        baseBranch: 'main'
+      }
+    });
+    const taskId = create.json().task.id;
+    const agentHeaders = { authorization: 'Bearer test-agent-token' };
+
+    const unauthorized = await app.inject({
+      method: 'GET',
+      url: '/api/agent/repair-tasks/pending?agent=codex'
+    });
+    const pending = await app.inject({
+      method: 'GET',
+      url: '/api/agent/repair-tasks/pending?agent=codex',
+      headers: agentHeaders
+    });
+    const claim = await app.inject({
+      method: 'POST',
+      url: `/api/agent/repair-tasks/${taskId}/claim`,
+      headers: agentHeaders,
+      payload: { agentRunId: 'run-123' }
+    });
+    const secondClaim = await app.inject({
+      method: 'POST',
+      url: `/api/agent/repair-tasks/${taskId}/claim`,
+      headers: agentHeaders,
+      payload: { agentRunId: 'run-456' }
+    });
+    const payload = await app.inject({
+      method: 'GET',
+      url: `/api/agent/repair-tasks/${taskId}/payload`,
+      headers: agentHeaders
+    });
+    const status = await app.inject({
+      method: 'POST',
+      url: `/api/agent/repair-tasks/${taskId}/status`,
+      headers: agentHeaders,
+      payload: {
+        status: 'failed',
+        message: 'Tests failed before a fix could be produced.',
+        summary: 'Investigated the failing issue.',
+        failureReason: 'Verification command failed.',
+        metadata: { command: 'yarn test' }
+      }
+    });
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/repair-tasks/${taskId}`,
+      headers
+    });
+
+    expect(unauthorized.statusCode).toBe(401);
+    expect(pending.statusCode).toBe(200);
+    expect(pending.json().tasks).toHaveLength(1);
+    expect(pending.json().tasks[0]).toMatchObject({ id: taskId, agent: 'codex', status: 'pending' });
+    expect(claim.statusCode).toBe(200);
+    expect(claim.json().task).toMatchObject({ id: taskId, status: 'claimed', claimedAt: expect.any(Number) });
+    expect(secondClaim.statusCode).toBe(409);
+    expect(payload.statusCode).toBe(200);
+    expect(payload.json()).toMatchObject({
+      task: { id: taskId },
+      issue: { id: `${appKey}:js:agent`, message: 'agent repair me' },
+      project: { appKey, name: 'Agent Demo', type: 'web' },
+      instructions: {
+        repoUrl: 'git@github.com:example/agent-demo.git',
+        baseBranch: 'main'
+      }
+    });
+    expect(payload.json().events).toHaveLength(1);
+    expect(status.statusCode).toBe(200);
+    expect(status.json().task).toMatchObject({
+      id: taskId,
+      status: 'failed',
+      summary: 'Investigated the failing issue.',
+      failureReason: 'Verification command failed.',
+      completedAt: expect.any(Number)
+    });
+    expect(detail.json().notes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ actor: 'codex', message: 'Repair task claimed by agent.' }),
+        expect.objectContaining({ actor: 'codex', message: 'Tests failed before a fix could be produced.' })
+      ])
+    );
+
+    await app.close();
+  });
+
+  it('requires valid agent status updates and keeps issue detail tenant-scoped', async () => {
+    const app = createServerApp(createMemoryStore(), { agentToken: 'test-agent-token' });
+
+    const owner = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const other = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'other@example.com', password: 'secret123' }
+    });
+    const ownerHeaders = { authorization: `Bearer ${owner.json().token}` };
+    const otherHeaders = { authorization: `Bearer ${other.json().token}` };
+
+    const createdApp = await app.inject({
+      method: 'POST',
+      url: '/api/apps',
+      headers: ownerHeaders,
+      payload: { name: 'Private App', type: 'web' }
+    });
+    const appKey = createdApp.json().app.appKey;
+    await app.inject({
+      method: 'POST',
+      url: '/api/events/batch',
+      payload: {
+        appKey,
+        events: [
+          {
+            eventId: 'evt_private_detail',
+            appKey,
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710000000000,
+            sessionId: 'session-1',
+            anonymousId: 'anon-1',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'private detail',
+            fingerprint: 'js:private-detail',
+            breadcrumbs: []
+          }
+        ]
+      }
+    });
+    const create = await app.inject({
+      method: 'POST',
+      url: '/api/repair-tasks',
+      headers: ownerHeaders,
+      payload: {
+        issueId: `${appKey}:js:private-detail`,
+        agent: 'hermes',
+        repoUrl: 'git@github.com:example/private.git',
+        baseBranch: 'main'
+      }
+    });
+    const taskId = create.json().task.id;
+    const otherIssueDetail = await app.inject({
+      method: 'GET',
+      url: `/api/issues/${encodeURIComponent(`${appKey}:js:private-detail`)}`,
+      headers: otherHeaders
+    });
+    const invalidStatus = await app.inject({
+      method: 'POST',
+      url: `/api/agent/repair-tasks/${taskId}/status`,
+      headers: { authorization: 'Bearer test-agent-token' },
+      payload: {
+        status: 'pending',
+        message: 'rewind'
+      }
+    });
+
+    expect(otherIssueDetail.statusCode).toBe(404);
+    expect(invalidStatus.statusCode).toBe(400);
+
+    await app.close();
+  });
 });

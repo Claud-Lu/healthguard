@@ -35,6 +35,7 @@ services:
       DATABASE_URL: postgres://healthguard:healthguard@postgres:5432/healthguard
       CORS_ORIGIN: "*"
       LOG_LEVEL: info
+      HEALTHGUARD_AGENT_TOKEN: ${HEALTHGUARD_AGENT_TOKEN:-}
     ports:
       - "3100:3100"
 

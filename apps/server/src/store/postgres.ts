@@ -2,7 +2,9 @@ import type { Pool, PoolClient } from 'pg';
 import { nanoid } from 'nanoid';
 import { createHttpFingerprint, extractPathname } from '@health-guard/core';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@health-guard/core';
-import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskNote } from './types';
+import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskAgent, RepairTaskNote, UpdateRepairTaskInput } from './types';
+
+const TERMINAL_REPAIR_STATUSES = ['closed', 'failed', 'canceled'] as const;
 
 function httpIssueMessage(event: { method: string; url: string; errorMessage?: string }): string {
   const pathname = extractPathname(event.url);
@@ -62,6 +64,12 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
         'INSERT INTO apps (id, name, app_key, type, owner_user_id, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
         [app.id, app.name, app.appKey, app.type, app.ownerUserId, app.createdAt]
       );
+    },
+
+    async findAppByKey(appKey: string): Promise<AppRecord | null> {
+      const result = await pool.query('SELECT * FROM apps WHERE app_key = $1', [appKey]);
+      if (result.rows.length === 0) return null;
+      return rowToApp(result.rows[0]);
     },
 
     async listAppsByUser(userId: string): Promise<AppRecord[]> {
@@ -423,6 +431,19 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       };
     },
 
+    async getRepairTaskForAgent(id: string): Promise<{ task: RepairTask | null; notes: RepairTaskNote[] }> {
+      const taskResult = await pool.query('SELECT * FROM repair_tasks WHERE id = $1', [id]);
+      if (taskResult.rows.length === 0) {
+        return { task: null, notes: [] };
+      }
+
+      const notesResult = await pool.query('SELECT * FROM repair_task_notes WHERE task_id = $1 ORDER BY created_at ASC', [id]);
+      return {
+        task: rowToRepairTask(taskResult.rows[0]),
+        notes: notesResult.rows.map(rowToRepairTaskNote)
+      };
+    },
+
     async cancelRepairTask(id: string, ownerUserId: string, canceledAt: number): Promise<RepairTask | null> {
       const existing = await pool.query('SELECT * FROM repair_tasks WHERE id = $1 AND owner_user_id = $2', [id, ownerUserId]);
       if (existing.rows.length === 0) return null;
@@ -442,6 +463,99 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
         [createId('repair_note'), id, 'user', 'Repair task canceled.', null, canceledAt]
       );
       return result.rows.length === 0 ? null : rowToRepairTask(result.rows[0]);
+    },
+
+    async listPendingRepairTasks(agent?: RepairTaskAgent, limit = 20): Promise<RepairTask[]> {
+      const result = agent
+        ? await pool.query(
+            "SELECT * FROM repair_tasks WHERE status = 'pending' AND agent = $1 ORDER BY created_at ASC LIMIT $2",
+            [agent, limit]
+          )
+        : await pool.query(
+            "SELECT * FROM repair_tasks WHERE status = 'pending' ORDER BY created_at ASC LIMIT $1",
+            [limit]
+          );
+      return result.rows.map(rowToRepairTask);
+    },
+
+    async claimRepairTask(id: string, agentRunId: string | undefined, claimedAt: number): Promise<RepairTask | null> {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const claimed = await client.query(
+          "UPDATE repair_tasks SET status = 'claimed', claimed_at = $2, updated_at = $2 WHERE id = $1 AND status = 'pending' RETURNING *",
+          [id, claimedAt]
+        );
+        if (claimed.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return null;
+        }
+        const message = agentRunId ? `Repair task claimed by agent (run ${agentRunId}).` : 'Repair task claimed by agent.';
+        await client.query(
+          `INSERT INTO repair_task_notes (id, task_id, actor, message, metadata, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [createId('repair_note'), id, rowToRepairTask(claimed.rows[0]).agent, message, agentRunId ? { agentRunId } : null, claimedAt]
+        );
+        await client.query('COMMIT');
+        return rowToRepairTask(claimed.rows[0]);
+      } catch (err) {
+        try { await client.query('ROLLBACK'); } catch { /* ignore rollback failure */ }
+        throw err;
+      } finally {
+        client.release();
+      }
+    },
+
+    async updateRepairTask(input: UpdateRepairTaskInput): Promise<RepairTask | null> {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const sets: string[] = [];
+        const values: unknown[] = [];
+        let idx = 1;
+        const push = (column: string, value: unknown): void => {
+          sets.push(`${column} = $${idx}`);
+          values.push(value);
+          idx += 1;
+        };
+
+        if (input.status !== undefined) push('status', input.status);
+        if (input.repairBranch !== undefined) push('repair_branch', input.repairBranch);
+        if (input.prUrl !== undefined) push('pr_url', input.prUrl);
+        if (input.commitSha !== undefined) push('commit_sha', input.commitSha);
+        if (input.summary !== undefined) push('summary', input.summary);
+        if (input.failureReason !== undefined) push('failure_reason', input.failureReason);
+        push('updated_at', input.updatedAt);
+        if (input.status !== undefined && (TERMINAL_REPAIR_STATUSES as readonly string[]).includes(input.status)) {
+          push('completed_at', input.completedAt ?? input.updatedAt);
+        }
+
+        values.push(input.id);
+        const result = await client.query(
+          `UPDATE repair_tasks SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
+          values
+        );
+        if (result.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return null;
+        }
+
+        if (input.note) {
+          await client.query(
+            `INSERT INTO repair_task_notes (id, task_id, actor, message, metadata, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [createId('repair_note'), input.id, input.note.actor, input.note.message, input.note.metadata ?? null, input.updatedAt]
+          );
+        }
+
+        await client.query('COMMIT');
+        return rowToRepairTask(result.rows[0]);
+      } catch (err) {
+        try { await client.query('ROLLBACK'); } catch { /* ignore rollback failure */ }
+        throw err;
+      } finally {
+        client.release();
+      }
     },
 
     async cleanup(retentionDays = 30): Promise<{ deletedEvents: number; deletedSessions: number }> {

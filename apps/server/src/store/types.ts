@@ -71,7 +71,7 @@ export interface RepairTask {
 export interface RepairTaskNote {
   id: string;
   taskId: string;
-  actor: 'healthguard' | 'hermes' | 'codex' | 'claude-code' | 'user';
+  actor: 'healthguard' | 'hermes' | 'codex' | 'claude-code' | 'manual' | 'user';
   message: string;
   metadata?: Record<string, unknown>;
   createdAt: number;
@@ -85,6 +85,19 @@ export interface CreateRepairTaskInput {
   repoUrl: string;
   baseBranch: string;
   createdAt: number;
+}
+
+export interface UpdateRepairTaskInput {
+  id: string;
+  status?: RepairTaskStatus;
+  repairBranch?: string;
+  prUrl?: string;
+  commitSha?: string;
+  summary?: string;
+  failureReason?: string;
+  note?: { actor: RepairTaskNote['actor']; message: string; metadata?: Record<string, unknown> };
+  updatedAt: number;
+  completedAt?: number;
 }
 
 export type IssueStatusFilter = 'open' | 'archived' | 'all';
@@ -108,6 +121,7 @@ export interface Store {
   findUserBySessionToken(token: string): Promise<UserRecord | null>;
 
   createApp(app: AppRecord): Promise<void>;
+  findAppByKey(appKey: string): Promise<AppRecord | null>;
   listAppsByUser(userId: string): Promise<AppRecord[]>;
 
   ingestEvents(events: HealthGuardEvent[]): Promise<void>;
@@ -120,6 +134,10 @@ export interface Store {
   createRepairTask(input: CreateRepairTaskInput): Promise<RepairTask>;
   listRepairTasks(appKey: string, ownerUserId: string): Promise<RepairTask[]>;
   getRepairTaskDetail(id: string, ownerUserId: string): Promise<{ task: RepairTask | null; notes: RepairTaskNote[] }>;
+  getRepairTaskForAgent(id: string): Promise<{ task: RepairTask | null; notes: RepairTaskNote[] }>;
   cancelRepairTask(id: string, ownerUserId: string, canceledAt: number): Promise<RepairTask | null>;
+  listPendingRepairTasks(agent?: RepairTaskAgent, limit?: number): Promise<RepairTask[]>;
+  claimRepairTask(id: string, agentRunId: string | undefined, claimedAt: number): Promise<RepairTask | null>;
+  updateRepairTask(input: UpdateRepairTaskInput): Promise<RepairTask | null>;
   cleanup?(retentionDays?: number): Promise<{ deletedEvents: number; deletedSessions: number }>;
 }

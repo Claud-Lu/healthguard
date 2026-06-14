@@ -4,9 +4,9 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { nanoid } from 'nanoid';
 import { parseEventBatch, type EventBatch } from '@health-guard/core';
-import type { AppType, IssueQuery, IssueStatusFilter, RepairTaskAgent, Store, UserRecord } from './store';
+import type { AppType, IssueQuery, IssueStatusFilter, RepairTaskAgent, RepairTaskStatus, Store, UserRecord } from './store';
 
-export function createServerApp(store: Store, options?: { corsOrigin?: string | boolean }): FastifyInstance {
+export function createServerApp(store: Store, options?: { corsOrigin?: string | boolean; agentToken?: string }): FastifyInstance {
   const app = Fastify({
     logger: { level: process.env.LOG_LEVEL ?? 'info' }
   });
@@ -303,6 +303,114 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
     return { task };
   });
 
+  app.get<{ Querystring: AgentPendingQuerystring }>('/api/agent/repair-tasks/pending', async (request, reply) => {
+    if (!authenticateAgent(request.headers.authorization, options?.agentToken)) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const query = parseAgentPendingQuery(request.query);
+    if (!query.valid) {
+      return reply.status(400).send({ message: query.message });
+    }
+
+    const tasks = await store.listPendingRepairTasks(query.agent, query.limit);
+    return { tasks };
+  });
+
+  app.post<{ Params: { id: string }; Body: AgentClaimBody }>('/api/agent/repair-tasks/:id/claim', async (request, reply) => {
+    if (!authenticateAgent(request.headers.authorization, options?.agentToken)) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const agentRunId = parseOptionalString(request.body?.agentRunId);
+    const task = await store.claimRepairTask(request.params.id, agentRunId, Date.now());
+    if (task) {
+      return { task };
+    }
+
+    const existing = await store.getRepairTaskForAgent(request.params.id);
+    if (!existing.task) {
+      return reply.status(404).send({ message: 'Repair task not found' });
+    }
+    return reply.status(409).send({ message: 'Repair task is not pending' });
+  });
+
+  app.get<{ Params: { id: string } }>('/api/agent/repair-tasks/:id/payload', async (request, reply) => {
+    if (!authenticateAgent(request.headers.authorization, options?.agentToken)) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const detail = await store.getRepairTaskForAgent(request.params.id);
+    if (!detail.task) {
+      return reply.status(404).send({ message: 'Repair task not found' });
+    }
+
+    const issueDetail = await store.getIssueDetail(detail.task.issueId, undefined, 5);
+    if (!issueDetail.issue) {
+      return reply.status(404).send({ message: 'Issue not found' });
+    }
+
+    const project = await store.findAppByKey(detail.task.appKey);
+    return {
+      task: detail.task,
+      issue: issueDetail.issue,
+      events: issueDetail.events,
+      notes: detail.notes,
+      project: {
+        appKey: detail.task.appKey,
+        name: project?.name,
+        type: project?.type
+      },
+      instructions: {
+        repoUrl: detail.task.repoUrl,
+        baseBranch: detail.task.baseBranch,
+        constraints: [
+          'Use the repository target and branch from this payload.',
+          'Run the project verification commands before marking the task closed.',
+          'Update HealthGuard with a short summary, PR URL, commit SHA, or failure reason.'
+        ]
+      }
+    };
+  });
+
+  app.post<{ Params: { id: string }; Body: AgentStatusBody }>('/api/agent/repair-tasks/:id/status', async (request, reply) => {
+    if (!authenticateAgent(request.headers.authorization, options?.agentToken)) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const detail = await store.getRepairTaskForAgent(request.params.id);
+    if (!detail.task) {
+      return reply.status(404).send({ message: 'Repair task not found' });
+    }
+
+    const body = parseAgentStatusBody(request.body);
+    if (!body.valid) {
+      return reply.status(400).send({ message: body.message });
+    }
+
+    const task = await store.updateRepairTask({
+      id: detail.task.id,
+      status: body.input.status,
+      repairBranch: body.input.repairBranch,
+      prUrl: body.input.prUrl,
+      commitSha: body.input.commitSha,
+      summary: body.input.summary,
+      failureReason: body.input.failureReason,
+      updatedAt: Date.now(),
+      note: {
+        actor: detail.task.agent,
+        message: body.input.message,
+        metadata: body.input.metadata
+      }
+    });
+
+    if (!task) {
+      return reply.status(404).send({ message: 'Repair task not found' });
+    }
+
+    return { task };
+  });
+
   app.get<{ Params: { id: string }; Querystring: IssueQuerystring }>('/api/issues/:id', async (request, reply) => {
     const user = await authenticate(store, request.headers.authorization);
     if (!user) {
@@ -323,6 +431,11 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
     );
 
     if (!detail.issue) {
+      return reply.status(404).send({ message: 'Issue not found' });
+    }
+
+    const visible = await userCanAccessAppKey(store, user.id, detail.issue.appKey);
+    if (!visible) {
       return reply.status(404).send({ message: 'Issue not found' });
     }
 
@@ -385,6 +498,26 @@ interface CreateRepairTaskBody {
   agent?: string;
   repoUrl?: string;
   baseBranch?: string;
+}
+
+interface AgentPendingQuerystring {
+  agent?: string;
+  limit?: string;
+}
+
+interface AgentClaimBody {
+  agentRunId?: string;
+}
+
+interface AgentStatusBody {
+  status?: string;
+  message?: string;
+  repairBranch?: string;
+  prUrl?: string;
+  commitSha?: string;
+  summary?: string;
+  failureReason?: string;
+  metadata?: Record<string, unknown>;
 }
 
 type CredentialsResult =
@@ -470,9 +603,85 @@ function isRepairTaskAgent(value: string): value is RepairTaskAgent {
   return value === 'hermes' || value === 'codex' || value === 'claude-code' || value === 'manual';
 }
 
+function isAgentWritableRepairTaskStatus(value: string): value is RepairTaskStatus {
+  return value === 'running' || value === 'pr_created' || value === 'failed' || value === 'closed';
+}
+
+function parseAgentPendingQuery(query: AgentPendingQuerystring): { valid: true; agent?: RepairTaskAgent; limit?: number } | { valid: false; message: string } {
+  const agent = query.agent?.trim();
+  if (agent && !isRepairTaskAgent(agent)) {
+    return { valid: false, message: 'Unsupported repair agent' };
+  }
+
+  const limit = query.limit === undefined ? undefined : Number(query.limit);
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 100)) {
+    return { valid: false, message: 'limit must be an integer between 1 and 100' };
+  }
+
+  return { valid: true, agent: agent as RepairTaskAgent | undefined, limit };
+}
+
+function parseAgentStatusBody(body: AgentStatusBody | undefined): {
+  valid: true;
+  input: {
+    status: RepairTaskStatus;
+    message: string;
+    repairBranch?: string;
+    prUrl?: string;
+    commitSha?: string;
+    summary?: string;
+    failureReason?: string;
+    metadata?: Record<string, unknown>;
+  };
+} | { valid: false; message: string } {
+  const status = body?.status?.trim();
+  const message = body?.message?.trim();
+
+  if (!status || !isAgentWritableRepairTaskStatus(status)) {
+    return { valid: false, message: 'Unsupported repair task status' };
+  }
+  if (!message) {
+    return { valid: false, message: 'message is required' };
+  }
+
+  return {
+    valid: true,
+    input: {
+      status,
+      message,
+      repairBranch: parseOptionalString(body?.repairBranch),
+      prUrl: parseOptionalString(body?.prUrl),
+      commitSha: parseOptionalString(body?.commitSha),
+      summary: parseOptionalString(body?.summary),
+      failureReason: parseOptionalString(body?.failureReason),
+      metadata: body?.metadata
+    }
+  };
+}
+
+function parseOptionalString(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 async function userOwnsAppKey(store: Store, userId: string, appKey: string): Promise<boolean> {
-  const apps = await store.listAppsByUser(userId);
-  return apps.some((app) => app.appKey === appKey);
+  const app = await store.findAppByKey(appKey);
+  return app?.ownerUserId === userId;
+}
+
+async function userCanAccessAppKey(store: Store, userId: string, appKey: string): Promise<boolean> {
+  const app = await store.findAppByKey(appKey);
+  return !app || app.ownerUserId === userId;
+}
+
+function authenticateAgent(authorizationHeader: string | undefined, configuredToken?: string): boolean {
+  const expected = configuredToken ?? process.env.HEALTHGUARD_AGENT_TOKEN;
+  const token = authorizationHeader?.startsWith('Bearer ') ? authorizationHeader.slice('Bearer '.length) : '';
+  if (!expected || !token) return false;
+
+  const expectedBuffer = Buffer.from(expected);
+  const tokenBuffer = Buffer.from(token);
+  return expectedBuffer.length === tokenBuffer.length && timingSafeEqual(expectedBuffer, tokenBuffer);
 }
 
 function isIssueStatus(value: string): value is IssueStatusFilter {
