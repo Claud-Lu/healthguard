@@ -351,6 +351,34 @@ describe('sdk-web client', () => {
     });
   });
 
+  it('backs off automatic retries after transport failures', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const transport = vi.fn().mockRejectedValue(new Error('collector down'));
+      const client = createHealthGuardClient({
+        appKey: 'demo-app',
+        endpoint: '/api/events/batch',
+        transport,
+        flushIntervalMs: 1000,
+        transportFailureRetryDelayMs: 60000
+      });
+
+      client.captureException(new Error('retry later'));
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(transport).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(transport).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(59000);
+      expect(transport).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('captures manual performance metrics', async () => {
     const transport = vi.fn().mockResolvedValue(undefined);
     const client = createHealthGuardClient({

@@ -25,6 +25,7 @@ export interface HealthGuardClientOptions {
   userId?: string;
   flushIntervalMs?: number;
   maxBatchSize?: number;
+  transportFailureRetryDelayMs?: number;
   autoCapture?: boolean | AutoCaptureOptions;
   target?: BrowserLikeTarget;
   transport?: (batch: EventBatch, endpoint: string) => Promise<void>;
@@ -67,14 +68,20 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
   const sessionId = createId('session');
   const anonymousId = getAnonymousId();
   const maxBatchSize = options.maxBatchSize ?? 10;
+  const transportFailureRetryDelayMs = options.transportFailureRetryDelayMs ?? 30000;
   const transport = options.transport ?? defaultTransport;
   const target = options.target ?? getDefaultTarget();
 
   let timer: ReturnType<typeof setInterval> | undefined;
   let isFlushing = false;
+  let nextAutomaticFlushAt = 0;
 
-  async function flush(): Promise<void> {
+  async function flush(force = false): Promise<void> {
     if (queue.length === 0 || isFlushing) {
+      return;
+    }
+
+    if (!force && nextAutomaticFlushAt > Date.now()) {
       return;
     }
 
@@ -82,8 +89,12 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
     const events = queue.splice(0, maxBatchSize);
     try {
       await transport({ appKey: options.appKey, events }, options.endpoint);
+      nextAutomaticFlushAt = 0;
     } catch (error) {
       queue.unshift(...events);
+      if (transportFailureRetryDelayMs > 0) {
+        nextAutomaticFlushAt = Date.now() + transportFailureRetryDelayMs;
+      }
     } finally {
       isFlushing = false;
     }
@@ -189,7 +200,7 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
         timer = undefined;
       }
 
-      await flush();
+      await flush(true);
     }
   };
 }
