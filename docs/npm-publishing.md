@@ -6,6 +6,7 @@ HealthGuard publishes public npm packages under the `@health-guard` npm organiza
 - `@health-guard/sdk-web`
 - `@health-guard/sdk-miniprogram`
 - `@health-guard/sdk-uniapp`
+- `@health-guard/repair-agent`
 
 ## Verification Before Publishing
 
@@ -25,6 +26,7 @@ npm pack ./packages/core --dry-run
 npm pack ./packages/sdk-web --dry-run
 npm pack ./packages/sdk-miniprogram --dry-run
 npm pack ./packages/sdk-uniapp --dry-run
+npm pack ./packages/repair-agent --dry-run
 ```
 
 ## First Publish
@@ -38,6 +40,7 @@ npm publish ./packages/core --access public
 npm publish ./packages/sdk-web --access public
 npm publish ./packages/sdk-miniprogram --access public
 npm publish ./packages/sdk-uniapp --access public
+npm publish ./packages/repair-agent --access public
 ```
 
 Revoke the temporary token after the packages exist and Trusted Publishing is configured.

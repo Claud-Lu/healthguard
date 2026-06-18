@@ -23,7 +23,8 @@ const packages = [
   ['packages/core/package.json', '@health-guard/core'],
   ['packages/sdk-web/package.json', '@health-guard/sdk-web'],
   ['packages/sdk-miniprogram/package.json', '@health-guard/sdk-miniprogram'],
-  ['packages/sdk-uniapp/package.json', '@health-guard/sdk-uniapp']
+  ['packages/sdk-uniapp/package.json', '@health-guard/sdk-uniapp'],
+  ['packages/repair-agent/package.json', '@health-guard/repair-agent']
 ] as const;
 
 function readPackageJson(path: string): PackageJson {

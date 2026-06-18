@@ -41,3 +41,4 @@ jobs:
           npm publish ./packages/sdk-web --access public --provenance
           npm publish ./packages/sdk-miniprogram --access public --provenance
           npm publish ./packages/sdk-uniapp --access public --provenance
+          npm publish ./packages/repair-agent --access public --provenance

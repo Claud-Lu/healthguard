@@ -54,18 +54,59 @@ export interface HealthGuardEvent {
   breadcrumbs?: Array<{ type: string; message: string; timestamp: number; data?: Record<string, unknown> }>;
   environment?: string;
   release?: string;
+  url?: string;
+  method?: string;
   [key: string]: unknown;
 }
 
-const SKIPPED_DIRS = new Set(['node_modules', 'dist', '.git', '.vite', '.turbo', 'coverage', '.next']);
+const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'build', '.git', '.vite', '.turbo', 'coverage', '.next', '.nuxt', 'out']);
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.vue', '.mjs', '.cjs']);
+
+const STOP_WORDS = new Set([
+  'the',
+  'a',
+  'an',
+  'is',
+  'are',
+  'was',
+  'were',
+  'be',
+  'been',
+  'being',
+  'to',
+  'of',
+  'and',
+  'or',
+  'in',
+  'on',
+  'at',
+  'by',
+  'for',
+  'with',
+  'from',
+  'as',
+  'it',
+  'its',
+  'this',
+  'that',
+  'failed',
+  'error',
+  'typeerror',
+  'undefined',
+  'null',
+  'object',
+  'function',
+  'cannot',
+  'can',
+  'not'
+]);
 
 function isSourceFile(name: string): boolean {
   const ext = name.slice(name.lastIndexOf('.'));
   return SOURCE_EXTENSIONS.has(ext);
 }
 
-function walkDir(dir: string, files: string[], depth = 0, maxDepth = 10): void {
+function walkDir(dir: string, files: string[], depth = 0, maxDepth = 12): void {
   if (depth > maxDepth) return;
 
   let entries: string[];
@@ -281,4 +322,153 @@ export function formatReport(report: RepairReport): string {
   markdown += `4. Verify the fix in the test environment and archive the issue in HealthGuard when resolved.\n`;
 
   return markdown;
+}
+
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9/_.-]+/g, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length >= 2 && !STOP_WORDS.has(token));
+}
+
+export function extractSearchKeywords(issue: IssueSummary, detail: IssueDetail): Set<string> {
+  const keywords = new Set<string>();
+
+  for (const token of tokenize(issue.message)) {
+    keywords.add(token);
+  }
+
+  for (const event of detail.events.slice(0, 5)) {
+    if (event.pageUrl) {
+      try {
+        const pathname = new URL(event.pageUrl).pathname;
+        const segments = pathname.split('/').filter(Boolean);
+        for (const segment of segments) {
+          keywords.add(segment);
+          // also add camelCase / snake_case parts
+          for (const part of segment.split(/[-_.]/)) {
+            if (part.length >= 2) keywords.add(part.toLowerCase());
+          }
+        }
+      } catch {
+        // ignore malformed URLs
+      }
+    }
+
+    if (event.url) {
+      try {
+        const pathname = new URL(event.url).pathname;
+        const segments = pathname.split('/').filter(Boolean);
+        for (const segment of segments) {
+          for (const part of segment.split(/[-_.]/)) {
+            if (part.length >= 2) keywords.add(part.toLowerCase());
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (event.breadcrumbs) {
+      for (const crumb of event.breadcrumbs) {
+        for (const token of tokenize(crumb.message)) {
+          keywords.add(token);
+        }
+      }
+    }
+  }
+
+  return keywords;
+}
+
+export interface SourceMatch {
+  file: string;
+  score: number;
+  excerpts: string[];
+}
+
+export function searchSourceFiles(
+  repoRoot: string,
+  issue: IssueSummary,
+  detail: IssueDetail,
+  options: { maxFiles?: number; maxFileSizeBytes?: number } = {}
+): SourceMatch[] {
+  const maxFileSizeBytes = options.maxFileSizeBytes ?? 1024 * 1024;
+  const keywords = extractSearchKeywords(issue, detail);
+  const keywordList = Array.from(keywords);
+
+  if (keywordList.length === 0) {
+    return [];
+  }
+
+  const files: string[] = [];
+  walkDir(repoRoot, files);
+
+  const matches: SourceMatch[] = [];
+
+  for (const file of files) {
+    let stats;
+    try {
+      stats = statSync(file);
+    } catch {
+      continue;
+    }
+
+    if (stats.size > maxFileSizeBytes) continue;
+
+    let source: string;
+    try {
+      source = readFileSync(file, 'utf-8');
+    } catch {
+      continue;
+    }
+
+    const lowerSource = source.toLowerCase();
+    const relativeFile = relative(repoRoot, file);
+    const lowerFile = relativeFile.toLowerCase();
+    let score = 0;
+    const matchedKeywords = new Set<string>();
+    const excerpts: string[] = [];
+
+    for (const keyword of keywordList) {
+      let count = 0;
+      let index = lowerSource.indexOf(keyword);
+      while (index !== -1) {
+        count += 1;
+        if (excerpts.length < 3) {
+          const start = Math.max(0, index - 40);
+          const end = Math.min(source.length, index + keyword.length + 80);
+          excerpts.push(source.slice(start, end).replace(/\s+/g, ' '));
+        }
+        index = lowerSource.indexOf(keyword, index + keyword.length);
+      }
+
+      if (count > 0) {
+        matchedKeywords.add(keyword);
+        score += count * 2;
+      }
+
+      // Path matching is strong signal
+      if (lowerFile.includes(keyword)) {
+        matchedKeywords.add(keyword);
+        score += 5;
+      }
+    }
+
+    // Boost files whose path resembles a route from pageUrl
+    const pageUrlRoute = detail.events[0]?.pageUrl
+      ? new URL(detail.events[0].pageUrl).pathname.replace(/^\//, '')
+      : undefined;
+    if (pageUrlRoute && lowerFile.replace(/[/\\]/g, '-').includes(pageUrlRoute.replace(/\//g, '-'))) {
+      score += 10;
+    }
+
+    if (score > 0) {
+      matches.push({ file: relativeFile, score, excerpts });
+    }
+  }
+
+  matches.sort((a, b) => b.score - a.score);
+  return options.maxFiles ? matches.slice(0, options.maxFiles) : matches;
 }

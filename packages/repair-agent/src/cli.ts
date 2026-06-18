@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import type { Credentials } from './index.js';
+import type { Credentials, IssueDetail, IssueSummary } from './index.js';
 import {
   discoverSdkConfig,
   formatReport,
@@ -7,6 +7,7 @@ import {
   listApps,
   listIssues,
   login,
+  searchSourceFiles,
   toApiBase
 } from './index.js';
 
@@ -18,12 +19,14 @@ interface CliOptions {
   appKey?: string;
   issueId?: string;
   limit: number;
+  search: boolean;
 }
 
 function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     cwd: process.cwd(),
-    limit: 5
+    limit: 5,
+    search: true
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -59,6 +62,9 @@ function parseArgs(argv: string[]): CliOptions {
         options.limit = Number(next) || 5;
         i += 1;
         break;
+      case '--no-search':
+        options.search = false;
+        break;
       case '-h':
       case '--help':
         printHelp();
@@ -87,6 +93,7 @@ Options:
   --app-key <key>    Override the appKey discovered from SDK config
   --issue <id>       Fetch detail for a specific issue instead of listing top issues
   --limit <n>        Number of issues to list (default: 5)
+  --no-search        Skip local source file search
   -h, --help         Show this help
 
 Environment variables (used as fallback):
@@ -159,6 +166,9 @@ async function main(): Promise<void> {
     const detail = await getIssueDetail(apiBase, token, options.issueId, appKey);
     const report = formatReport({ app, issue: detail.issue, detail });
     console.log(report);
+    if (options.search) {
+      printSourceMatches(detail.issue, detail, options.cwd);
+    }
     return;
   }
 
@@ -186,6 +196,28 @@ async function main(): Promise<void> {
   const report = formatReport({ app, issue: topIssue, detail });
   console.log('---');
   console.log(report);
+
+  if (options.search) {
+    printSourceMatches(topIssue, detail, options.cwd);
+  }
+}
+
+function printSourceMatches(issue: IssueSummary, detail: IssueDetail, cwd: string): void {
+  console.error('Searching local source files for relevant code...');
+  const matches = searchSourceFiles(cwd, issue, detail, { maxFiles: 5 });
+
+  if (matches.length === 0) {
+    console.log('\n_No matching source files found. Try providing source maps or build a development build._');
+    return;
+  }
+
+  console.log('\n## Likely source files\n');
+  for (const match of matches) {
+    console.log(`- **${match.file}** (score: ${match.score})`);
+    for (const excerpt of match.excerpts.slice(0, 2)) {
+      console.log(`  \`\`\`\n  ${excerpt}\n  \`\`\``);
+    }
+  }
 }
 
 main().catch((error) => {
