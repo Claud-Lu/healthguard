@@ -11,7 +11,9 @@
     "examples/*"
   ],
   "scripts": {
-    "build": "yarn workspaces run build",
+    "build:packages": "yarn workspace @health-guard/core build && yarn workspace @health-guard/sdk-web build && yarn workspace @health-guard/sdk-miniprogram build && yarn workspace @health-guard/sdk-uniapp build && yarn workspace @health-guard/repair-agent build",
+    "build:apps": "yarn workspace @healthguard/dashboard build && yarn workspace @healthguard/server build && yarn workspace @healthguard/vue3-demo build",
+    "build": "yarn build:packages && yarn build:apps",
     "dev:dashboard": "yarn workspace @healthguard/dashboard dev",
     "dev:demo": "yarn workspace @healthguard/vue3-demo dev",
     "dev:local": "bash scripts/dev-local.sh",
