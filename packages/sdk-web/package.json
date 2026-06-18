@@ -1,6 +1,6 @@
 {
   "name": "@health-guard/sdk-web",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "HealthGuard SDK for H5 and browser applications.",
   "license": "MIT",
   "type": "module",
@@ -34,6 +34,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@health-guard/core": "0.2.0"
+    "@health-guard/core": "0.3.0"
   }
 }
