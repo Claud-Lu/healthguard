@@ -1,6 +1,6 @@
 {
   "name": "@health-guard/repair-agent",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Local agent that fetches HealthGuard issues for the current project so Claude Code can fix them.",
   "license": "MIT",
   "type": "module",

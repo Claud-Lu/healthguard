@@ -7,16 +7,17 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-18
+
 ### 新增
-- 补齐 Repair Task Agent API：支持 Agent token 鉴权、pending 轮询、原子 claim、结构化 payload 读取和状态回写。
-- Dashboard 修复任务列表展示 Agent 回写的 summary 与 failureReason。
+- 新增 `@health-guard/repair-agent` 包：扫描项目 SDK 配置，登录 HealthGuard 并拉取 issue 列表/详情，支持本地源码关键词匹配。
 
 ### 修复
-- 补充 `/api/health` 兼容健康检查端点，适配公司 21 环境的 `/healthguard-api/health` 反向代理。
-- 修复已注册项目的 Issue 详情可被其他登录用户读取的租户隔离问题。
+- SDK transport 失败后增加退避重试（`transportFailureRetryDelayMs`，默认 30s），失败事件回队并支持手动 `flush()` 强制上报。
+- `sdk-uniapp` 与 `sdk-miniprogram` 对齐 `sdk-web` 的退避重试行为。
 
-### 文档
-- 增加 `HEALTHGUARD_AGENT_TOKEN` 部署配置和 Agent API 排障说明。
+### 变更
+- 公共 npm 包版本统一提升至 `0.3.0`。
 
 ## [0.2.0] - 2026-06-09
 
@@ -90,5 +91,6 @@
 - AI CLI 操作手册
 - 运营商指南
 
+[0.3.0]: https://github.com/Claud-Lu/healthguard/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Claud-Lu/healthguard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Claud-Lu/healthguard/releases/tag/v0.1.0

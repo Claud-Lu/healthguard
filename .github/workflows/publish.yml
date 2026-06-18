@@ -37,8 +37,12 @@ jobs:
 
       - name: Publish packages
         run: |
-          npm publish ./packages/core --access public --provenance
-          npm publish ./packages/sdk-web --access public --provenance
-          npm publish ./packages/sdk-miniprogram --access public --provenance
-          npm publish ./packages/sdk-uniapp --access public --provenance
-          npm publish ./packages/repair-agent --access public --provenance
+          for dir in ./packages/core ./packages/sdk-web ./packages/sdk-miniprogram ./packages/sdk-uniapp ./packages/repair-agent; do
+            pkg=$(node -p "require('$dir/package.json').name")
+            version=$(node -p "require('$dir/package.json').version")
+            if npm view "$pkg@$version" version >/dev/null 2>&1; then
+              echo "$pkg@$version already published; skipping"
+            else
+              npm publish "$dir" --access public --provenance
+            fi
+          done
