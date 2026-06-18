@@ -43,6 +43,7 @@ export interface UniAppClientOptions {
   userId?: string;
   flushIntervalMs?: number;
   maxBatchSize?: number;
+  transportFailureRetryDelayMs?: number;
   autoCapture?: boolean | UniAppAutoCaptureOptions;
   transport?: (batch: EventBatch, endpoint: string) => Promise<void>;
 }
@@ -247,12 +248,14 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
   const sessionId = createId('session');
   const anonymousId = getAnonymousId();
   const maxBatchSize = options.maxBatchSize ?? 10;
+  const transportFailureRetryDelayMs = options.transportFailureRetryDelayMs ?? 30000;
   const transport = options.transport ?? defaultTransport;
   const platform = detectPlatform();
   const h5 = isH5();
 
   let timer: ReturnType<typeof setInterval> | undefined;
   let isFlushing = false;
+  let nextAutomaticFlushAt = 0;
 
   function createBaseEvent(): Pick<
     ErrorEvent,
@@ -285,8 +288,12 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
     };
   }
 
-  async function flush(): Promise<void> {
+  async function flush(force = false): Promise<void> {
     if (queue.length === 0 || isFlushing) {
+      return;
+    }
+
+    if (!force && nextAutomaticFlushAt > Date.now()) {
       return;
     }
 
@@ -294,8 +301,12 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
     const events = queue.splice(0, maxBatchSize);
     try {
       await transport({ appKey: options.appKey, events }, options.endpoint);
+      nextAutomaticFlushAt = 0;
     } catch (error) {
       queue.unshift(...events);
+      if (transportFailureRetryDelayMs > 0) {
+        nextAutomaticFlushAt = Date.now() + transportFailureRetryDelayMs;
+      }
     } finally {
       isFlushing = false;
     }
@@ -405,7 +416,7 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
         timer = undefined;
       }
 
-      await flush();
+      await flush(true);
     }
   };
 }

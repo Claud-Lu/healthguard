@@ -362,4 +362,64 @@ describe('sdk-miniprogram client', () => {
       }
     ]);
   });
+
+  it('keeps events queued when transport fails so they can be retried', async () => {
+    const wx = {
+      onError: vi.fn(),
+      onUnhandledRejection: vi.fn(),
+      request: vi.fn()
+    };
+    const transport = vi.fn().mockRejectedValueOnce(new Error('network down')).mockResolvedValueOnce(undefined);
+    const client = createMiniProgramClient({
+      appKey: 'mini-app',
+      endpoint: '/api/events/batch',
+      wx,
+      transport,
+      flushIntervalMs: 0
+    });
+
+    client.captureException(new Error('retry me'));
+    await client.flush();
+    await client.flush();
+
+    expect(transport).toHaveBeenCalledTimes(2);
+    expect(transport.mock.calls[1][0].events[0]).toMatchObject({
+      type: 'error',
+      message: 'retry me'
+    });
+  });
+
+  it('backs off automatic retries after transport failures', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const wx = {
+        onError: vi.fn(),
+        onUnhandledRejection: vi.fn(),
+        request: vi.fn()
+      };
+      const transport = vi.fn().mockRejectedValue(new Error('collector down'));
+      const client = createMiniProgramClient({
+        appKey: 'mini-app',
+        endpoint: '/api/events/batch',
+        wx,
+        transport,
+        flushIntervalMs: 1000,
+        transportFailureRetryDelayMs: 60000
+      });
+
+      client.captureException(new Error('retry later'));
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(transport).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(transport).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(59000);
+      expect(transport).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

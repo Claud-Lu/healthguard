@@ -110,6 +110,9 @@ export interface MiniProgramClientOptions {
   release?: string;
   environment?: HealthGuardEnvironment;
   userId?: string;
+  flushIntervalMs?: number;
+  maxBatchSize?: number;
+  transportFailureRetryDelayMs?: number;
   autoCapture?: boolean | MiniProgramAutoCaptureOptions;
   transport?: (batch: EventBatch, endpoint: string) => Promise<void>;
 }
@@ -128,10 +131,51 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
   const breadcrumbs: Breadcrumb[] = [];
   const sessionId = createId('session');
   const anonymousId = createId('anon');
+  const maxBatchSize = options.maxBatchSize ?? 10;
+  const transportFailureRetryDelayMs = options.transportFailureRetryDelayMs ?? 30000;
   const transport = options.transport ?? createRequestTransport(options.wx);
+
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let isFlushing = false;
+  let nextAutomaticFlushAt = 0;
 
   function enqueue(event: EventBatch['events'][number]): void {
     queue.push(event);
+
+    if (queue.length >= maxBatchSize) {
+      void flush().catch(() => {});
+    }
+  }
+
+  async function flush(force = false): Promise<void> {
+    if (queue.length === 0 || isFlushing) {
+      return;
+    }
+
+    if (!force && nextAutomaticFlushAt > Date.now()) {
+      return;
+    }
+
+    isFlushing = true;
+    const events = queue.splice(0, maxBatchSize);
+    try {
+      await transport({ appKey: options.appKey, events }, options.endpoint);
+      nextAutomaticFlushAt = 0;
+    } catch (error) {
+      queue.unshift(...events);
+      if (transportFailureRetryDelayMs > 0) {
+        nextAutomaticFlushAt = Date.now() + transportFailureRetryDelayMs;
+      }
+    } finally {
+      isFlushing = false;
+    }
+  }
+
+  if ((options.flushIntervalMs ?? 5000) > 0) {
+    timer = setInterval(() => {
+      void flush();
+    }, options.flushIntervalMs ?? 5000);
+    timer.unref?.();
   }
 
   function captureException(error: unknown, errorType: ErrorType = 'js', context?: Record<string, unknown>): void {
@@ -231,12 +275,12 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
       });
     },
     async flush(): Promise<void> {
-      if (queue.length === 0) {
-        return;
+      if (timer && queue.length === 0) {
+        clearInterval(timer);
+        timer = undefined;
       }
 
-      const events = queue.splice(0, queue.length);
-      await transport({ appKey: options.appKey, events }, options.endpoint);
+      await flush(true);
     }
   };
 
