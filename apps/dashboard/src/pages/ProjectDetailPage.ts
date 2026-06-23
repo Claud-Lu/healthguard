@@ -35,6 +35,8 @@ export default {
     const repairRepoUrl = ref('');
     const repairBaseBranch = ref('main');
     const repairAgent = ref<RepairTaskAgent>('hermes');
+    const fixedReleaseInput = ref('');
+    const verifiedReleaseInput = ref('');
 
     const selectedApp = computed(() => store.apps.find((item) => item.appKey === appKey.value) ?? null);
 
@@ -94,9 +96,15 @@ export default {
 
     async function openIssue(issue: IssueSummary): Promise<void> {
       selectedIssue.value = await requestJson<IssueDetailResponse>(apiUrl(`/issues/${encodeURIComponent(issue.id)}?${buildIssueQuery(false)}`), undefined, store.token);
+      fixedReleaseInput.value = selectedIssue.value.issue.fixedInRelease ?? selectedIssue.value.issue.lastSeenRelease ?? '';
+      verifiedReleaseInput.value = selectedIssue.value.issue.verifiedInRelease ?? selectedIssue.value.issue.fixedInRelease ?? '';
     }
 
     async function archiveIssue(issue: IssueSummary): Promise<void> {
+      if (!issue.verifiedInRelease) {
+        store.errorMessage = 'verifiedInRelease is required before archiving.';
+        return;
+      }
       await requestJson<{ issue: IssueSummary }>(apiUrl(`/issues/${encodeURIComponent(issue.id)}/archive`), { method: 'PATCH', body: JSON.stringify({}) }, store.token);
       selectedIssue.value = null;
       await loadProjectData();
@@ -106,6 +114,37 @@ export default {
       await requestJson<{ issue: IssueSummary }>(apiUrl(`/issues/${encodeURIComponent(issue.id)}/reopen`), { method: 'PATCH', body: JSON.stringify({}) }, store.token);
       issueStatus.value = 'open';
       selectedIssue.value = null;
+      await loadProjectData();
+    }
+
+    async function markIssueFixed(issue: IssueSummary): Promise<void> {
+      const fixedInRelease = fixedReleaseInput.value.trim();
+      if (!fixedInRelease) {
+        store.errorMessage = 'Fixed release is required.';
+        return;
+      }
+      const response = await requestJson<{ issue: IssueSummary }>(
+        apiUrl(`/issues/${encodeURIComponent(issue.id)}/fixed`),
+        { method: 'PATCH', body: JSON.stringify({ fixedInRelease }) },
+        store.token
+      );
+      selectedIssue.value = { ...(selectedIssue.value as IssueDetailResponse), issue: response.issue };
+      verifiedReleaseInput.value = response.issue.verifiedInRelease ?? response.issue.fixedInRelease ?? verifiedReleaseInput.value;
+      await loadProjectData();
+    }
+
+    async function markIssueVerified(issue: IssueSummary): Promise<void> {
+      const verifiedInRelease = verifiedReleaseInput.value.trim();
+      if (!verifiedInRelease) {
+        store.errorMessage = 'Verified release is required.';
+        return;
+      }
+      const response = await requestJson<{ issue: IssueSummary }>(
+        apiUrl(`/issues/${encodeURIComponent(issue.id)}/verified`),
+        { method: 'PATCH', body: JSON.stringify({ verifiedInRelease }) },
+        store.token
+      );
+      selectedIssue.value = { ...(selectedIssue.value as IssueDetailResponse), issue: response.issue };
       await loadProjectData();
     }
 
@@ -439,10 +478,83 @@ export default {
       ]);
     }
 
+    function renderIssueReleaseWorkflow(issue: IssueSummary) {
+      return h('section', { class: 'issue-release-workflow' }, [
+        h('h4', 'Issue status'),
+        h('div', { class: 'release-status-grid' }, [
+          renderReleaseItem('Status', issue.status),
+          renderReleaseItem('First seen release', issue.firstSeenRelease ?? '-'),
+          renderReleaseItem('Last seen release', issue.lastSeenRelease ?? '-'),
+          renderReleaseItem('Fixed in release', issue.fixedInRelease ?? '-'),
+          renderReleaseItem('Verified in release', issue.verifiedInRelease ?? '-')
+        ]),
+        issue.status === 'fixed_pending_release' && issue.fixedInRelease
+          ? h('p', { class: 'release-note' }, `Fixed, waiting for release ${issue.fixedInRelease} to be published and verified.`)
+          : null,
+        issue.fixedInRelease && issue.lastSeenRelease && compareRelease(issue.lastSeenRelease, issue.fixedInRelease) < 0
+          ? h('p', { class: 'release-note muted' }, 'Old releases are still reporting. This does not mean the new release failed verification.')
+          : null,
+        h('div', { class: 'release-action-row' }, [
+          h('label', { class: 'field compact-field' }, [
+            h('span', 'Fixed release'),
+            h('input', {
+              type: 'text',
+              placeholder: '1.1.12',
+              value: fixedReleaseInput.value,
+              onInput: (event: Event) => {
+                fixedReleaseInput.value = (event.target as HTMLInputElement).value;
+              }
+            })
+          ]),
+          h('button', { type: 'button', class: 'outline-button detail-action-button', onClick: () => void markIssueFixed(issue) }, 'Mark fixed')
+        ]),
+        h('div', { class: 'release-action-row' }, [
+          h('label', { class: 'field compact-field' }, [
+            h('span', 'Verified release'),
+            h('input', {
+              type: 'text',
+              placeholder: issue.fixedInRelease ?? '1.1.12',
+              value: verifiedReleaseInput.value,
+              onInput: (event: Event) => {
+                verifiedReleaseInput.value = (event.target as HTMLInputElement).value;
+              }
+            })
+          ]),
+          h('button', { type: 'button', class: 'copy-for-ai-button', onClick: () => void markIssueVerified(issue) }, 'Test passed')
+        ])
+      ]);
+    }
+
+    function renderReleaseItem(label: string, value: string) {
+      return h('div', { class: 'release-status-item' }, [
+        h('span', label),
+        h('strong', value)
+      ]);
+    }
+
     function getSeverityClass(count: number) {
       if (count > 20) return 'severity-critical';
       if (count > 5) return 'severity-warning';
       return 'severity-normal';
+    }
+
+    function compareRelease(left: string, right: string): number {
+      const leftParts = parseRelease(left);
+      const rightParts = parseRelease(right);
+      const max = Math.max(leftParts.length, rightParts.length);
+      for (let index = 0; index < max; index++) {
+        const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+        if (diff !== 0) return diff;
+      }
+      return left.localeCompare(right);
+    }
+
+    function parseRelease(value: string): number[] {
+      return value
+        .replace(/^[^\d]*/, '')
+        .split(/[.-]/)
+        .map((part) => Number(part))
+        .filter((part) => Number.isFinite(part));
     }
 
     function buildCopyForAI(issue: IssueSummary, events: Array<Record<string, unknown>>): string {
@@ -703,6 +815,13 @@ export default {
                             [
                               h('strong', issue.message),
                               h('span', `${issue.errorType} / ${issue.eventCount} ${t.events}`),
+                              h('div', { class: 'issue-release-meta' }, [
+                                h('span', `Status: ${issue.status}`),
+                                h('span', `First: ${issue.firstSeenRelease ?? '-'}`),
+                                h('span', `Last: ${issue.lastSeenRelease ?? '-'}`),
+                                h('span', `Fixed: ${issue.fixedInRelease ?? '-'}`),
+                                h('span', `Verified: ${issue.verifiedInRelease ?? '-'}`)
+                              ]),
                               issue.archived && issue.archivedAt ? h('span', { class: 'issue-archived-at' }, `${t.archivedAt} ${formatTime(issue.archivedAt)}`) : null,
                               Object.keys(issue.platformDistribution).length > 0
                                 ? h(
@@ -738,8 +857,13 @@ export default {
                       h('div', { class: 'detail-info-bar' }, [
                         h('span', { class: issue.errorType === 'http' || issue.errorType === 'request' ? 'badge-http' : 'badge-error' }, issue.errorType.toUpperCase()),
                         issue.archived ? h('span', { class: 'badge-archived' }, t.archivedIssues) : null,
+                        h('span', { class: 'badge-archived' }, issue.status),
                         h('span', `${t.firstSeen} ${formatTime(issue.firstSeenAt)}`),
                         h('span', `${t.lastSeen} ${formatTime(issue.lastSeenAt)}`),
+                        h('span', `First release ${issue.firstSeenRelease ?? '-'}`),
+                        h('span', `Last release ${issue.lastSeenRelease ?? '-'}`),
+                        h('span', `Fixed ${issue.fixedInRelease ?? '-'}`),
+                        h('span', `Verified ${issue.verifiedInRelease ?? '-'}`),
                         issue.archived && issue.archivedAt ? h('span', `${t.archivedAt} ${formatTime(issue.archivedAt)}`) : null,
                         h('span', { class: 'detail-fingerprint' }, issue.fingerprint),
                         Object.keys(issue.platformDistribution).length > 0
@@ -773,11 +897,14 @@ export default {
                           : h('button', {
                               type: 'button',
                               class: 'outline-button detail-action-button danger-action',
+                              disabled: !issue.verifiedInRelease,
+                              title: issue.verifiedInRelease ? t.archiveIssue : 'verifiedInRelease is required before archiving',
                               onClick: () => {
                                 void archiveIssue(issue);
                               }
                             }, t.archiveIssue)
                       ]),
+                      renderIssueReleaseWorkflow(issue),
                       renderRepairTaskCreator(issue),
                       ...Object.entries(groupEventsByType(selectedIssue.value.events)).map(([type, events]) => renderEventGroup(type, events))
                     ]);

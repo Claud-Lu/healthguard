@@ -682,6 +682,68 @@ h1 {
   word-break: break-word;
 }
 
+.issue-release-meta,
+.release-status-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.issue-release-meta span,
+.release-status-item {
+  background: #ffffff;
+  border: 1px solid #e4ebef;
+  border-radius: 4px;
+  color: #475569;
+  font-size: 12px;
+  padding: 4px 6px;
+}
+
+.release-status-item {
+  display: grid;
+  gap: 2px;
+}
+
+.release-status-item span {
+  color: #60717d;
+  font-size: 11px;
+}
+
+.release-status-item strong {
+  color: #182229;
+  overflow-wrap: anywhere;
+}
+
+.issue-release-workflow {
+  background: #f7f9fa;
+  border: 1px solid #d8e1e6;
+  border-radius: 6px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.issue-release-workflow h4 {
+  margin: 0;
+}
+
+.release-note {
+  color: #0f766e;
+  font-size: 13px;
+  margin: 0;
+}
+
+.release-note.muted {
+  color: #60717d;
+}
+
+.release-action-row {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .detail-body {
   display: grid;
   gap: 12px;

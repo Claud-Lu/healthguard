@@ -282,7 +282,7 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       const issueSql = `
         SELECT app_key, COUNT(*)::int as issues
         FROM issues
-        WHERE app_key = ANY($1) AND archived_at IS NULL
+        WHERE app_key = ANY($1) AND status <> 'archived' AND archived_at IS NULL
         GROUP BY app_key
       `;
       const issueResult = await pool.query(issueSql, [appKeys]);
@@ -360,13 +360,34 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
     },
 
     async archiveIssue(id: string, archivedAt: number): Promise<IssueSummary | null> {
-      const result = await pool.query('UPDATE issues SET archived_at = $1 WHERE id = $2 RETURNING *', [archivedAt, id]);
+      const result = await pool.query(
+        "UPDATE issues SET archived_at = $1, status = 'archived' WHERE id = $2 AND status = 'resolved' AND verified_in_release IS NOT NULL RETURNING *",
+        [archivedAt, id]
+      );
       if (result.rows.length === 0) return null;
       return rowToIssue(result.rows[0]);
     },
 
     async reopenIssue(id: string): Promise<IssueSummary | null> {
-      const result = await pool.query('UPDATE issues SET archived_at = NULL WHERE id = $1 RETURNING *', [id]);
+      const result = await pool.query("UPDATE issues SET archived_at = NULL, status = 'open' WHERE id = $1 RETURNING *", [id]);
+      if (result.rows.length === 0) return null;
+      return rowToIssue(result.rows[0]);
+    },
+
+    async markIssueFixed(id: string, fixedInRelease: string): Promise<IssueSummary | null> {
+      const result = await pool.query(
+        "UPDATE issues SET fixed_in_release = $1, archived_at = NULL, status = 'fixed_pending_release' WHERE id = $2 RETURNING *",
+        [fixedInRelease, id]
+      );
+      if (result.rows.length === 0) return null;
+      return rowToIssue(result.rows[0]);
+    },
+
+    async markIssueVerified(id: string, verifiedInRelease: string): Promise<IssueSummary | null> {
+      const result = await pool.query(
+        "UPDATE issues SET verified_in_release = $1, archived_at = NULL, status = 'resolved' WHERE id = $2 RETURNING *",
+        [verifiedInRelease, id]
+      );
       if (result.rows.length === 0) return null;
       return rowToIssue(result.rows[0]);
     },
@@ -645,6 +666,11 @@ async function ensureSchema(pool: Pool): Promise<void> {
       event_count INTEGER NOT NULL DEFAULT 0,
       first_seen_at BIGINT NOT NULL,
       last_seen_at BIGINT NOT NULL,
+      first_seen_release VARCHAR(255),
+      last_seen_release VARCHAR(255),
+      fixed_in_release VARCHAR(255),
+      verified_in_release VARCHAR(255),
+      status VARCHAR(32) NOT NULL DEFAULT 'open',
       platform_distribution JSONB NOT NULL DEFAULT '{}',
       archived_at BIGINT
     )
@@ -709,6 +735,43 @@ async function ensureSchema(pool: Pool): Promise<void> {
       END IF;
     END $$;
   `);
+
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'issues' AND column_name = 'first_seen_release'
+      ) THEN
+        ALTER TABLE issues ADD COLUMN first_seen_release VARCHAR(255);
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'issues' AND column_name = 'last_seen_release'
+      ) THEN
+        ALTER TABLE issues ADD COLUMN last_seen_release VARCHAR(255);
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'issues' AND column_name = 'fixed_in_release'
+      ) THEN
+        ALTER TABLE issues ADD COLUMN fixed_in_release VARCHAR(255);
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'issues' AND column_name = 'verified_in_release'
+      ) THEN
+        ALTER TABLE issues ADD COLUMN verified_in_release VARCHAR(255);
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'issues' AND column_name = 'status'
+      ) THEN
+        ALTER TABLE issues ADD COLUMN status VARCHAR(32) NOT NULL DEFAULT 'open';
+      END IF;
+    END $$;
+  `);
+
+  await pool.query("UPDATE issues SET status = 'archived' WHERE archived_at IS NOT NULL AND status <> 'archived'");
 
   // Migrate existing sessions table to add expires_at if missing
   await pool.query(`
@@ -782,13 +845,13 @@ async function backfillFailedHttpIssues(pool: Pool): Promise<void> {
 
 async function upsertIssue(poolOrClient: Pool | PoolClient, event: ErrorEvent): Promise<void> {
   const id = `${event.appKey}:${event.fingerprint}`;
-  const existing = await poolOrClient.query('SELECT event_count, last_seen_at, platform_distribution FROM issues WHERE id = $1', [id]);
+  const existing = await poolOrClient.query('SELECT event_count, last_seen_at, platform_distribution, fixed_in_release FROM issues WHERE id = $1', [id]);
 
   if (existing.rows.length === 0) {
     await poolOrClient.query(
-      `INSERT INTO issues (id, app_key, fingerprint, message, error_type, event_count, first_seen_at, last_seen_at, platform_distribution)
-       VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8)`,
-      [id, event.appKey, event.fingerprint, event.message, event.errorType, event.timestamp, event.timestamp, JSON.stringify({ [event.platform]: 1 })]
+      `INSERT INTO issues (id, app_key, fingerprint, message, error_type, event_count, first_seen_at, last_seen_at, first_seen_release, last_seen_release, platform_distribution, status)
+       VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9, $10, 'open')`,
+      [id, event.appKey, event.fingerprint, event.message, event.errorType, event.timestamp, event.timestamp, event.release ?? null, event.release ?? null, JSON.stringify({ [event.platform]: 1 })]
     );
     return;
   }
@@ -797,22 +860,26 @@ async function upsertIssue(poolOrClient: Pool | PoolClient, event: ErrorEvent): 
   const distribution = (row.platform_distribution as Record<string, number>) ?? {};
   distribution[event.platform] = (distribution[event.platform] ?? 0) + 1;
 
-  await poolOrClient.query(
-    `UPDATE issues SET event_count = $1, last_seen_at = $2, platform_distribution = $3, archived_at = NULL WHERE id = $4`,
-    [(row.event_count as number) + 1, Math.max(Number(row.last_seen_at), event.timestamp), JSON.stringify(distribution), id]
-  );
+  await updateIssueRecurrence(poolOrClient, {
+    id,
+    eventCount: (row.event_count as number) + 1,
+    lastSeenAt: Math.max(Number(row.last_seen_at), event.timestamp),
+    platformDistribution: distribution,
+    fixedInRelease: nullableString(row.fixed_in_release),
+    eventRelease: event.release
+  });
 }
 
 async function upsertHttpIssue(poolOrClient: Pool | PoolClient, event: HttpEvent & { fingerprint: string }): Promise<void> {
   const id = `${event.appKey}:${event.fingerprint}`;
   const message = httpIssueMessage(event);
-  const existing = await poolOrClient.query('SELECT event_count, last_seen_at, platform_distribution FROM issues WHERE id = $1', [id]);
+  const existing = await poolOrClient.query('SELECT event_count, last_seen_at, platform_distribution, fixed_in_release FROM issues WHERE id = $1', [id]);
 
   if (existing.rows.length === 0) {
     await poolOrClient.query(
-      `INSERT INTO issues (id, app_key, fingerprint, message, error_type, event_count, first_seen_at, last_seen_at, platform_distribution)
-       VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8)`,
-      [id, event.appKey, event.fingerprint, message, 'http', event.timestamp, event.timestamp, JSON.stringify({ [event.platform]: 1 })]
+      `INSERT INTO issues (id, app_key, fingerprint, message, error_type, event_count, first_seen_at, last_seen_at, first_seen_release, last_seen_release, platform_distribution, status)
+       VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9, $10, 'open')`,
+      [id, event.appKey, event.fingerprint, message, 'http', event.timestamp, event.timestamp, event.release ?? null, event.release ?? null, JSON.stringify({ [event.platform]: 1 })]
     );
     return;
   }
@@ -821,10 +888,14 @@ async function upsertHttpIssue(poolOrClient: Pool | PoolClient, event: HttpEvent
   const distribution = (row.platform_distribution as Record<string, number>) ?? {};
   distribution[event.platform] = (distribution[event.platform] ?? 0) + 1;
 
-  await poolOrClient.query(
-    `UPDATE issues SET event_count = $1, last_seen_at = $2, platform_distribution = $3, archived_at = NULL WHERE id = $4`,
-    [(row.event_count as number) + 1, Math.max(Number(row.last_seen_at), event.timestamp), JSON.stringify(distribution), id]
-  );
+  await updateIssueRecurrence(poolOrClient, {
+    id,
+    eventCount: (row.event_count as number) + 1,
+    lastSeenAt: Math.max(Number(row.last_seen_at), event.timestamp),
+    platformDistribution: distribution,
+    fixedInRelease: nullableString(row.fixed_in_release),
+    eventRelease: event.release
+  });
 }
 
 async function upsertHttpIssueSnapshot(
@@ -862,14 +933,51 @@ async function upsertHttpIssueSnapshot(
   }
 
   await pool.query(
-    `UPDATE issues SET event_count = $1, last_seen_at = $2, platform_distribution = $3 WHERE id = $4`,
-    [aggregate.count, aggregate.lastSeenAt, JSON.stringify(aggregate.platformDistribution), id]
+    `UPDATE issues SET event_count = $1, last_seen_at = $2, last_seen_release = COALESCE($3, last_seen_release), platform_distribution = $4 WHERE id = $5`,
+    [aggregate.count, aggregate.lastSeenAt, aggregate.event.release ?? null, JSON.stringify(aggregate.platformDistribution), id]
+  );
+}
+
+async function updateIssueRecurrence(
+  poolOrClient: Pool | PoolClient,
+  input: {
+    id: string;
+    eventCount: number;
+    lastSeenAt: number;
+    platformDistribution: Record<string, number>;
+    fixedInRelease: string | null;
+    eventRelease?: string;
+  }
+): Promise<void> {
+  if (!input.fixedInRelease || (input.eventRelease && compareRelease(input.eventRelease, input.fixedInRelease) >= 0)) {
+    await poolOrClient.query(
+      `UPDATE issues
+       SET event_count = $1,
+           last_seen_at = $2,
+           last_seen_release = COALESCE($3, last_seen_release),
+           platform_distribution = $4,
+           archived_at = NULL,
+           status = 'open'
+       WHERE id = $5`,
+      [input.eventCount, input.lastSeenAt, input.eventRelease ?? null, JSON.stringify(input.platformDistribution), input.id]
+    );
+    return;
+  }
+
+  await poolOrClient.query(
+    `UPDATE issues
+     SET event_count = $1,
+         last_seen_at = $2,
+         last_seen_release = COALESCE($3, last_seen_release),
+         platform_distribution = $4
+     WHERE id = $5`,
+    [input.eventCount, input.lastSeenAt, input.eventRelease ?? null, JSON.stringify(input.platformDistribution), input.id]
   );
 }
 
 function addIssueStatusCondition(conditions: string[], status: IssueQuery['status'] = 'open'): void {
   if (status === 'all') return;
-  conditions.push(status === 'archived' ? 'archived_at IS NOT NULL' : 'archived_at IS NULL');
+  conditions.push(status === 'archived' ? "(status = 'archived' OR archived_at IS NOT NULL)" : "status <> 'archived' AND archived_at IS NULL");
 }
 
 function addTimeRangeConditions(
@@ -917,6 +1025,8 @@ function rowToApp(row: Record<string, unknown>): AppRecord {
 }
 
 function rowToIssue(row: Record<string, unknown>): IssueSummary {
+  const archived = row.archived_at !== null && row.archived_at !== undefined;
+  const status = archived ? 'archived' : String(row.status ?? 'open') as IssueSummary['status'];
   return {
     id: String(row.id),
     appKey: String(row.app_key),
@@ -926,10 +1036,38 @@ function rowToIssue(row: Record<string, unknown>): IssueSummary {
     eventCount: Number(row.event_count),
     firstSeenAt: Number(row.first_seen_at),
     lastSeenAt: Number(row.last_seen_at),
+    firstSeenRelease: nullableString(row.first_seen_release),
+    lastSeenRelease: nullableString(row.last_seen_release),
+    fixedInRelease: nullableString(row.fixed_in_release),
+    verifiedInRelease: nullableString(row.verified_in_release),
+    status,
     platformDistribution: (row.platform_distribution as Record<string, number>) ?? {},
-    archived: row.archived_at !== null && row.archived_at !== undefined,
+    archived,
     archivedAt: row.archived_at === null || row.archived_at === undefined ? null : Number(row.archived_at)
   };
+}
+
+function nullableString(value: unknown): string | null {
+  return value === null || value === undefined ? null : String(value);
+}
+
+function compareRelease(left: string, right: string): number {
+  const leftParts = parseRelease(left);
+  const rightParts = parseRelease(right);
+  const max = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < max; index++) {
+    const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return left.localeCompare(right);
+}
+
+function parseRelease(value: string): number[] {
+  return value
+    .replace(/^[^\d]*/, '')
+    .split(/[.-]/)
+    .map((part) => Number(part))
+    .filter((part) => Number.isFinite(part));
 }
 
 function rowToRepairTask(row: Record<string, unknown>): RepairTask {

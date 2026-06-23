@@ -199,6 +199,14 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
       return reply.status(401).send({ message: 'Unauthorized' });
     }
 
+    const detail = await store.getIssueDetail(request.params.id, undefined, 1);
+    if (!detail.issue) {
+      return reply.status(404).send({ message: 'Issue not found' });
+    }
+    if (detail.issue.status !== 'resolved' || !detail.issue.verifiedInRelease) {
+      return reply.status(409).send({ message: 'verifiedInRelease is required before archiving' });
+    }
+
     const issue = await store.archiveIssue(request.params.id, Date.now());
     if (!issue) {
       return reply.status(404).send({ message: 'Issue not found' });
@@ -214,6 +222,44 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
     }
 
     const issue = await store.reopenIssue(request.params.id);
+    if (!issue) {
+      return reply.status(404).send({ message: 'Issue not found' });
+    }
+
+    return { issue };
+  });
+
+  app.patch<{ Params: { id: string }; Body: IssueReleaseBody }>('/api/issues/:id/fixed', async (request, reply) => {
+    const user = await authenticate(store, request.headers.authorization);
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const fixedInRelease = parseReleaseBodyValue(request.body, 'fixedInRelease');
+    if (!fixedInRelease) {
+      return reply.status(400).send({ message: 'fixedInRelease is required' });
+    }
+
+    const issue = await store.markIssueFixed(request.params.id, fixedInRelease);
+    if (!issue) {
+      return reply.status(404).send({ message: 'Issue not found' });
+    }
+
+    return { issue };
+  });
+
+  app.patch<{ Params: { id: string }; Body: IssueReleaseBody }>('/api/issues/:id/verified', async (request, reply) => {
+    const user = await authenticate(store, request.headers.authorization);
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const verifiedInRelease = parseReleaseBodyValue(request.body, 'verifiedInRelease');
+    if (!verifiedInRelease) {
+      return reply.status(400).send({ message: 'verifiedInRelease is required' });
+    }
+
+    const issue = await store.markIssueVerified(request.params.id, verifiedInRelease);
     if (!issue) {
       return reply.status(404).send({ message: 'Issue not found' });
     }
@@ -500,6 +546,11 @@ interface CreateRepairTaskBody {
   baseBranch?: string;
 }
 
+interface IssueReleaseBody {
+  fixedInRelease?: string;
+  verifiedInRelease?: string;
+}
+
 interface AgentPendingQuerystring {
   agent?: string;
   limit?: string;
@@ -662,6 +713,10 @@ function parseAgentStatusBody(body: AgentStatusBody | undefined): {
 function parseOptionalString(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function parseReleaseBodyValue(body: IssueReleaseBody | undefined, key: keyof IssueReleaseBody): string | undefined {
+  return parseOptionalString(body?.[key]);
 }
 
 async function userOwnsAppKey(store: Store, userId: string, appKey: string): Promise<boolean> {

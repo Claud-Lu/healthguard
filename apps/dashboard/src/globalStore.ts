@@ -27,6 +27,11 @@ export interface IssueSummary {
   eventCount: number;
   firstSeenAt: number;
   lastSeenAt: number;
+  firstSeenRelease: string | null;
+  lastSeenRelease: string | null;
+  fixedInRelease: string | null;
+  verifiedInRelease: string | null;
+  status: IssueLifecycleStatus;
   platformDistribution: Record<string, number>;
   archived: boolean;
   archivedAt: number | null;
@@ -42,6 +47,7 @@ export interface OverviewTotals {
 
 export type RepairTaskStatus = 'pending' | 'claimed' | 'running' | 'pr_created' | 'failed' | 'canceled' | 'closed';
 export type RepairTaskAgent = 'hermes' | 'codex' | 'claude-code' | 'manual';
+export type IssueLifecycleStatus = 'open' | 'fixed_pending_release' | 'verifying' | 'resolved' | 'archived';
 
 export interface RepairTask {
   id: string;

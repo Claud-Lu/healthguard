@@ -24,7 +24,13 @@ interface StoredIssue {
   event_count: number;
   first_seen_at: number;
   last_seen_at: number;
+  first_seen_release: string | null;
+  last_seen_release: string | null;
+  fixed_in_release: string | null;
+  verified_in_release: string | null;
+  status: string;
   platform_distribution: Record<string, number>;
+  archived_at: number | null;
 }
 
 interface StoredRepairTask {
@@ -72,6 +78,13 @@ function createFakePostgresPool(events: StoredEvent[]) {
         return { rows: [] };
       }
 
+      if (sql.startsWith("UPDATE issues SET status = 'archived'")) {
+        for (const issue of issues.values()) {
+          if (issue.archived_at !== null) issue.status = 'archived';
+        }
+        return { rows: [] };
+      }
+
       if (sql.includes('SELECT event_id, app_key, platform, timestamp, payload') && sql.includes('FROM events')) {
         return {
           rows: events.filter((event) => event.type === 'http' && event.payload.success === false)
@@ -92,7 +105,14 @@ function createFakePostgresPool(events: StoredEvent[]) {
       }
 
       if (sql.startsWith('INSERT INTO issues')) {
-        const [id, appKey, fingerprint, message, errorType, eventCount, firstSeenAt, lastSeenAt, platformDistribution] = params;
+        const hasReleaseColumns = sql.includes('first_seen_release');
+        const [id, appKey, fingerprint, message, errorType] = params;
+        const eventCount = hasReleaseColumns ? 1 : Number(params[5]);
+        const firstSeenAt = hasReleaseColumns ? params[5] : params[6];
+        const lastSeenAt = hasReleaseColumns ? params[6] : params[7];
+        const firstSeenRelease = hasReleaseColumns ? params[7] : null;
+        const lastSeenRelease = hasReleaseColumns ? params[8] : null;
+        const platformDistribution = hasReleaseColumns ? params[9] : params[8];
         issues.set(String(id), {
           id: String(id),
           app_key: String(appKey),
@@ -102,17 +122,28 @@ function createFakePostgresPool(events: StoredEvent[]) {
           event_count: Number(eventCount),
           first_seen_at: Number(firstSeenAt),
           last_seen_at: Number(lastSeenAt),
-          platform_distribution: JSON.parse(String(platformDistribution)) as Record<string, number>
+          first_seen_release: firstSeenRelease === null ? null : String(firstSeenRelease),
+          last_seen_release: lastSeenRelease === null ? null : String(lastSeenRelease),
+          fixed_in_release: null,
+          verified_in_release: null,
+          status: 'open',
+          platform_distribution: JSON.parse(String(platformDistribution)) as Record<string, number>,
+          archived_at: null
         });
         return { rows: [] };
       }
 
       if (sql.startsWith('UPDATE issues SET event_count = $1')) {
-        const issue = issues.get(String(params[3]));
+        const idIndex = sql.includes('last_seen_release') ? 4 : 3;
+        const distributionIndex = sql.includes('last_seen_release') ? 3 : 2;
+        const issue = issues.get(String(params[idIndex]));
         if (issue) {
           issue.event_count = Number(params[0]);
           issue.last_seen_at = Number(params[1]);
-          issue.platform_distribution = JSON.parse(String(params[2])) as Record<string, number>;
+          if (sql.includes('last_seen_release') && params[2] !== null && params[2] !== undefined) {
+            issue.last_seen_release = String(params[2]);
+          }
+          issue.platform_distribution = JSON.parse(String(params[distributionIndex])) as Record<string, number>;
         }
         return { rows: [] };
       }

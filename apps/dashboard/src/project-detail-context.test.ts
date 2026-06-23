@@ -42,4 +42,16 @@ describe('project detail mini-program context rendering', () => {
     expect(source).toContain('task.summary');
     expect(source).toContain('task.failureReason');
   });
+
+  it('exposes issue release workflow actions and status messaging', () => {
+    expect(source).toContain('fixedReleaseInput = ref');
+    expect(source).toContain('verifiedReleaseInput = ref');
+    expect(source).toContain('function markIssueFixed');
+    expect(source).toContain('function markIssueVerified');
+    expect(source).toContain("`/issues/${encodeURIComponent(issue.id)}/fixed`");
+    expect(source).toContain("`/issues/${encodeURIComponent(issue.id)}/verified`");
+    expect(source).toContain('renderIssueReleaseWorkflow');
+    expect(source).toContain('Issue status');
+    expect(source).toContain('Old releases are still reporting');
+  });
 });

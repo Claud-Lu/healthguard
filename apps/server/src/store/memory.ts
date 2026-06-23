@@ -161,14 +161,37 @@ export function createMemoryStore(): Store {
     async archiveIssue(id: string, archivedAt: number): Promise<IssueSummary | null> {
       const issue = state.issues.get(id) ?? null;
       if (!issue) return null;
+      if (issue.status !== 'resolved' || !issue.verifiedInRelease) return null;
       issue.archived = true;
       issue.archivedAt = archivedAt;
+      issue.status = 'archived';
       return issue;
     },
 
     async reopenIssue(id: string): Promise<IssueSummary | null> {
       const issue = state.issues.get(id) ?? null;
       if (!issue) return null;
+      issue.archived = false;
+      issue.archivedAt = null;
+      issue.status = 'open';
+      return issue;
+    },
+
+    async markIssueFixed(id: string, fixedInRelease: string): Promise<IssueSummary | null> {
+      const issue = state.issues.get(id) ?? null;
+      if (!issue) return null;
+      issue.fixedInRelease = fixedInRelease;
+      issue.status = 'fixed_pending_release';
+      issue.archived = false;
+      issue.archivedAt = null;
+      return issue;
+    },
+
+    async markIssueVerified(id: string, verifiedInRelease: string): Promise<IssueSummary | null> {
+      const issue = state.issues.get(id) ?? null;
+      if (!issue) return null;
+      issue.verifiedInRelease = verifiedInRelease;
+      issue.status = 'resolved';
       issue.archived = false;
       issue.archivedAt = null;
       return issue;
@@ -304,8 +327,8 @@ export function createMemoryStore(): Store {
 
 function matchesIssueStatus(issue: IssueSummary, status: IssueQuery['status'] = 'open'): boolean {
   if (status === 'all') return true;
-  if (status === 'archived') return issue.archived;
-  return !issue.archived;
+  if (status === 'archived') return issue.status === 'archived' || issue.archived;
+  return issue.status !== 'archived' && !issue.archived;
 }
 
 function matchesTimeRange(timestamp: number, startTime?: number, endTime?: number): boolean {
@@ -321,9 +344,9 @@ function aggregateError(state: MemoryStoreState, event: ErrorEvent): void {
   if (existing) {
     existing.eventCount += 1;
     existing.lastSeenAt = Math.max(existing.lastSeenAt, event.timestamp);
+    existing.lastSeenRelease = event.release ?? existing.lastSeenRelease;
     existing.platformDistribution[event.platform] = (existing.platformDistribution[event.platform] ?? 0) + 1;
-    existing.archived = false;
-    existing.archivedAt = null;
+    applyRecurrenceStatus(existing, event.release);
     return;
   }
 
@@ -336,6 +359,11 @@ function aggregateError(state: MemoryStoreState, event: ErrorEvent): void {
     eventCount: 1,
     firstSeenAt: event.timestamp,
     lastSeenAt: event.timestamp,
+    firstSeenRelease: event.release ?? null,
+    lastSeenRelease: event.release ?? null,
+    fixedInRelease: null,
+    verifiedInRelease: null,
+    status: 'open',
     platformDistribution: { [event.platform]: 1 },
     archived: false,
     archivedAt: null
@@ -353,9 +381,9 @@ function aggregateHttpIssue(state: MemoryStoreState, event: HttpEvent & { finger
   if (existing) {
     existing.eventCount += 1;
     existing.lastSeenAt = Math.max(existing.lastSeenAt, event.timestamp);
+    existing.lastSeenRelease = event.release ?? existing.lastSeenRelease;
     existing.platformDistribution[event.platform] = (existing.platformDistribution[event.platform] ?? 0) + 1;
-    existing.archived = false;
-    existing.archivedAt = null;
+    applyRecurrenceStatus(existing, event.release);
     return;
   }
 
@@ -368,10 +396,49 @@ function aggregateHttpIssue(state: MemoryStoreState, event: HttpEvent & { finger
     eventCount: 1,
     firstSeenAt: event.timestamp,
     lastSeenAt: event.timestamp,
+    firstSeenRelease: event.release ?? null,
+    lastSeenRelease: event.release ?? null,
+    fixedInRelease: null,
+    verifiedInRelease: null,
+    status: 'open',
     platformDistribution: { [event.platform]: 1 },
     archived: false,
     archivedAt: null
   });
+}
+
+function applyRecurrenceStatus(issue: IssueSummary, release?: string): void {
+  if (!issue.fixedInRelease) {
+    issue.status = 'open';
+    issue.archived = false;
+    issue.archivedAt = null;
+    return;
+  }
+
+  if (release && compareRelease(release, issue.fixedInRelease) >= 0) {
+    issue.status = 'open';
+    issue.archived = false;
+    issue.archivedAt = null;
+  }
+}
+
+function compareRelease(left: string, right: string): number {
+  const leftParts = parseRelease(left);
+  const rightParts = parseRelease(right);
+  const max = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < max; index++) {
+    const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return left.localeCompare(right);
+}
+
+function parseRelease(value: string): number[] {
+  return value
+    .replace(/^[^\d]*/, '')
+    .split(/[.-]/)
+    .map((part) => Number(part))
+    .filter((part) => Number.isFinite(part));
 }
 
 function filterEvents(events: HealthGuardEvent[], appKey?: string, platform?: string): HealthGuardEvent[] {

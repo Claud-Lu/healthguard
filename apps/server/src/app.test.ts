@@ -523,6 +523,12 @@ describe('collector api', () => {
         ]
       }
     });
+    await app.inject({
+      method: 'PATCH',
+      url: '/api/issues/demo-app%3Ajs%3Aboom/verified',
+      headers,
+      payload: { verifiedInRelease: 'manual' }
+    });
 
     const archive = await app.inject({
       method: 'PATCH',
@@ -537,14 +543,16 @@ describe('collector api', () => {
     expect(archive.statusCode).toBe(200);
     expect(archive.json().issue).toMatchObject({
       id: 'demo-app:js:boom',
-      archived: true
+      archived: true,
+      status: 'archived'
     });
     expect(archive.json().issue.archivedAt).toEqual(expect.any(Number));
     expect(openIssues.json().issues).toHaveLength(0);
     expect(archivedIssues.json().issues).toHaveLength(1);
     expect(archivedIssues.json().issues[0]).toMatchObject({
       id: 'demo-app:js:boom',
-      archived: true
+      archived: true,
+      status: 'archived'
     });
     expect(openOverview.json().totals.issues).toBe(0);
     expect(archivedOverview.json().totals.issues).toBe(1);
@@ -584,6 +592,229 @@ describe('collector api', () => {
       eventCount: 2
     });
     expect(archivedAfterRecurrence.json().issues).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it('tracks issue releases and supports fixed and verified release workflow', async () => {
+    const app = createServerApp(createMemoryStore());
+
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const headers = { authorization: `Bearer ${register.json().token}` };
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/events/batch',
+      payload: {
+        appKey: 'demo-app',
+        events: [
+          {
+            eventId: 'evt_release_1',
+            appKey: 'demo-app',
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710000000000,
+            sessionId: 'session-1',
+            anonymousId: 'anon-1',
+            release: '1.1.10',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'boom',
+            fingerprint: 'js:boom',
+            breadcrumbs: []
+          },
+          {
+            eventId: 'evt_release_2',
+            appKey: 'demo-app',
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710000005000,
+            sessionId: 'session-2',
+            anonymousId: 'anon-2',
+            release: '1.1.11',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'boom',
+            fingerprint: 'js:boom',
+            breadcrumbs: []
+          }
+        ]
+      }
+    });
+
+    const issues = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app', headers });
+    expect(issues.json().issues[0]).toMatchObject({
+      firstSeenRelease: '1.1.10',
+      lastSeenRelease: '1.1.11',
+      fixedInRelease: null,
+      verifiedInRelease: null,
+      status: 'open',
+      archived: false
+    });
+
+    const fixed = await app.inject({
+      method: 'PATCH',
+      url: '/api/issues/demo-app%3Ajs%3Aboom/fixed',
+      headers,
+      payload: { fixedInRelease: '1.1.12' }
+    });
+    expect(fixed.statusCode).toBe(200);
+    expect(fixed.json().issue).toMatchObject({
+      fixedInRelease: '1.1.12',
+      status: 'fixed_pending_release',
+      archived: false
+    });
+
+    const archiveBeforeVerification = await app.inject({
+      method: 'PATCH',
+      url: '/api/issues/demo-app%3Ajs%3Aboom/archive',
+      headers
+    });
+    expect(archiveBeforeVerification.statusCode).toBe(409);
+
+    const verified = await app.inject({
+      method: 'PATCH',
+      url: '/api/issues/demo-app%3Ajs%3Aboom/verified',
+      headers,
+      payload: { verifiedInRelease: '1.1.12' }
+    });
+    expect(verified.statusCode).toBe(200);
+    expect(verified.json().issue).toMatchObject({
+      verifiedInRelease: '1.1.12',
+      status: 'resolved',
+      archived: false
+    });
+
+    const archive = await app.inject({
+      method: 'PATCH',
+      url: '/api/issues/demo-app%3Ajs%3Aboom/archive',
+      headers
+    });
+    expect(archive.statusCode).toBe(200);
+    expect(archive.json().issue).toMatchObject({
+      verifiedInRelease: '1.1.12',
+      status: 'archived',
+      archived: true
+    });
+
+    await app.close();
+  });
+
+  it('keeps verified issues resolved for older-release recurrences and reopens them for fixed-or-newer releases', async () => {
+    const app = createServerApp(createMemoryStore());
+
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const headers = { authorization: `Bearer ${register.json().token}` };
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/events/batch',
+      payload: {
+        appKey: 'demo-app',
+        events: [
+          {
+            eventId: 'evt_initial',
+            appKey: 'demo-app',
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710000000000,
+            sessionId: 'session-1',
+            anonymousId: 'anon-1',
+            release: '1.1.10',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'boom',
+            fingerprint: 'js:boom',
+            breadcrumbs: []
+          }
+        ]
+      }
+    });
+    await app.inject({
+      method: 'PATCH',
+      url: '/api/issues/demo-app%3Ajs%3Aboom/fixed',
+      headers,
+      payload: { fixedInRelease: '1.1.12' }
+    });
+    await app.inject({
+      method: 'PATCH',
+      url: '/api/issues/demo-app%3Ajs%3Aboom/verified',
+      headers,
+      payload: { verifiedInRelease: '1.1.12' }
+    });
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/events/batch',
+      payload: {
+        appKey: 'demo-app',
+        events: [
+          {
+            eventId: 'evt_old_release',
+            appKey: 'demo-app',
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710000005000,
+            sessionId: 'session-2',
+            anonymousId: 'anon-2',
+            release: '1.1.11',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'boom',
+            fingerprint: 'js:boom',
+            breadcrumbs: []
+          }
+        ]
+      }
+    });
+    const afterOldRelease = await app.inject({ method: 'GET', url: '/api/issues/demo-app%3Ajs%3Aboom', headers });
+    expect(afterOldRelease.json().issue).toMatchObject({
+      lastSeenRelease: '1.1.11',
+      fixedInRelease: '1.1.12',
+      verifiedInRelease: '1.1.12',
+      status: 'resolved',
+      archived: false
+    });
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/events/batch',
+      payload: {
+        appKey: 'demo-app',
+        events: [
+          {
+            eventId: 'evt_regression',
+            appKey: 'demo-app',
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710000010000,
+            sessionId: 'session-3',
+            anonymousId: 'anon-3',
+            release: '1.1.12',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'boom',
+            fingerprint: 'js:boom',
+            breadcrumbs: []
+          }
+        ]
+      }
+    });
+    const afterRegression = await app.inject({ method: 'GET', url: '/api/issues/demo-app%3Ajs%3Aboom', headers });
+    expect(afterRegression.json().issue).toMatchObject({
+      lastSeenRelease: '1.1.12',
+      status: 'open',
+      archived: false,
+      archivedAt: null
+    });
 
     await app.close();
   });

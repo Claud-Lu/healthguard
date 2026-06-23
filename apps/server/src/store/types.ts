@@ -27,6 +27,11 @@ export interface IssueSummary {
   eventCount: number;
   firstSeenAt: number;
   lastSeenAt: number;
+  firstSeenRelease: string | null;
+  lastSeenRelease: string | null;
+  fixedInRelease: string | null;
+  verifiedInRelease: string | null;
+  status: IssueLifecycleStatus;
   platformDistribution: Record<string, number>;
   archived: boolean;
   archivedAt: number | null;
@@ -47,6 +52,7 @@ export interface IssueDetail {
 
 export type RepairTaskStatus = 'pending' | 'claimed' | 'running' | 'pr_created' | 'failed' | 'canceled' | 'closed';
 export type RepairTaskAgent = 'hermes' | 'codex' | 'claude-code' | 'manual';
+export type IssueLifecycleStatus = 'open' | 'fixed_pending_release' | 'verifying' | 'resolved' | 'archived';
 
 export interface RepairTask {
   id: string;
@@ -131,6 +137,8 @@ export interface Store {
   getIssueDetail(id: string, platform?: string, eventLimit?: number, startTime?: number, endTime?: number): Promise<IssueDetail>;
   archiveIssue(id: string, archivedAt: number): Promise<IssueSummary | null>;
   reopenIssue(id: string): Promise<IssueSummary | null>;
+  markIssueFixed(id: string, fixedInRelease: string): Promise<IssueSummary | null>;
+  markIssueVerified(id: string, verifiedInRelease: string): Promise<IssueSummary | null>;
   createRepairTask(input: CreateRepairTaskInput): Promise<RepairTask>;
   listRepairTasks(appKey: string, ownerUserId: string): Promise<RepairTask[]>;
   getRepairTaskDetail(id: string, ownerUserId: string): Promise<{ task: RepairTask | null; notes: RepairTaskNote[] }>;
