@@ -11,7 +11,8 @@ COPY packages/core/package.json packages/core/
 RUN yarn install --frozen-lockfile
 
 COPY . .
-RUN yarn workspace @healthguard/dashboard build
+RUN yarn workspace @health-guard/core build \
+    && yarn workspace @healthguard/dashboard build
 
 # Production stage
 FROM nginx:alpine
