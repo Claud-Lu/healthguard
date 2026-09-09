@@ -1,4 +1,6 @@
 import { createHttpFingerprint, extractPathname } from '@health-guard/core';
+import { createMemoryNotifications } from '../notifications/store';
+import { queueIssueAlert } from '../notifications/service';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@health-guard/core';
 import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskAgent, RepairTaskNote, UpdateRepairTaskInput } from './types';
 
@@ -15,6 +17,7 @@ export interface MemoryStoreState {
 }
 
 export function createMemoryStore(): Store {
+  const notifications = createMemoryNotifications();
   const state: MemoryStoreState = {
     users: [],
     sessions: new Map(),
@@ -26,6 +29,7 @@ export function createMemoryStore(): Store {
   };
 
   return {
+    notifications,
     async createUser(user: UserRecord): Promise<void> {
       state.users.push(user);
     },
@@ -72,6 +76,9 @@ export function createMemoryStore(): Store {
 
         state.events.push(payload);
 
+        const issueId = 'fingerprint' in payload ? `${payload.appKey}:${payload.fingerprint}` : '';
+        const before = structuredClone(state.issues.get(issueId) ?? null);
+
         if (event.type === 'error') {
           aggregateError(state, event);
         }
@@ -79,6 +86,9 @@ export function createMemoryStore(): Store {
         if (event.type === 'http' && !event.success) {
           aggregateHttpIssue(state, payload as HttpEvent & { fingerprint: string });
         }
+        const after = state.issues.get(issueId);
+        const app = state.apps.find(a => a.appKey === event.appKey);
+        if (app && after) await queueIssueAlert(notifications, app, await notifications.getRule(app.appKey), before, after);
       }
     },
 

@@ -689,6 +689,7 @@ export default {
             h('div', [h('h1', selectedApp.value.name), h('p', t.inspectSubtitle)]),
             h('div', { class: 'topbar-actions' }, [
               h('span', { class: 'version-badge' }, `v${__APP_VERSION__}`),
+              h('button', { type: 'button', class: 'outline-button', onClick: () => router.push({ path: '/notifications', query: { appKey: appKey.value } }) }, store.locale === 'zh-CN' ? '通知设置' : 'Notifications'),
               h('button', { type: 'button', class: 'outline-button', onClick: () => { void loadProjectData(); }, disabled: store.loading }, t.refresh),
               h('button', { type: 'button', class: 'outline-button', onClick: () => router.push('/projects') }, t.projectList)
             ]),

@@ -5,6 +5,11 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
+      path: '/notifications',
+      name: 'Notifications',
+      component: () => import('./pages/NotificationSettingsPage')
+    },
+    {
       path: '/',
       redirect: () => (store.token ? '/projects' : '/login')
     },

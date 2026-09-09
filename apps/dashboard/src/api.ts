@@ -9,7 +9,8 @@ export function apiUrl(path: string): string {
 export class ApiError extends Error {
   constructor(
     message: string,
-    readonly code?: string
+    readonly code?: string,
+    readonly status?: number
   ) {
     super(message);
   }
@@ -27,7 +28,7 @@ export async function requestJson<T>(url: string, init?: RequestInit, token?: st
 
   if (!response.ok) {
     const payload = await readErrorPayload(response);
-    throw new ApiError(payload.message || `Request failed: ${response.status}`, payload.code);
+    throw new ApiError(payload.message || `Request failed: ${response.status}`, payload.code, response.status);
   }
 
   return response.json() as Promise<T>;

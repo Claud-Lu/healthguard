@@ -1,4 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
+import { createPostgresNotifications, ensureNotificationSchema } from '../notifications/store';
+import { queueIssueAlert } from '../notifications/service';
 import { nanoid } from 'nanoid';
 import { createHttpFingerprint, extractPathname } from '@health-guard/core';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@health-guard/core';
@@ -21,9 +23,11 @@ export interface PostgresStoreOptions {
 export async function createPostgresStore(options: PostgresStoreOptions): Promise<Store> {
   const { pool, sessionTtlMs = 7 * 24 * 60 * 60 * 1000 } = options;
   await ensureSchema(pool);
+  await ensureNotificationSchema(pool);
   await backfillFailedHttpIssues(pool);
 
   return {
+    notifications: createPostgresNotifications(pool),
     async createUser(user: UserRecord): Promise<void> {
       await pool.query(
         'INSERT INTO users (id, email, password_hash, created_at) VALUES ($1, $2, $3, $4)',
@@ -87,6 +91,19 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       try {
         await client.query('BEGIN');
 
+        // Serialize batches per project, including previously unseen issue fingerprints.
+        for (const key of [...new Set(events.map(event => event.appKey))].sort()) {
+          await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [key]);
+        }
+        const notifications = createPostgresNotifications(client);
+        const alertApps = new Map<string, AppRecord>();
+        for (const key of new Set(events.map(event => event.appKey))) {
+          if ((await notifications.getRule(key)).enabled) {
+            const result = await client.query('SELECT * FROM apps WHERE app_key = $1', [key]);
+            if (result.rows[0]) alertApps.set(key, rowToApp(result.rows[0]));
+          }
+        }
+
         const values: unknown[] = [];
         const placeholders: string[] = [];
 
@@ -126,12 +143,21 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
         );
 
         for (const event of events) {
+          const alertApp = alertApps.get(event.appKey);
+          const fingerprint = event.type === 'error' ? event.fingerprint : event.type === 'http' && !event.success ? createHttpFingerprint(event) : null;
+          const issueId = fingerprint ? `${event.appKey}:${fingerprint}` : null;
+          const beforeRows = alertApp && issueId ? await client.query('SELECT * FROM issues WHERE id = $1', [issueId]) : null;
+          const before = beforeRows?.rows[0] ? rowToIssue(beforeRows.rows[0]) : null;
           if (event.type === 'error') {
             await upsertIssue(client, event as ErrorEvent);
           }
           if (event.type === 'http' && !event.success) {
             const payload = { ...event, fingerprint: createHttpFingerprint(event) } as HttpEvent & { fingerprint: string };
             await upsertHttpIssue(client, payload);
+          }
+          if (alertApp && issueId) {
+            const afterRows = await client.query('SELECT * FROM issues WHERE id = $1', [issueId]);
+            if (afterRows.rows[0]) await queueIssueAlert(notifications, alertApp, await notifications.getRule(event.appKey), before, rowToIssue(afterRows.rows[0]));
           }
         }
 
@@ -583,6 +609,8 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
       const eventResult = await pool.query('DELETE FROM events WHERE timestamp < $1', [cutoff]);
       const sessionResult = await pool.query('DELETE FROM sessions WHERE expires_at < EXTRACT(EPOCH FROM NOW()) * 1000');
+      await pool.query("DELETE FROM notification_jobs WHERE status IN ('sent', 'failed', 'canceled') AND created_at < $1", [Date.now() - 90 * 24 * 60 * 60 * 1000]);
+      await pool.query('DELETE FROM notification_cooldowns WHERE next_at < $1', [Date.now()]);
       return {
         deletedEvents: eventResult.rowCount ?? 0,
         deletedSessions: sessionResult.rowCount ?? 0

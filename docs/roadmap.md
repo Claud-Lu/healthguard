@@ -89,12 +89,12 @@ Acceptance:
 - [x] Automatic data retention cleanup (configurable `CLEANUP_INTERVAL_MS` and retention period).
 - [x] Graceful shutdown on SIGTERM/SIGINT.
 
-## Phase 9: Alert & Notification (Planned)
+## Phase 9: Alert & Notification (Email available)
 
 - [ ] Alert rules: configure error rate / count thresholds per project.
 - [ ] Webhook notifications (Slack, DingTalk, Feishu, custom HTTP).
-- [ ] Email notifications.
-- [ ] Alert history and status tracking.
+- [x] Email notifications: account SMTP settings, project recipients, new/regression/count triggers, cooldown, test emails and durable delivery history.
+- [x] Email delivery history and status tracking.
 
 ## Phase 10: SourceMap & Release Tracking (Planned)
 

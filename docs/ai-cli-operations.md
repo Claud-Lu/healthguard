@@ -144,3 +144,7 @@ If the consuming app is served over HTTPS, use an HTTPS collector endpoint or an
 - No events appear: confirm endpoint, app key, browser mixed-content rules, and network requests to `/events/batch`.
 - Events disappeared after restart: current MVP storage is in-memory.
 - Dashboard language looks wrong: clear `healthguard_locale` from browser local storage or switch language manually.
+
+## Email notifications
+
+See [Email notifications](./email-notifications.md) for dashboard setup, SMTP credential handling, trigger rules, delivery history and authenticated API operations.

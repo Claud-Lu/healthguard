@@ -1,4 +1,6 @@
 import cors from '@fastify/cors';
+import { registerNotificationRoutes } from './notifications/routes';
+import type { SendMail } from './notifications/service';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -6,7 +8,7 @@ import { nanoid } from 'nanoid';
 import { parseEventBatch, type EventBatch } from '@health-guard/core';
 import type { AppType, IssueQuery, IssueStatusFilter, RepairTaskAgent, RepairTaskStatus, Store, UserRecord } from './store';
 
-export function createServerApp(store: Store, options?: { corsOrigin?: string | boolean; agentToken?: string }): FastifyInstance {
+export function createServerApp(store: Store, options?: { corsOrigin?: string | boolean; agentToken?: string; encryptionKey?: string; sendMail?: SendMail; notificationWorker?: boolean }): FastifyInstance {
   const app = Fastify({
     logger: { level: process.env.LOG_LEVEL ?? 'info' }
   });
@@ -19,6 +21,7 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
     max: 100,
     timeWindow: '1 minute'
   });
+  registerNotificationRoutes(app, store, options);
 
   const healthPayload = {
     ok: true,

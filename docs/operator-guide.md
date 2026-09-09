@@ -100,3 +100,7 @@ Do not commit the real token. The repository `docker-compose.yml` reads `HEALTHG
 - The default `docker-compose.yml` uses hardcoded database credentials (`healthguard:healthguard`) for development convenience. **Before deploying to production, change `POSTGRES_PASSWORD` and the corresponding `DATABASE_URL` to strong, unique passwords.**
 - `CORS_ORIGIN` is set to `*` by default. Restrict it to your actual domain in production.
 - `HEALTHGUARD_AGENT_TOKEN` protects repair-agent polling, claim, payload, and status update APIs. Keep it in deployment secrets and rotate it if an agent machine is compromised.
+
+## Email notifications
+
+See [Email notifications](./email-notifications.md) for dashboard setup, SMTP credential handling, trigger rules, delivery history and authenticated API operations.

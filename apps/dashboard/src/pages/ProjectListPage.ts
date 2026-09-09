@@ -131,6 +131,7 @@ export default {
           ]),
           h('button', { type: 'button', class: 'wide logout-top', onClick: handleLogout }, t.logout),
           h('button', { type: 'button', class: 'wide', onClick: () => { void loadDashboardData(); }, disabled: store.loading }, t.refresh),
+          h('button', { type: 'button', class: 'wide secondary', onClick: () => router.push('/notifications') }, store.locale === 'zh-CN' ? '通知设置' : 'Notifications'),
           h('div', { class: 'create-box' }, [
             h('h2', t.createApp),
             h('button', { type: 'button', class: 'wide secondary', onClick: () => { showCreateModal.value = true; } }, t.create)

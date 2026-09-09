@@ -1,4 +1,5 @@
 import type { ErrorEvent, HealthGuardEvent } from '@health-guard/core';
+import type { NotificationStore } from '../notifications/types';
 
 export type AppType = 'web' | 'wechat-miniprogram' | 'alipay-miniprogram' | 'flutter' | 'uni-app' | 'other';
 
@@ -119,6 +120,7 @@ export interface IssueQuery {
 }
 
 export interface Store {
+  notifications: NotificationStore;
   createUser(user: UserRecord): Promise<void>;
   findUserByEmail(email: string): Promise<UserRecord | null>;
   findUserById(id: string): Promise<UserRecord | null>;
