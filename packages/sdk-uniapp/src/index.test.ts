@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createUniAppClient } from './index';
+
+afterEach(() => { vi.unstubAllGlobals(); });
 
 describe('sdk-uniapp client', () => {
   it('queues captured exceptions and flushes them through the configured transport', async () => {
@@ -158,6 +160,36 @@ describe('sdk-uniapp client', () => {
     const event = transport.mock.calls[0][0].events[0];
     expect(event.breadcrumbs).toHaveLength(30);
     expect(event.breadcrumbs[0].message).toBe('crumb 5');
+  });
+
+  it('reads the actual global uni-app page stack for native errors and requests', async () => {
+    vi.stubGlobal('uni', { getSystemInfoSync: () => ({ uniPlatform: 'app' }) });
+    const pages = vi.fn(() => [{ route: 'pages/home/index' }, { route: 'pages/trip/detail', $page: { fullPath: '/pages/trip/detail?id=42' } }]);
+    vi.stubGlobal('getCurrentPages', pages);
+    const transport = vi.fn().mockResolvedValue(undefined);
+    const client = createUniAppClient({ appKey: 'demo', endpoint: '/api/events/batch', transport, flushIntervalMs: 0 });
+    client.captureException(new Error('native error'));
+    client.captureHttp({ method: 'POST', url: 'https://api.example.com/orders', duration: 10, success: false });
+    await client.flush();
+    const events = transport.mock.calls[0][0].events;
+    expect(events).toHaveLength(2);
+    for (const event of events) expect(event).toMatchObject({ platform: 'uniapp-app', pageUrl: '/pages/trip/detail?id=42' });
+    pages.mockReturnValue([{ route: '/pages/home/index' }]);
+    client.captureException(new Error('next page'));
+    await client.flush();
+    expect(transport.mock.calls[1][0].events[0].pageUrl).toBe('/pages/home/index');
+  });
+
+  it('keeps native capture working when the page stack is empty or unavailable', async () => {
+    const pages = vi.fn().mockReturnValueOnce([]).mockImplementationOnce(() => { throw new Error('page runtime unavailable'); });
+    vi.stubGlobal('getCurrentPages', pages);
+    const transport = vi.fn().mockResolvedValue(undefined);
+    const client = createUniAppClient({ appKey: 'demo', endpoint: '/api/events/batch', transport, flushIntervalMs: 0 });
+    client.captureException(new Error('startup'));
+    client.captureHttp({ method: 'GET', url: 'https://api.example.com/orders', duration: 10, success: false });
+    await client.flush();
+    expect(transport.mock.calls[0][0].events).toHaveLength(2);
+    for (const event of transport.mock.calls[0][0].events) expect(event.pageUrl).toBeUndefined();
   });
 });
 

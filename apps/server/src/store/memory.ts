@@ -88,7 +88,7 @@ export function createMemoryStore(): Store {
         }
         const after = state.issues.get(issueId);
         const app = state.apps.find(a => a.appKey === event.appKey);
-        if (app && after) await queueIssueAlert(notifications, app, await notifications.getRule(app.appKey), before, after);
+        if (app && after) await queueIssueAlert(notifications, app, await notifications.getRule(app.appKey), before, after, payload);
       }
     },
 

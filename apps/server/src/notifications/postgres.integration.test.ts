@@ -3,7 +3,7 @@ import { Pool } from 'pg';
 import { describe, expect, it } from 'vitest';
 import { createPostgresStore } from '../store';
 import { encryptSecret } from './service';
-import type { ErrorEvent } from '@health-guard/core';
+import type { ErrorEvent, HttpEvent } from '@health-guard/core';
 
 // Run against a disposable database: TEST_DATABASE_URL=... yarn test.
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -41,6 +41,13 @@ describe.skipIf(!databaseUrl)('notification PostgreSQL persistence and concurren
       const next = await store.notifications.claimJob(Date.now());
       await store.notifications.finishJob(next!.id, 'sent', null, Date.now());
       expect((await store.notifications.listJobs('u1', 'demo'))[0].status).toBe('sent');
+
+      const http: HttpEvent = { ...event('http-context'), type: 'http', platform: 'uniapp-app', method: 'POST', url: 'https://api.example.com/v1/position?access_token=secret&source=app', status: 500, duration: 140, success: false, pageUrl: '/pages/trip/current', environment: 'test' };
+      await restarted.ingestEvents([http]);
+      const contextJob = (await store.notifications.listJobs('u1', 'demo')).find(job => job.text.includes('Event ID: http-context'))!;
+      expect(contextJob.text).toContain('请求地址 / Request URL: https://api.example.com/v1/position?access_token=%5BFiltered%5D&source=app');
+      expect(contextJob.text).toContain('App 页面路由 / App route: /pages/trip/current');
+      expect(contextJob.text).not.toContain('=secret');
     } finally {
       await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end();
     }

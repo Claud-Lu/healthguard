@@ -157,7 +157,7 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
           }
           if (alertApp && issueId) {
             const afterRows = await client.query('SELECT * FROM issues WHERE id = $1', [issueId]);
-            if (afterRows.rows[0]) await queueIssueAlert(notifications, alertApp, await notifications.getRule(event.appKey), before, rowToIssue(afterRows.rows[0]));
+            if (afterRows.rows[0]) await queueIssueAlert(notifications, alertApp, await notifications.getRule(event.appKey), before, rowToIssue(afterRows.rows[0]), event);
           }
         }
 

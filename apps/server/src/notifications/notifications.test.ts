@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createServerApp } from '../app';
 import { createMemoryStore } from '../store';
 import { createNotificationWorker, decryptSecret, encryptSecret } from './service';
-import type { ErrorEvent } from '@health-guard/core';
+import type { ErrorEvent, HttpEvent } from '@health-guard/core';
 
 const secret = 'test-mailbox-authorization-code';
 const key = randomBytes(32);
@@ -123,5 +123,53 @@ describe('email notification API and delivery', () => {
     expect((await store.notifications.listJobs('u1', 'app-one'))[0].reason).toBe('new_issue');
     await request('DELETE', '/api/notifications/sender');
     expect((await store.notifications.getRule('app-one')).enabled).toBe(false);
+  });
+
+  it('snapshots the triggering HTTP request and H5 page, including the host and hash route', async () => {
+    const { request, root, store } = await fixture();
+    await request('PUT', '/api/notifications/sender', sender);
+    await request('PUT', root, { ...defaultRule, onNewIssue: false, threshold: 2 });
+    const first: HttpEvent = { ...event('first'), type: 'http', method: 'POST', url: 'https://old.example.com/api/orders', status: 503, duration: 120, success: false, pageUrl: 'https://shop.example.com/old', release: 'newer-release', timestamp: Date.now() + 10_000 };
+    // Same fingerprint on a different host/page. The triggering event can arrive out of order.
+    const trigger: HttpEvent = { ...first, eventId: 'trigger', timestamp: Date.now(), release: 'trigger-release', environment: 'test', url: 'https://api.example.com/api/orders?token=request-secret&order=42', pageUrl: 'https://shop.example.com/app?lang=zh#/orders/detail?id=42&token=page-secret', errorMessage: 'Unavailable' };
+    await store.ingestEvents([first, trigger]);
+    const [job] = await store.notifications.listJobs('u1', 'app-one');
+    expect(job.reason).toBe('threshold');
+    expect(job.text).toContain('请求地址 / Request URL: https://api.example.com/api/orders?token=%5BFiltered%5D&order=42');
+    expect(job.text).toContain('页面完整地址 / Page URL: https://shop.example.com/app?lang=zh#/orders/detail?id=42&token=%5BFiltered%5D');
+    expect(job.text).toContain('本次版本 / Event release: trigger-release');
+    expect(job.text).toContain(`本次发生 / Event time (UTC): ${new Date(trigger.timestamp).toISOString()}`);
+    expect(job.text).toContain('状态码 / Status: 503');
+    expect(job.text).toContain('请求耗时 / Duration: 120 ms');
+    expect(job.text).toContain('环境 / Environment: test');
+    expect(job.text).toContain('Event ID: trigger');
+    for (const value of ['request-secret', 'page-secret', 'old.example.com', '/old', 'newer-release']) expect(job.text).not.toContain(value);
+  });
+
+  it('includes native routes for HTTP and error alerts, and handles older events without page data', async () => {
+    const { request, root, store } = await fixture();
+    await request('PUT', '/api/notifications/sender', sender); await request('PUT', root, defaultRule);
+    await store.ingestEvents([
+      { ...event('native-error', 'native'), platform: 'uniapp-app', page: '/pages/trip/current' },
+      { ...event('native-http'), type: 'http', platform: 'uniapp-app', method: 'POST', url: 'https://api.example.com/position', duration: 50, success: false, pageUrl: '/pages/home/index' },
+      { ...event('old', 'old'), platform: 'uniapp-app' }
+    ]);
+    const jobs = await store.notifications.listJobs('u1', 'app-one');
+    expect(jobs.find(job => job.text.includes('Event ID: native-error'))?.text).toContain('App 页面路由 / App route: /pages/trip/current');
+    expect(jobs.find(job => job.text.includes('Event ID: native-http'))?.text).toContain('App 页面路由 / App route: /pages/home/index');
+    expect(jobs.find(job => job.text.includes('Event ID: old'))?.text).toContain('App 页面路由 / App route: 未上报 / Not reported');
+  });
+
+  it('resolves relative browser requests against the page and never invents a native request host', async () => {
+    const { request, root, store } = await fixture();
+    await request('PUT', '/api/notifications/sender', sender); await request('PUT', root, defaultRule);
+    const http: HttpEvent = { ...event('h5'), type: 'http', method: 'GET', url: '../api/orders', duration: 1, success: false, pageUrl: 'https://shop.example.com/app/index.html#/home' };
+    await store.ingestEvents([http, { ...http, eventId: 'app', platform: 'uniapp-app', url: '/api/profile', pageUrl: '/pages/profile/index' }]);
+    const jobs = await store.notifications.listJobs('u1', 'app-one');
+    expect(jobs.find(job => job.text.includes('Event ID: h5'))?.text).toContain('请求地址 / Request URL: https://shop.example.com/api/orders');
+    const native = jobs.find(job => job.text.includes('Event ID: app'))!.text;
+    expect(native).toContain('请求地址 / Request URL: /api/profile');
+    expect(native).toContain('完整请求地址未上报');
+    expect(native).not.toContain('healthguard.invalid');
   });
 });

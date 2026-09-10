@@ -26,6 +26,16 @@ History shows the latest 50 messages per project and retains completed records f
 
 Tests are limited to one per account per minute. Use the test button again after correcting a failed configuration.
 
+## Alert content
+
+Alerts include the project, issue, cumulative count, platform, environment, event release/time, latest occurrence time, event/issue IDs and a dashboard link. HTTP alerts also include the request method, **full request URL** (scheme, host, path and query), status, duration and request error. H5/Web alerts include the **full page URL**, including hash routes; native App and mini-program alerts include the **page route**.
+
+Details are snapshotted from the event that triggers the notification, so an issue shared across hosts/pages or an event received out of order does not borrow context from another occurrence. URL user credentials and known authentication query/hash parameters are removed or masked. Request bodies, headers and arbitrary context are not included in email.
+
+Relative browser request URLs are resolved against the reported full page URL. If the SDK did not report a host or page, the message marks the missing data instead of guessing. Existing queued messages keep their saved content. Historical events cannot be backfilled with information that was never collected.
+
+For uni-app native/mini-program routes, use `@health-guard/sdk-uniapp@0.3.1` or later and rebuild/release the client. This fixes the global `getCurrentPages()` API lookup and prefers `$page.fullPath`, with `route`/`__route__` fallbacks. Updating the collector alone cannot add page routes to older installed clients.
+
 ## Deployment
 
 Use PostgreSQL for persistent settings and the durable queue. Memory mode is intended for local evaluation and loses settings on restart.

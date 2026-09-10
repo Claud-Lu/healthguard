@@ -148,3 +148,5 @@ If the consuming app is served over HTTPS, use an HTTPS collector endpoint or an
 ## Email notifications
 
 See [Email notifications](./email-notifications.md) for dashboard setup, SMTP credential handling, trigger rules, delivery history and authenticated API operations.
+
+Alert emails include the full request URL and H5 page URL or native page route from the triggering event. Missing page data requires a client SDK upgrade (`@health-guard/sdk-uniapp@0.3.1` for the uni-app route fix) and a new client release; historical events cannot be backfilled. Authentication parameters are masked.

@@ -6,7 +6,10 @@ import {
   type EventBatch
 } from '@health-guard/core';
 
-const SDK_VERSION = '0.1.0';
+const SDK_VERSION = '0.3.1';
+
+// uni-app exposes this as a global API, not as a method on `uni`.
+declare const getCurrentPages: undefined | (() => Array<{ route?: string; __route__?: string; $page?: { fullPath?: string } }>);
 
 /* -------------------------------------------------------------------------- */
 /*                                   Types                                    */
@@ -175,12 +178,12 @@ function getCurrentPageUrl(): string | undefined {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const uniGlobal = (globalThis as any).uni;
-    const pages = uniGlobal?.getCurrentPages?.();
+    const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : uniGlobal?.getCurrentPages?.();
     if (Array.isArray(pages) && pages.length > 0) {
       const page = pages[pages.length - 1];
-      const route = page?.route ?? page?.__route__;
-      if (route) {
-        return `/${route}`;
+      const route = page?.$page?.fullPath || page?.route || page?.__route__;
+      if (typeof route === 'string' && route) {
+        return `/${route.replace(/^\/+/, '')}`;
       }
     }
   } catch {

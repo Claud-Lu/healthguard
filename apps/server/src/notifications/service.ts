@@ -3,7 +3,9 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import nodemailer from 'nodemailer';
 import { nanoid } from 'nanoid';
+import type { HealthGuardEvent } from '@health-guard/core';
 import type { AppRecord, IssueSummary, Store } from '../store/types';
+import { issueAlertContent } from './content';
 import { alertReason, type NotificationJob, type NotificationRule, type NotificationStore, type SenderConfig } from './types';
 
 export function encryptionKey(value = process.env.HEALTHGUARD_ENCRYPTION_KEY): Buffer | null {
@@ -27,14 +29,11 @@ export function decryptSecret(value: string, key: Buffer, userId: string): strin
   return Buffer.concat([cipher.update(data), cipher.final()]).toString('utf8');
 }
 
-export async function queueIssueAlert(notifications: NotificationStore, app: AppRecord, rule: NotificationRule, before: IssueSummary | null, after: IssueSummary): Promise<void> {
+export async function queueIssueAlert(notifications: NotificationStore, app: AppRecord, rule: NotificationRule, before: IssueSummary | null, after: IssueSummary, event: HealthGuardEvent): Promise<void> {
   const reason = alertReason(before, after, rule);
   if (!reason || !rule.recipients.length || !await notifications.getSender(app.ownerUserId)) return;
-  const labels = { new_issue: '新异常 / New issue', regression: '异常再次出现 / Regression', threshold: '达到次数阈值 / Threshold reached', test: '测试 / Test' };
   const now = Date.now();
-  const subject = `[HealthGuard] ${labels[reason]} · ${app.name}`.replace(/[\r\n]/g, ' ').slice(0, 200);
-  const dashboard = process.env.HEALTHGUARD_DASHBOARD_URL?.replace(/\/$/, '');
-  const text = `${labels[reason]}\n\n项目 / Project: ${app.name}\n异常 / Issue: ${after.message.slice(0, 500)}\n类型 / Type: ${after.errorType}\n累计次数 / Total count: ${after.eventCount}\n版本 / Release: ${after.lastSeenRelease ?? '-'}\n最近发生 / Last seen: ${new Date(after.lastSeenAt).toISOString()}\nIssue ID: ${after.id}\n${dashboard ? `\n${dashboard}/projects/${encodeURIComponent(app.appKey)}` : ''}\n\n可在 HealthGuard 通知设置中调整规则或关闭推送。`;
+  const { subject, text } = issueAlertContent(app, after, event, reason, process.env.HEALTHGUARD_DASHBOARD_URL);
   await notifications.enqueue({ id: nanoid(), ownerUserId: app.ownerUserId, appKey: app.appKey, issueId: after.id, reason, subject, text, recipients: rule.recipients, status: 'pending', error: null, createdAt: now, updatedAt: now }, rule.cooldownMinutes * 60_000);
 }
 
