@@ -5,7 +5,9 @@ import nodemailer from 'nodemailer';
 import { nanoid } from 'nanoid';
 import type { HealthGuardEvent } from '@health-guard/core';
 import type { AppRecord, IssueSummary, Store } from '../store/types';
+import { compareRelease } from '../store/releases';
 import { issueAlertContent } from './content';
+import { isLocalDevelopmentEvent } from './eligibility';
 import { alertReason, type NotificationJob, type NotificationRule, type NotificationStore, type SenderConfig } from './types';
 
 export function encryptionKey(value = process.env.HEALTHGUARD_ENCRYPTION_KEY): Buffer | null {
@@ -30,7 +32,20 @@ export function decryptSecret(value: string, key: Buffer, userId: string): strin
 }
 
 export async function queueIssueAlert(notifications: NotificationStore, app: AppRecord, rule: NotificationRule, before: IssueSummary | null, after: IssueSummary, event: HealthGuardEvent): Promise<void> {
-  const reason = alertReason(before, after, rule);
+  const currentReason = alertReason(before, after, rule);
+  if (isLocalDevelopmentEvent(event)) {
+    // Local events still update shared issues. Preserve first/regression triggers
+    // so the next deployed occurrence can alert without relying on a threshold.
+    if (currentReason === 'new_issue' || currentReason === 'regression') await notifications.deferLocalTrigger(app.appKey, after.id, currentReason);
+    return;
+  }
+  const deferred = await notifications.takeLocalTrigger(after.id);
+  const regressionRelease = !after.fixedInRelease || Boolean(event.release && compareRelease(event.release, after.fixedInRelease) >= 0);
+  const deferredEnabled = rule.enabled && (deferred === 'new_issue' ? rule.onNewIssue : deferred === 'regression' && rule.onRegression && after.status === 'open' && regressionRelease);
+  if (deferred === 'regression' && rule.enabled && rule.onRegression && !regressionRelease) {
+    await notifications.deferLocalTrigger(app.appKey, after.id, deferred);
+  }
+  const reason = deferredEnabled ? deferred : currentReason;
   if (!reason || !rule.recipients.length || !await notifications.getSender(app.ownerUserId)) return;
   const now = Date.now();
   const { subject, text } = issueAlertContent(app, after, event, reason, process.env.HEALTHGUARD_DASHBOARD_URL);

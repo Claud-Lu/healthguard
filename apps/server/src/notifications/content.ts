@@ -39,7 +39,7 @@ export function notificationAddress(value: string, base?: string): string {
   }
 }
 
-function pageAddress(event: HealthGuardEvent): string | undefined {
+export function pageAddress(event: HealthGuardEvent): string | undefined {
   const context = 'context' in event ? event.context : undefined;
   return [event.pageUrl, 'page' in event ? event.page : undefined, context?.pageUrl, context?.page, context?.route]
     .find((value): value is string => typeof value === 'string' && value.trim().length > 0);

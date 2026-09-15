@@ -125,6 +125,117 @@ describe('email notification API and delivery', () => {
     expect((await store.notifications.getRule('app-one')).enabled).toBe(false);
   });
 
+  it.each([
+    'http://127.0.0.1:5173/#/trip',
+    'http://localhost:5173/#/trip',
+    'http://app.localhost:8080/',
+    'http://LOCALHOST.:5173/',
+    'http://127.1:5173/',
+    'http://[::1]:5173/',
+    'http://[::ffff:127.0.0.1]:5173/',
+    'http://0.0.0.0:5173/',
+    '//localhost:5173/trip'
+  ])('retains local H5 failures from %s without queueing email or consuming the cooldown', async pageUrl => {
+    const { request, root, store } = await fixture();
+    await request('PUT', '/api/notifications/sender', sender);
+    await request('PUT', root, { ...defaultRule, threshold: 0 });
+    const local: HttpEvent = { ...event('local'), type: 'http', platform: 'uniapp-h5', environment: 'test', method: 'GET', url: 'https://api.example.com/trips', pageUrl, duration: 4, success: false, errorMessage: 'Failed to fetch' };
+    expect((await request('POST', '/api/events/batch', { appKey: 'app-one', events: [local] })).statusCode).toBe(202);
+    expect((await store.listIssues({ appKey: 'app-one' }))[0].eventCount).toBe(1);
+    expect(await store.notifications.listJobs('u1', 'app-one')).toHaveLength(0);
+    await store.ingestEvents([{ ...local, eventId: 'deployed', pageUrl: 'https://test.example.com/trip' }]);
+    const jobs = await store.notifications.listJobs('u1', 'app-one');
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].reason).toBe('new_issue');
+    expect(jobs[0].text).toContain('Event ID: deployed');
+    const send = vi.fn().mockResolvedValue(undefined);
+    await createNotificationWorker(store, key, send).run();
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it('keeps development environment errors out of all automatic alerts', async () => {
+    const { request, root, store } = await fixture();
+    await request('PUT', '/api/notifications/sender', sender);
+    await request('PUT', root, { ...defaultRule, threshold: 1 });
+    const local: ErrorEvent = { ...event('local'), platform: 'uniapp-app', environment: 'development' };
+    expect((await request('POST', '/api/events/batch', { appKey: 'app-one', events: [local] })).statusCode).toBe(202);
+    await store.markIssueFixed('app-one:js:boom', 'v2.0.0');
+    await store.markIssueVerified('app-one:js:boom', 'v2.0.0');
+    await store.ingestEvents([{ ...local, eventId: 'local-regression', release: 'v2.0.0' }]);
+    expect((await store.listIssues({ appKey: 'app-one' }))[0].eventCount).toBe(2);
+    const send = vi.fn().mockResolvedValue(undefined);
+    await createNotificationWorker(store, key, send).run();
+    expect(send).not.toHaveBeenCalled();
+    expect(await store.notifications.listJobs('u1', 'app-one')).toHaveLength(0);
+  });
+
+  it('preserves a local regression for the next deployed event when thresholds are disabled', async () => {
+    const { request, root, store } = await fixture();
+    await request('PUT', '/api/notifications/sender', sender);
+    await request('PUT', root, { ...defaultRule, threshold: 0 });
+    vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+    await store.ingestEvents([event('first')]);
+    await store.markIssueFixed('app-one:js:boom', 'v2.0.0');
+    await store.markIssueVerified('app-one:js:boom', 'v2.0.0');
+    vi.spyOn(Date, 'now').mockReturnValue(1_800_000_061_000);
+    await store.ingestEvents([{ ...event('local-regression', 'js:boom', 'v2.0.0'), pageUrl: 'http://localhost:5173/' }]);
+    expect(await store.notifications.listJobs('u1', 'app-one')).toHaveLength(1);
+    await store.ingestEvents([event('old-release'), { ...event('unknown-release'), release: undefined }]);
+    expect(await store.notifications.listJobs('u1', 'app-one')).toHaveLength(1);
+    await store.ingestEvents([event('deployed-regression', 'js:boom', 'v2.0.0')]);
+    expect((await store.notifications.listJobs('u1', 'app-one'))[0]).toMatchObject({ reason: 'regression' });
+    vi.spyOn(Date, 'now').mockReturnValue(1_800_000_122_000);
+    await store.ingestEvents([event('again', 'js:boom', 'v2.0.0')]);
+    expect(await store.notifications.listJobs('u1', 'app-one')).toHaveLength(2);
+  });
+
+  it('discards deferred local triggers when their notification rule is disabled', async () => {
+    const { request, root, store } = await fixture();
+    await request('PUT', '/api/notifications/sender', sender);
+    await request('PUT', root, { ...defaultRule, threshold: 0 });
+    await store.ingestEvents([{ ...event('local'), pageUrl: 'http://localhost:5173/' }]);
+    await request('PUT', root, { ...defaultRule, enabled: false, threshold: 0 });
+    await request('PUT', root, { ...defaultRule, threshold: 0 });
+    await store.ingestEvents([event('deployed')]);
+    expect(await store.notifications.listJobs('u1', 'app-one')).toHaveLength(0);
+  });
+
+  it('uses legacy page context to identify local browser errors', async () => {
+    const { request, root, store } = await fixture();
+    await request('PUT', '/api/notifications/sender', sender); await request('PUT', root, defaultRule);
+    await store.ingestEvents([
+      { ...event('page', 'page'), page: 'http://localhost:5173/' },
+      { ...event('context', 'context'), context: { pageUrl: 'http://127.0.0.1:5173/' } }
+    ]);
+    expect(await store.notifications.listJobs('u1', 'app-one')).toHaveLength(0);
+  });
+
+  it.each([
+    { environment: 'test' as const, pageUrl: 'https://test.example.com/' },
+    { environment: 'test' as const, pageUrl: 'http://192.168.10.21:5173/' },
+    { environment: 'production' as const, pageUrl: 'http://10.0.0.2/' },
+    { pageUrl: 'https://localhost.example.com/' },
+    { pageUrl: 'https://127.0.0.1.example.com/' },
+    { pageUrl: 'https://example.com/?next=http://localhost:5173' },
+    { pageUrl: 'not a URL' },
+    { platform: 'uniapp-app' as const, pageUrl: 'http://localhost/' },
+    { platform: 'uniapp-app' as const, page: '/pages/trip/current' },
+    {}
+  ])('preserves deployed and ambiguous errors: %j', async context => {
+    const { request, root, store } = await fixture();
+    await request('PUT', '/api/notifications/sender', sender); await request('PUT', root, defaultRule);
+    await store.ingestEvents([{ ...event('deployed'), ...context }]);
+    expect(await store.notifications.listJobs('u1', 'app-one')).toHaveLength(1);
+  });
+
+  it('still alerts when a deployed browser incorrectly requests a loopback API', async () => {
+    const { request, root, store } = await fixture();
+    await request('PUT', '/api/notifications/sender', sender); await request('PUT', root, defaultRule);
+    const http: HttpEvent = { ...event('misconfigured'), type: 'http', method: 'GET', url: 'http://127.0.0.1:5173/', pageUrl: 'https://test.example.com/', duration: 4, success: false };
+    await store.ingestEvents([http]);
+    expect(await store.notifications.listJobs('u1', 'app-one')).toHaveLength(1);
+  });
+
   it('snapshots the triggering HTTP request and H5 page, including the host and hash route', async () => {
     const { request, root, store } = await fixture();
     await request('PUT', '/api/notifications/sender', sender);

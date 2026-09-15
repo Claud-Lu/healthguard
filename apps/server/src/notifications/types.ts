@@ -25,6 +25,7 @@ export const defaultRule: NotificationRule = {
 };
 
 export type NotificationReason = 'test' | 'new_issue' | 'regression' | 'threshold';
+export type DeferredAlertReason = 'new_issue' | 'regression';
 export interface NotificationJob {
   id: string;
   ownerUserId: string;
@@ -45,6 +46,8 @@ export interface NotificationStore {
   saveSender(userId: string, config: SenderConfig | null): Promise<void>;
   getRule(appKey: string): Promise<NotificationRule>;
   saveRule(appKey: string, rule: NotificationRule): Promise<void>;
+  deferLocalTrigger(appKey: string, issueId: string, reason: DeferredAlertReason): Promise<void>;
+  takeLocalTrigger(issueId: string): Promise<DeferredAlertReason | null>;
   enqueue(job: NotificationJob, cooldownMs: number): Promise<boolean>;
   listJobs(userId: string, appKey: string): Promise<NotificationJob[]>;
   claimJob(now: number): Promise<NotificationJob | null>;

@@ -19,6 +19,8 @@ Clearing the sender disables notifications for all projects owned by the current
 - **Threshold:** an issue's cumulative occurrence count is at least the configured threshold. Set `0` to disable this condition. This is a lifetime count, not an error-rate or rolling-window rule.
 - **Interval:** one notification per issue during the interval (default 30 minutes; minimum 1 minute). All trigger types share the interval. Once an issue is above the threshold, a later event after the interval can trigger another notification.
 - Only newly reported events trigger alerts after enabling; existing historical issues are not mailed in bulk. Errors and failed HTTP requests are eligible. Performance events and successful requests are not.
+- Local development events are retained in the dashboard but never create automatic email jobs or consume the notification interval. This applies to all projects without changing their saved rules: an explicit `development` environment, and Web/H5 pages hosted on `localhost` (including subdomains), IPv4/IPv6 loopback or `0.0.0.0`. The triggering event's page context is used, including older SDK page fields. If a local event first creates or reopens an issue, the corresponding alert condition is deferred until its next eligible occurrence; that email uses the deployed event's context, even with the threshold disabled. Deferred regressions still require an event at or after the recorded fix release; older or missing releases leave that condition pending. Disabling the project or the corresponding trigger clears these deferred conditions.
+- Deployed `test`/`production` environments and private-network sites remain eligible. A failed request to a loopback API alone does not establish a local page. Native App/WebView localhost pages and events without a recognizable browser page remain eligible unless they explicitly report a development environment. For local debugging through a LAN IP/custom hostname or native/mini-program tools, configure the SDK's `environment: 'development'` to suppress automatic mail. Test emails are unaffected, and issue counts still include local events.
 
 Notification jobs are saved with the ingested issue transaction in PostgreSQL. SMTP delivery runs separately, so SMTP failures do not fail event collection. One job is processed every two seconds per collector. Pending jobs survive restart. Disabling a project cancels its queued automatic notifications; delivery uses the project's current recipients. An email already being sent cannot be recalled.
 
@@ -49,7 +51,7 @@ Optional environment variables:
 
 Supported ports are 465 (implicit TLS), 587 and 25 (STARTTLS). TLS is required, certificates are verified, and authorization codes are encrypted using AES-256-GCM with the account ID as authenticated context. SMTP configuration follows the [Nodemailer SMTP transport documentation](https://nodemailer.com/smtp).
 
-Database tables are created automatically on server startup. Existing users, projects and issues are preserved. When rolling back, retain the encryption key and the additive notification tables; an older collector ignores them.
+Database tables are created automatically on server startup. Existing users, projects and issues are preserved. When rolling back, retain the encryption key and the additive notification tables (including `notification_local_triggers` for deferred local conditions); an older collector ignores them.
 
 ## API / agent operations
 

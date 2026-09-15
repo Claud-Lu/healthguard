@@ -48,6 +48,40 @@ describe.skipIf(!databaseUrl)('notification PostgreSQL persistence and concurren
       expect(contextJob.text).toContain('请求地址 / Request URL: https://api.example.com/v1/position?access_token=%5BFiltered%5D&source=app');
       expect(contextJob.text).toContain('App 页面路由 / App route: /pages/trip/current');
       expect(contextJob.text).not.toContain('=secret');
+
+      await store.notifications.saveRule('demo', { ...await store.notifications.getRule('demo'), threshold: 0 });
+      const local: HttpEvent = { ...http, eventId: 'local-h5', platform: 'uniapp-h5', method: 'GET', url: 'http://127.0.0.1:5173/', pageUrl: 'http://127.0.0.1:5173/#/pages/trip', status: undefined, errorMessage: 'Failed to fetch' };
+      await restarted.ingestEvents([local]);
+      const localIssue = (await store.listIssues({ appKey: 'demo' })).find(issue => issue.message.includes('Failed to fetch'))!;
+      expect(localIssue.eventCount).toBe(1);
+      expect((await pool.query('SELECT 1 FROM notification_cooldowns WHERE key = $1', [localIssue.id])).rows).toHaveLength(0);
+      expect((await store.notifications.listJobs('u1', 'demo')).some(job => job.text.includes('Event ID: local-h5'))).toBe(false);
+      const afterLocalRestart = await createPostgresStore({ pool });
+      const deployed: HttpEvent = { ...local, eventId: 'deployed-h5', url: 'https://api.example.com/', pageUrl: 'https://test.example.com/#/pages/trip' };
+      await Promise.all([afterLocalRestart.ingestEvents([deployed]), restarted.ingestEvents([{ ...deployed, eventId: 'deployed-h5-concurrent' }])]);
+      let deployedJobs = (await store.notifications.listJobs('u1', 'demo')).filter(job => job.issueId === localIssue.id);
+      expect(deployedJobs).toHaveLength(1);
+      expect(deployedJobs[0].reason).toBe('new_issue');
+      expect(deployedJobs[0].text).toContain('Event ID: deployed-h5');
+      expect((await pool.query('SELECT 1 FROM notification_local_triggers WHERE issue_id = $1', [localIssue.id])).rows).toHaveLength(0);
+
+      await pool.query('DELETE FROM notification_cooldowns WHERE key = $1', [localIssue.id]);
+      await store.markIssueFixed(localIssue.id, 'v2.0.0'); await store.markIssueVerified(localIssue.id, 'v2.0.0');
+      await restarted.ingestEvents([{ ...local, eventId: 'local-h5-regression', release: 'v2.0.0' }]);
+      const afterRegressionRestart = await createPostgresStore({ pool });
+      await afterRegressionRestart.ingestEvents([{ ...deployed, eventId: 'deployed-old-release', release: 'v1.0.0' }, { ...deployed, eventId: 'deployed-missing-release', release: undefined }]);
+      expect((await store.notifications.listJobs('u1', 'demo')).filter(job => job.issueId === localIssue.id)).toHaveLength(1);
+      expect((await pool.query('SELECT 1 FROM notification_local_triggers WHERE issue_id = $1', [localIssue.id])).rows).toHaveLength(1);
+      await afterRegressionRestart.ingestEvents([{ ...deployed, eventId: 'deployed-h5-regression', release: 'v2.0.0' }]);
+      deployedJobs = (await store.notifications.listJobs('u1', 'demo')).filter(job => job.issueId === localIssue.id);
+      expect(deployedJobs).toHaveLength(2);
+      expect(deployedJobs[0].reason).toBe('regression');
+
+      await restarted.ingestEvents([{ ...event('local-app'), fingerprint: 'local-app', platform: 'uniapp-app', environment: 'development' }]);
+      expect((await store.notifications.listJobs('u1', 'demo')).some(job => job.text.includes('Event ID: local-app'))).toBe(false);
+      expect((await pool.query('SELECT 1 FROM notification_local_triggers WHERE issue_id = $1', ['demo:local-app'])).rows).toHaveLength(1);
+      await store.notifications.saveRule('demo', { ...await store.notifications.getRule('demo'), enabled: false });
+      expect((await pool.query('SELECT 1 FROM notification_local_triggers WHERE app_key = $1', ['demo'])).rows).toHaveLength(0);
     } finally {
       await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end();
     }

@@ -1,6 +1,7 @@
 import { createHttpFingerprint, extractPathname } from '@health-guard/core';
 import { createMemoryNotifications } from '../notifications/store';
 import { queueIssueAlert } from '../notifications/service';
+import { compareRelease } from './releases';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@health-guard/core';
 import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskAgent, RepairTaskNote, UpdateRepairTaskInput } from './types';
 
@@ -432,24 +433,6 @@ function applyRecurrenceStatus(issue: IssueSummary, release?: string): void {
   }
 }
 
-function compareRelease(left: string, right: string): number {
-  const leftParts = parseRelease(left);
-  const rightParts = parseRelease(right);
-  const max = Math.max(leftParts.length, rightParts.length);
-  for (let index = 0; index < max; index++) {
-    const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
-    if (diff !== 0) return diff;
-  }
-  return left.localeCompare(right);
-}
-
-function parseRelease(value: string): number[] {
-  return value
-    .replace(/^[^\d]*/, '')
-    .split(/[.-]/)
-    .map((part) => Number(part))
-    .filter((part) => Number.isFinite(part));
-}
 
 function filterEvents(events: HealthGuardEvent[], appKey?: string, platform?: string): HealthGuardEvent[] {
   return events.filter((event) => (appKey ? event.appKey === appKey : true)).filter((event) => (platform ? event.platform === platform : true));

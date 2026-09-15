@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { createPostgresNotifications, ensureNotificationSchema } from '../notifications/store';
 import { queueIssueAlert } from '../notifications/service';
+import { compareRelease } from './releases';
 import { nanoid } from 'nanoid';
 import { createHttpFingerprint, extractPathname } from '@health-guard/core';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@health-guard/core';
@@ -1079,24 +1080,6 @@ function nullableString(value: unknown): string | null {
   return value === null || value === undefined ? null : String(value);
 }
 
-function compareRelease(left: string, right: string): number {
-  const leftParts = parseRelease(left);
-  const rightParts = parseRelease(right);
-  const max = Math.max(leftParts.length, rightParts.length);
-  for (let index = 0; index < max; index++) {
-    const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
-    if (diff !== 0) return diff;
-  }
-  return left.localeCompare(right);
-}
-
-function parseRelease(value: string): number[] {
-  return value
-    .replace(/^[^\d]*/, '')
-    .split(/[.-]/)
-    .map((part) => Number(part))
-    .filter((part) => Number.isFinite(part));
-}
 
 function rowToRepairTask(row: Record<string, unknown>): RepairTask {
   return {
