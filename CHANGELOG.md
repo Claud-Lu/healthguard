@@ -7,7 +7,11 @@
 
 ## [Unreleased]
 
+### 新增
+- 敏感信息扫描防线：`yarn check:sensitive` 脚本、pre-commit 钩子（`.githooks/`，`yarn install` 时自动启用）与 GitHub Actions 工作流三层共用同一扫描逻辑；内置通用规则（数字个人邮箱、真实形态 appKey、个人域名白名单、CGNAT 内网 IP 段），真实敏感词经 gitignore 的 `.sensitive-deny-list` 本地文件或 `SENSITIVE_DENY_LIST` Secret 注入，不进仓库。
+
 ### 修复
+- 移除小程序 SDK 测试夹具中的真实第三方接口域名与项目名，替换为 `example.com` 通用占位。
 - 邮件通知自动跳过明确的本地开发环境及 localhost、IPv4/IPv6 回环地址上的 Web/H5 页面；本地错误仍保留在监控记录中，且不占用告警间隔。
 - 本地事件先创建或重开异常时，保留首次/复发通知条件给后续部署环境事件，避免关闭次数阈值后漏报；条件持久化并在关闭对应通知规则时清理。
 - 保留已部署的测试/预发布/内网站点及正式 App 的告警，避免仅凭请求地址或原生 WebView 的 localhost 误判本地开发；补充内存与 PostgreSQL 回归验证。

@@ -10,3 +10,6 @@ data/
 logs/
 *.log
 .playwright-mcp/
+
+# 敏感词黑名单（本地维护，勿提交）
+.sensitive-deny-list

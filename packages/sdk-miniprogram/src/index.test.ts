@@ -164,7 +164,7 @@ describe('sdk-miniprogram client', () => {
     });
 
     wx.request({
-      url: 'https://sharebus.lemonbus.cn/sharebusapi/passenger/vehicles/nearby?latitude=30.49&longitude=114.18&token=secret',
+      url: 'https://api.example.com/passenger-api/passenger/vehicles/nearby?latitude=30.49&longitude=114.18&token=secret',
       method: 'GET',
       data: { latitude: 30.49, longitude: 114.18, token: 'secret' },
       healthGuard: {
@@ -177,7 +177,7 @@ describe('sdk-miniprogram client', () => {
     expect(transport.mock.calls[0][0].events[0]).toMatchObject({
       type: 'http',
       method: 'GET',
-      url: 'https://sharebus.lemonbus.cn/sharebusapi/passenger/vehicles/nearby?latitude=30.49&longitude=114.18&token=%5BFiltered%5D',
+      url: 'https://api.example.com/passenger-api/passenger/vehicles/nearby?latitude=30.49&longitude=114.18&token=%5BFiltered%5D',
       status: 404,
       success: false,
       errorMessage: 'http status error',

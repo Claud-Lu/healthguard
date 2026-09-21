@@ -18,9 +18,11 @@
     "dev:demo": "yarn workspace @healthguard/vue3-demo dev",
     "dev:local": "bash scripts/dev-local.sh",
     "dev:server": "yarn workspace @healthguard/server dev",
+    "check:sensitive": "node scripts/check-sensitive-info.mjs",
     "lint": "eslint . --ext .ts,.tsx,.vue --max-warnings=0",
     "test": "vitest run",
-    "type-check": "tsc -p tsconfig.json --noEmit"
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
     "@types/node": "^20.19.25",

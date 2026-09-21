@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+echo "[pre-commit] 运行敏感信息扫描"
+node scripts/check-sensitive-info.mjs
