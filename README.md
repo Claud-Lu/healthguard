@@ -26,7 +26,7 @@ It is designed for teams shipping browser, mini-program, and uni-app experiences
 
 ## ✨ Features
 
-- **🔌 Multi-Platform SDKs** — H5, WeChat Mini Program, Alipay, uni-app, Flutter
+- **🔌 Multi-Platform SDKs** — H5, WeChat Mini Program, Alipay Mini Program via uni-app, and uni-app multi-end runtimes
 - **📊 Real-time Dashboard** — Error tracking, HTTP request monitoring, performance metrics, breadcrumbs
 - **🐳 One-Command Deploy** — Docker Compose with PostgreSQL persistence
 - **🌍 Bilingual UI** — English / Chinese auto-detect with manual override
@@ -165,8 +165,13 @@ Local URLs:
 - [x] PostgreSQL persistence
 - [x] Docker deployment
 - [x] Rate limiting & CORS
+- [x] Repair task workflow and `@health-guard/repair-agent`
+- [ ] WeChat mini program demo
+- [ ] Flutter SDK
 - [ ] Android SDK
 - [ ] iOS SDK
+- [ ] Alert notifications
+- [ ] SourceMap upload and stack de-minification
 - [ ] Session Replay
 - [ ] Grafana / Prometheus integration
 

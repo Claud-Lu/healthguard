@@ -26,7 +26,7 @@ HealthGuard 是一个轻量级、隐私优先的 Sentry 替代方案，适合需
 
 ## ✨ 核心特性
 
-- **🔌 多平台 SDK** — H5、微信小程序、支付宝小程序、uni-app、Flutter
+- **🔌 多平台 SDK** — H5、微信小程序、uni-app 多端运行时，以及通过 uni-app 覆盖支付宝小程序等平台
 - **📊 实时看板** — 错误追踪、HTTP 请求监控、性能指标、面包屑回溯
 - **🐳 一键部署** — Docker Compose 搭配 PostgreSQL 持久化存储
 - **🌍 双语界面** — 中英文自动识别，支持手动切换
@@ -165,8 +165,13 @@ yarn dev:local    # 本地同时启动服务端、看板与示例
 - [x] PostgreSQL 持久化
 - [x] Docker 一键部署
 - [x] 限流与 CORS 配置
+- [x] 修复任务工作流与 `@health-guard/repair-agent`
+- [ ] 微信小程序 demo
+- [ ] Flutter SDK
 - [ ] Android SDK
 - [ ] iOS SDK
+- [ ] 告警通知
+- [ ] SourceMap 上传与堆栈反解
 - [ ] 录屏回放（Session Replay）
 - [ ] Grafana / Prometheus 集成
 

@@ -13,7 +13,7 @@
 - docs/ai-cli-operations.md
 - docs/decisions/业务与交互变更记录.md
 
-项目当前已完成 MVP 本地闭环雏形：已初始化 yarn workspace monorepo，并新增 `packages/core`、`packages/sdk-web`、`packages/sdk-miniprogram`、`apps/server`、`apps/dashboard`、`examples/vue3-demo`。
+项目当前已发布到 `v0.3.0`：已完成 H5 / 微信小程序 / uni-app SDK、Dashboard、Fastify Server、PostgreSQL 持久化、Docker Compose 部署、认证隔离、Issue 管理、Repair Task Phase 1，以及 `@health-guard/repair-agent`。
 
 开发原则：
 - 先跑通 H5 端到端闭环，再扩展微信小程序。
@@ -28,17 +28,20 @@
 
 当前已完成：
 - `packages/core`：事件 schema、batch 校验、敏感 query 脱敏、issue fingerprint。
-- `packages/sdk-web`：手动捕获、自动 `error` / `unhandledrejection` / 资源错误 / fetch / XHR、性能事件、breadcrumb 队列、batch flush 和失败重试。
+- `packages/sdk-web`：手动捕获、自动 `error` / `unhandledrejection` / 资源错误 / fetch / XHR、性能事件、breadcrumb 队列、batch flush、失败回队和退避重试。
 - `packages/sdk-miniprogram`：`wx.onError`、`wx.onUnhandledRejection`、`wx.request` 和 App/Page 生命周期 breadcrumb。
-- `apps/server`：Fastify `/health`、`POST /api/events/batch`、`GET /api/issues`、`GET /api/issues/:id`、`GET /api/overview`、`GET/POST /api/apps`，当前为内存存储。
+- `packages/sdk-uniapp`：H5、微信、支付宝、抖音、App 等运行时检测和多端采集。
+- `packages/repair-agent`：扫描本地 SDK 配置，登录 HealthGuard 拉取 issue 列表/详情，并做本地源码关键词匹配。
+- `apps/server`：Fastify 采集、认证、项目、Issue、归档/重开、Repair Task、Agent API；支持 PostgreSQL 持久化和无 `DATABASE_URL` 时的内存 fallback。
 - `examples/vue3-demo`：接入 web SDK，可触发 JS 错误、Promise 异常和失败请求。
-- `apps/dashboard`：Vue dashboard，可查看 app key、概览、issue 列表、issue 详情和 SDK snippet。
+- `apps/dashboard`：Vue dashboard，可查看项目列表、app key、概览、issue 列表、issue 详情、修复任务和 SDK snippet。
 - `scripts/dev-local.sh` / `yarn dev:local`：同时启动 collector、demo、dashboard。
 - 验证命令：`yarn test`、`yarn type-check`、`yarn lint`、`yarn build`。
 
 建议下一步：
-1. 在一个真实业务应用的 H5 管理端、微信小程序、支付宝小程序做引入测试，先验证不污染业务数据、不上报敏感字段。
-2. 将 `apps/server` 内存存储替换为 SQLite 或 PostgreSQL。
-3. 补 `examples/wechat-mini-demo`。
-4. 再补 Docker Compose 和持久化部署说明。
+1. 补 `examples/wechat-mini-demo`，验证微信小程序 SDK 的真实 demo 闭环。
+2. 增加管理员 seed 脚本或部署初始化流程。
+3. 启动告警通知 Phase：阈值规则、Webhook、通知历史。
+4. 启动 SourceMap / release tracking Phase：上传、堆栈反解和 release 维度健康度。
+5. Flutter SDK 仍是计划项；不要在 README 或官网中把它描述为已完成能力。
 ```

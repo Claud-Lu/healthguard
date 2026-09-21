@@ -72,9 +72,8 @@ Acceptance:
 - [x] Auto-capture errors, unhandled rejections, fetch, XHR, and `uni.request`.
 - [x] Device info and page URL detection per platform.
 
-## Phase 7: Flutter SDK (In Progress)
+## Phase 7: Flutter SDK (Planned)
 
-- [x] `apps/driver-flutter` directory initialized.
 - [ ] Flutter SDK implementation.
 - [ ] Flutter demo app.
 
@@ -88,6 +87,13 @@ Acceptance:
 - [x] Pagination support on `listIssues` and `getIssueDetail`.
 - [x] Automatic data retention cleanup (configurable `CLEANUP_INTERVAL_MS` and retention period).
 - [x] Graceful shutdown on SIGTERM/SIGINT.
+
+## Phase 8.5: Repair Task Agent Workflow ✅
+
+- [x] Repair task API and dashboard workflow.
+- [x] Separate dashboard session authentication from agent bearer-token authentication.
+- [x] `@health-guard/repair-agent` package for scanning local SDK config, authenticating to HealthGuard, fetching issue detail, and matching local source context.
+- [x] Public npm packages released at `0.3.0`.
 
 ## Phase 9: Alert & Notification (Email available)
 

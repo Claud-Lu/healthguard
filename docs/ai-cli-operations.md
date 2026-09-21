@@ -82,7 +82,6 @@ Build the dashboard with deployment-specific environment variables outside track
 ```bash
 VITE_BASE_PATH=/healthguard/ \
 VITE_HEALTHGUARD_API_BASE=/healthguard-api \
-VITE_HEALTHGUARD_DEFAULT_APP_KEY=demo-web \
 yarn workspace @healthguard/dashboard build
 ```
 
@@ -114,7 +113,7 @@ Never commit npm tokens. The GitHub Actions workflow `.github/workflows/publish.
 Use environment variables in the consuming app:
 
 ```env
-VITE_HEALTHGUARD_ENDPOINT=<COLLECTOR_ENDPOINT>/events/batch
+VITE_HEALTHGUARD_ENDPOINT=<COLLECTOR_ENDPOINT>/api/events/batch
 VITE_HEALTHGUARD_APP_KEY=<PROJECT_APP_KEY>
 ```
 
@@ -139,10 +138,10 @@ If the consuming app is served over HTTPS, use an HTTPS collector endpoint or an
 - `Request failed: 400` during auth: read the response `code`; the dashboard should map it to a localized message.
 - Agent repair APIs return `401`: confirm `HEALTHGUARD_AGENT_TOKEN` is set on the server and the agent sends the same value as a bearer token.
 - Agent claim returns `409`: another agent already claimed the task or the task is no longer pending.
-- Project list is empty: the logged-in user has not created a project yet, or the in-memory collector restarted.
+- Project list is empty: the logged-in user has not created a project yet, or the local in-memory collector restarted.
 - Dashboard refresh shows the project list: this is expected when no project is selected. Select a project to inspect its detail data.
 - No events appear: confirm endpoint, app key, browser mixed-content rules, and network requests to `/events/batch`.
-- Events disappeared after restart: current MVP storage is in-memory.
+- Events disappeared after restart: confirm the server was started with `DATABASE_URL`; without it, local development uses the in-memory fallback store.
 - Dashboard language looks wrong: clear `healthguard_locale` from browser local storage or switch language manually.
 
 ## Email notifications

@@ -6,6 +6,8 @@ HealthGuard 是一个开源、可私有化部署的跨端应用健康度检测�
 
 这个版本的核心目标不是一次性复刻 Sentry 或 Bugly，而是做出一个中小团队能部署、独立维护者能维护、后续 AI agent 能接力的最小可用系统。
 
+> 当前实现状态：截至 `v0.3.0`，项目已完成 H5、微信小程序、uni-app SDK，Dashboard、Fastify Server、PostgreSQL 持久化、Docker Compose 部署、Repair Task Phase 1 和 `@health-guard/repair-agent`。本文保留 MVP 设计背景，但当前事实以 README、Roadmap、Changelog 和操作文档为准。
+
 ## 2. MVP 原则
 
 | 原则 | 调整 |
@@ -106,7 +108,7 @@ Vue Dashboard
 | SQLite/PostgreSQL 单库 | 最快启动 | 适合 demo 和早期开发，部署简单 |
 | ClickHouse + SQLite/PostgreSQL | 更贴近监控产品 | ClickHouse 存事件，关系库存应用和配置 |
 
-推荐第一阶段直接采用 ClickHouse + SQLite/PostgreSQL。事件类数据天然适合列式查询，但元数据不需要放进 ClickHouse。
+当前实现采用 PostgreSQL 单库作为默认持久化方案，兼顾部署简单度和早期查询能力。ClickHouse 保留为后续大规模事件分析选项，不进入当前版本默认架构。
 
 ## 6. 事件协议草案
 

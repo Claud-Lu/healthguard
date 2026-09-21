@@ -22,7 +22,7 @@ When login, project setup, SDK integration, deployment, storage, or verification
 5. Enter a password with at least 8 characters.
 6. Submit the form, then continue in the dashboard.
 
-The current MVP stores users, sessions, projects, events, and issues in memory. Restarting the collector clears this data. Use a persistent database before relying on the deployment for long-running data retention.
+Docker Compose deployments use PostgreSQL persistence by default. Local development can still run without `DATABASE_URL`; in that mode the server falls back to the in-memory store and data is lost on restart.
 
 ## Create A Project
 
@@ -59,7 +59,7 @@ import { createHealthGuardClient } from '@health-guard/sdk-web';
 
 createHealthGuardClient({
   appKey: '<PROJECT_APP_KEY>',
-  endpoint: '<COLLECTOR_ENDPOINT>/events/batch',
+  endpoint: '<COLLECTOR_ENDPOINT>/api/events/batch',
   environment: 'test',
   release: '<APP_VERSION>',
   autoCapture: true
@@ -89,11 +89,11 @@ Do not commit the real token. The repository `docker-compose.yml` reads `HEALTHG
 
 ## Current Limitations
 
-- Metadata and events are in-memory only.
 - There is no password reset flow yet.
-- There is no session expiry policy yet.
 - There is no role or team management yet.
-- Production private deployment should add persistent storage before real use.
+- Admin-user seeding is not implemented yet; create the first account through registration.
+- WeChat mini program and Flutter demo apps are not included yet.
+- Production private deployment should use PostgreSQL with strong credentials and a restricted CORS origin.
 
 ## Security Notes
 
