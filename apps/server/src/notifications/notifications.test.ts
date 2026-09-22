@@ -240,9 +240,9 @@ describe('email notification API and delivery', () => {
     const { request, root, store } = await fixture();
     await request('PUT', '/api/notifications/sender', sender);
     await request('PUT', root, { ...defaultRule, onNewIssue: false, threshold: 2 });
-    const first: HttpEvent = { ...event('first'), type: 'http', method: 'POST', url: 'https://old.example.com/api/orders', status: 503, duration: 120, success: false, pageUrl: 'https://shop.example.com/old', release: 'newer-release', timestamp: Date.now() + 10_000 };
+    const first: HttpEvent = { ...event('first'), type: 'http', method: 'POST', url: 'https://old.example.com/api/orders', status: 503, duration: 120, success: false, pageUrl: 'https://shop.example.com/old', release: 'newer-release', timestamp: Date.now() + 10_000, deviceInfo: { model: 'Other phone', system: 'Other OS' } };
     // Same fingerprint on a different host/page. The triggering event can arrive out of order.
-    const trigger: HttpEvent = { ...first, eventId: 'trigger', timestamp: Date.now(), release: 'trigger-release', environment: 'test', url: 'https://api.example.com/api/orders?token=request-secret&order=42', pageUrl: 'https://shop.example.com/app?lang=zh#/orders/detail?id=42&token=page-secret', errorMessage: 'Unavailable' };
+    const trigger: HttpEvent = { ...first, eventId: 'trigger', timestamp: Date.now(), release: 'trigger-release', environment: 'test', url: 'https://api.example.com/api/orders?token=request-secret&order=42', pageUrl: 'https://shop.example.com/app?lang=zh#/orders/detail?id=42&token=page-secret', errorMessage: 'Unavailable', deviceInfo: { model: 'Example phone', system: 'Android 14' } };
     await store.ingestEvents([first, trigger]);
     const [job] = await store.notifications.listJobs('u1', 'app-one');
     expect(job.reason).toBe('threshold');
@@ -254,7 +254,23 @@ describe('email notification API and delivery', () => {
     expect(job.text).toContain('请求耗时 / Duration: 120 ms');
     expect(job.text).toContain('环境 / Environment: test');
     expect(job.text).toContain('Event ID: trigger');
-    for (const value of ['request-secret', 'page-secret', 'old.example.com', '/old', 'newer-release']) expect(job.text).not.toContain(value);
+    expect(job.text).toContain('本次设备型号 / Event device model: Example phone');
+    expect(job.text).toContain('本次系统版本 / Event OS: Android 14');
+    for (const value of ['request-secret', 'page-secret', 'old.example.com', '/old', 'newer-release', 'Other phone', 'Other OS']) expect(job.text).not.toContain(value);
+  });
+
+  it.each([
+    { deviceInfo: { model: ' Example phone ', system: ' Android 14 ' }, model: 'Example phone', system: 'Android 14' },
+    { deviceInfo: { model: 'Example phone' }, model: 'Example phone', system: '未上报 / Not reported' },
+    { deviceInfo: { model: ' \t ', system: '\n ' }, model: '未上报 / Not reported', system: '未上报 / Not reported' },
+    { deviceInfo: undefined, model: '未上报 / Not reported', system: '未上报 / Not reported' }
+  ])('includes reported device details in native error alerts: %j', async ({ deviceInfo, model, system }) => {
+    const { request, root, store } = await fixture();
+    await request('PUT', '/api/notifications/sender', sender); await request('PUT', root, defaultRule);
+    await store.ingestEvents([{ ...event('native-device'), platform: 'uniapp-app', deviceInfo }]);
+    const [job] = await store.notifications.listJobs('u1', 'app-one');
+    expect(job.text).toContain(`本次设备型号 / Event device model: ${model}`);
+    expect(job.text).toContain(`本次系统版本 / Event OS: ${system}`);
   });
 
   it('includes native routes for HTTP and error alerts, and handles older events without page data', async () => {

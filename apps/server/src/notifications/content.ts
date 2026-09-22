@@ -57,6 +57,8 @@ export function issueAlertContent(app: AppRecord, issue: IssueSummary, event: He
     `类型 / Type: ${issue.errorType}`,
     `平台 / Platform: ${event.platform}`,
     `环境 / Environment: ${event.environment ?? missing}`,
+    `本次设备型号 / Event device model: ${event.deviceInfo?.model?.trim() || missing}`,
+    `本次系统版本 / Event OS: ${event.deviceInfo?.system?.trim() || missing}`,
     `累计次数 / Total count: ${issue.eventCount}`, ''
   ];
   if (event.type === 'http') {

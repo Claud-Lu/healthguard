@@ -30,7 +30,9 @@ Tests are limited to one per account per minute. Use the test button again after
 
 ## Alert content
 
-Alerts include the project, issue, cumulative count, platform, environment, event release/time, latest occurrence time, event/issue IDs and a dashboard link. HTTP alerts also include the request method, **full request URL** (scheme, host, path and query), status, duration and request error. H5/Web alerts include the **full page URL**, including hash routes; native App and mini-program alerts include the **page route**.
+Alerts include the project, issue, cumulative count, platform, environment, **triggering device model and OS version**, event release/time, latest occurrence time, event/issue IDs and a dashboard link. HTTP alerts also include the request method, **full request URL** (scheme, host, path and query), status, duration and request error. H5/Web alerts include the **full page URL**, including hash routes; native App and mini-program alerts include the **page route**.
+
+Device model and OS come from the triggering event's `deviceInfo.model` and `deviceInfo.system`. They identify that occurrence, not every device included in the issue's cumulative count. The mail preserves the reported model name or hardware code without guessing a retail name. Missing or blank values are marked **Not reported**. Clients already reporting these fields only need the collector update; clients without them need to collect and report device information in a new client release. Browser user-agent strings are not used to guess a phone model.
 
 Details are snapshotted from the event that triggers the notification, so an issue shared across hosts/pages or an event received out of order does not borrow context from another occurrence. URL user credentials and known authentication query/hash parameters are removed or masked. Request bodies, headers and arbitrary context are not included in email.
 
