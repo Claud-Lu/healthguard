@@ -13,6 +13,7 @@
 - 敏感信息扫描防线：`yarn check:sensitive` 脚本、pre-commit 钩子（`.githooks/`，`yarn install` 时自动启用）与 GitHub Actions 工作流三层共用同一扫描逻辑；内置通用规则（数字个人邮箱、真实形态 appKey、个人域名白名单、CGNAT 内网 IP 段），真实敏感词经 gitignore 的 `.sensitive-deny-list` 本地文件或 `SENSITIVE_DENY_LIST` Secret 注入，不进仓库。
 
 ### 变更
+- 开发流程统一到 `master` 主分支，整合已有开发分支提交并清理冗余分支；仓库 `AGENTS.md` 记录后续直接在主分支开发、验证和推送的约定。
 - 移除看板「修复任务」面板与「创建修复任务」表单，由 Issue 级修复 PR 链接追踪替代；Agent 任务队列接口（`/api/agent/repair-tasks/*`）保留并标记 experimental，`复制给 AI` 保持为 Issue 详情主操作。
 
 ### 修复
