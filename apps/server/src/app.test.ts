@@ -652,6 +652,7 @@ describe('collector api', () => {
       lastSeenRelease: '1.1.11',
       fixedInRelease: null,
       verifiedInRelease: null,
+      fixPrUrl: null,
       status: 'open',
       archived: false
     });
@@ -700,6 +701,96 @@ describe('collector api', () => {
       status: 'archived',
       archived: true
     });
+
+    await app.close();
+  });
+
+  it('sets, validates, and clears issue fix PR links', async () => {
+    const app = createServerApp(createMemoryStore());
+
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { email: 'owner@example.com', password: 'secret123' }
+    });
+    const headers = { authorization: `Bearer ${register.json().token}` };
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/events/batch',
+      payload: {
+        appKey: 'demo-app',
+        events: [
+          {
+            eventId: 'evt_fix_pr',
+            appKey: 'demo-app',
+            platform: 'web',
+            type: 'error',
+            timestamp: 1710000000000,
+            sessionId: 'session-1',
+            anonymousId: 'anon-1',
+            release: '1.1.10',
+            sdkVersion: '0.1.0',
+            errorType: 'js',
+            message: 'boom',
+            fingerprint: 'js:boom',
+            breadcrumbs: []
+          }
+        ]
+      }
+    });
+
+    const unauthorized = await app.inject({
+      method: 'PATCH',
+      url: '/api/issues/demo-app%3Ajs%3Aboom/fix-pr',
+      payload: { fixPrUrl: 'https://github.com/acme/app/pull/42' }
+    });
+    expect(unauthorized.statusCode).toBe(401);
+
+    const set = await app.inject({
+      method: 'PATCH',
+      url: '/api/issues/demo-app%3Ajs%3Aboom/fix-pr',
+      headers,
+      payload: { fixPrUrl: 'https://github.com/acme/app/pull/42' }
+    });
+    expect(set.statusCode).toBe(200);
+    expect(set.json().issue).toMatchObject({ fixPrUrl: 'https://github.com/acme/app/pull/42' });
+
+    const listed = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app', headers });
+    expect(listed.json().issues[0].fixPrUrl).toBe('https://github.com/acme/app/pull/42');
+
+    const invalidUrl = await app.inject({
+      method: 'PATCH',
+      url: '/api/issues/demo-app%3Ajs%3Aboom/fix-pr',
+      headers,
+      payload: { fixPrUrl: 'not-a-url' }
+    });
+    expect(invalidUrl.statusCode).toBe(400);
+
+    const nonHttp = await app.inject({
+      method: 'PATCH',
+      url: '/api/issues/demo-app%3Ajs%3Aboom/fix-pr',
+      headers,
+      payload: { fixPrUrl: 'javascript:alert(1)' }
+    });
+    expect(nonHttp.statusCode).toBe(400);
+
+    const missing = await app.inject({
+      method: 'PATCH',
+      url: '/api/issues/demo-app%3Anope/fix-pr',
+      headers,
+      payload: { fixPrUrl: 'https://github.com/acme/app/pull/42' }
+    });
+    expect(missing.statusCode).toBe(404);
+
+    const cleared = await app.inject({
+      method: 'PATCH',
+      url: '/api/issues/demo-app%3Ajs%3Aboom/fix-pr',
+      headers,
+      payload: { fixPrUrl: '  ' }
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().issue).toMatchObject({ fixPrUrl: null });
 
     await app.close();
   });

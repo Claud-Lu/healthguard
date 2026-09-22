@@ -270,6 +270,42 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
     return { issue };
   });
 
+  app.patch<{ Params: { id: string }; Body: IssueFixPrBody }>('/api/issues/:id/fix-pr', async (request, reply) => {
+    const user = await authenticate(store, request.headers.authorization);
+    if (!user) {
+      return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const raw = typeof request.body?.fixPrUrl === 'string' ? request.body.fixPrUrl.trim() : '';
+    if (raw === '') {
+      const cleared = await store.setIssueFixPr(request.params.id, null);
+      if (!cleared) {
+        return reply.status(404).send({ message: 'Issue not found' });
+      }
+      return { issue: cleared };
+    }
+
+    if (raw.length > 2048) {
+      return reply.status(400).send({ message: 'fixPrUrl is too long' });
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      return reply.status(400).send({ message: 'fixPrUrl must be a valid URL' });
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return reply.status(400).send({ message: 'fixPrUrl must be an http(s) URL' });
+    }
+
+    const issue = await store.setIssueFixPr(request.params.id, raw);
+    if (!issue) {
+      return reply.status(404).send({ message: 'Issue not found' });
+    }
+
+    return { issue };
+  });
+
   app.post<{ Body: CreateRepairTaskBody }>('/api/repair-tasks', async (request, reply) => {
     const user = await authenticate(store, request.headers.authorization);
     if (!user) {
@@ -552,6 +588,10 @@ interface CreateRepairTaskBody {
 interface IssueReleaseBody {
   fixedInRelease?: string;
   verifiedInRelease?: string;
+}
+
+interface IssueFixPrBody {
+  fixPrUrl?: string;
 }
 
 interface AgentPendingQuerystring {

@@ -208,6 +208,13 @@ export function createMemoryStore(): Store {
       return issue;
     },
 
+    async setIssueFixPr(id: string, fixPrUrl: string | null): Promise<IssueSummary | null> {
+      const issue = state.issues.get(id) ?? null;
+      if (!issue) return null;
+      issue.fixPrUrl = fixPrUrl;
+      return issue;
+    },
+
     async createRepairTask(input: CreateRepairTaskInput): Promise<RepairTask> {
       const task: RepairTask = {
         id: `repair_${state.repairTasks.length + 1}`,
@@ -374,6 +381,7 @@ function aggregateError(state: MemoryStoreState, event: ErrorEvent): void {
     lastSeenRelease: event.release ?? null,
     fixedInRelease: null,
     verifiedInRelease: null,
+    fixPrUrl: null,
     status: 'open',
     platformDistribution: { [event.platform]: 1 },
     archived: false,
@@ -411,6 +419,7 @@ function aggregateHttpIssue(state: MemoryStoreState, event: HttpEvent & { finger
     lastSeenRelease: event.release ?? null,
     fixedInRelease: null,
     verifiedInRelease: null,
+    fixPrUrl: null,
     status: 'open',
     platformDistribution: { [event.platform]: 1 },
     archived: false,

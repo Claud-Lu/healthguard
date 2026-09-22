@@ -77,7 +77,19 @@ Do not hard-code private company domains, internal IPs, business project names, 
 5. Refresh the dashboard.
 6. Confirm that event, error, failed request, or issue counts update.
 
-## Configure Repair Agents
+## Track Fix Pull Requests
+
+Each issue can carry one fix pull request URL so the dashboard can track "error found → fix in progress → PR merged" without duplicating GitHub's own state.
+
+1. Open a project, select an issue, and paste the PR URL into the **Fix PR** field in the issue detail.
+2. Linked issues appear in the **Fix PR Tracking** panel and get a `PR` badge in the issue list, with a filter for *Has fix PR / No fix PR*.
+3. The API is `PATCH /api/issues/:id/fix-pr` with `{ "fixPrUrl": "https://..." }` (empty string clears it; only http(s) URLs are accepted).
+
+HealthGuard never edits code or creates pull requests; the repair itself happens in your repository, by you or your coding agent.
+
+## Configure Repair Agents (experimental)
+
+The agent repair-task queue (`/api/agent/repair-tasks/*`) is **experimental**: nothing in this repository consumes it yet, and the recommended workflow is the lightweight path above — copy the issue report for your AI (or use `@health-guard/repair-agent`) and link the resulting PR back to the issue. The queue APIs remain available for self-hosted experiments.
 
 Repair agent APIs use a separate server-side bearer token instead of a dashboard session token.
 

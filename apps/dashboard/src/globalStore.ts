@@ -31,6 +31,7 @@ export interface IssueSummary {
   lastSeenRelease: string | null;
   fixedInRelease: string | null;
   verifiedInRelease: string | null;
+  fixPrUrl: string | null;
   status: IssueLifecycleStatus;
   platformDistribution: Record<string, number>;
   archived: boolean;

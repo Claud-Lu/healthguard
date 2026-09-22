@@ -31,16 +31,18 @@ describe('project detail mini-program context rendering', () => {
     expect(source).toContain("`/issues/${encodeURIComponent(issue.id)}/reopen`");
   });
 
-  it('exposes manual repair task creation from issue detail', () => {
-    expect(source).toContain('repairTasks = ref<RepairTask[]>([])');
-    expect(source).toContain('function loadRepairTasks');
-    expect(source).toContain('function createRepairTask');
-    expect(source).toContain("apiUrl(`/repair-tasks?appKey=${encodeURIComponent(appKey.value)}`)");
-    expect(source).toContain("apiUrl('/repair-tasks')");
-    expect(source).toContain('Create repair task');
-    expect(source).toContain('Repair Tasks');
-    expect(source).toContain('task.summary');
-    expect(source).toContain('task.failureReason');
+  it('exposes fix PR link tracking instead of the experimental repair task queue', () => {
+    expect(source).toContain("type FixPrFilter = 'all' | 'linked' | 'missing'");
+    expect(source).toContain("fixPrFilter = ref<FixPrFilter>('all')");
+    expect(source).toContain('function setIssueFixPr');
+    expect(source).toContain('`/issues/${encodeURIComponent(issue.id)}/fix-pr`');
+    expect(source).toContain('function renderFixPrPanel');
+    expect(source).toContain('function renderFixPrEditor');
+    expect(source).toContain('issue.fixPrUrl');
+    expect(source).toContain("fixPrFilter.value === 'linked' && !issue.fixPrUrl");
+    expect(source).not.toContain('createRepairTask');
+    expect(source).not.toContain('renderRepairTaskCreator');
+    expect(source).not.toContain('renderRepairTaskList');
   });
 
   it('exposes issue release workflow actions and status messaging', () => {

@@ -1087,3 +1087,115 @@ pre {
 .notification-empty { text-align: center; padding: 32px 16px; color: #758a96; font-size: 14px; }
 @media (max-width: 800px) { .notification-grid { grid-template-columns: 1fr; } .notification-page { padding: 24px 16px; } .notification-card { padding: 20px; } .notification-header { flex-direction: column; } }
 @media (max-width: 420px) { .notification-inline { grid-template-columns: 1fr; gap: 0; } }
+
+/* Fix PR tracking */
+.fix-pr-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fix-pr-list {
+  display: grid;
+  gap: 10px;
+}
+
+.fix-pr-row {
+  align-items: start;
+  background: #f7f9fa;
+  border: 1px solid #d8e1e6;
+  border-radius: 6px;
+  color: #182229;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 12px;
+  text-align: left;
+}
+
+.fix-pr-row.active {
+  border-color: #0f766e;
+}
+
+.fix-pr-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fix-pr-main strong {
+  color: #182229;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.fix-pr-main span,
+.fix-pr-main small {
+  color: #60717d;
+}
+
+.fix-pr-side {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fix-pr-status {
+  border-radius: 4px;
+  border: 1px solid #e4ebef;
+  background: #ffffff;
+  color: #475569;
+  font-size: 11px;
+  padding: 3px 6px;
+}
+
+.fix-pr-status-resolved,
+.fix-pr-status-fixed_pending_release {
+  border-color: #9fd6c9;
+  color: #127050;
+}
+
+.fix-pr-side a {
+  color: #6d5ae0;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.fix-pr-side a:hover {
+  text-decoration: underline;
+}
+
+.fix-pr-badge {
+  background: #efeafc;
+  border: 1px solid #cfc4f5;
+  border-radius: 4px;
+  color: #5b45c2;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 6px;
+}
+
+.fix-pr-editor {
+  border: 1px solid #e4ebef;
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.fix-pr-editor h4 {
+  margin: 0;
+}
+
+.fix-pr-input-field {
+  flex: 1 1 220px;
+}
+
+.fix-pr-current-link {
+  color: #6d5ae0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

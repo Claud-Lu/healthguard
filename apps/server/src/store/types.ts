@@ -32,6 +32,7 @@ export interface IssueSummary {
   lastSeenRelease: string | null;
   fixedInRelease: string | null;
   verifiedInRelease: string | null;
+  fixPrUrl: string | null;
   status: IssueLifecycleStatus;
   platformDistribution: Record<string, number>;
   archived: boolean;
@@ -141,6 +142,7 @@ export interface Store {
   reopenIssue(id: string): Promise<IssueSummary | null>;
   markIssueFixed(id: string, fixedInRelease: string): Promise<IssueSummary | null>;
   markIssueVerified(id: string, verifiedInRelease: string): Promise<IssueSummary | null>;
+  setIssueFixPr(id: string, fixPrUrl: string | null): Promise<IssueSummary | null>;
   createRepairTask(input: CreateRepairTaskInput): Promise<RepairTask>;
   listRepairTasks(appKey: string, ownerUserId: string): Promise<RepairTask[]>;
   getRepairTaskDetail(id: string, ownerUserId: string): Promise<{ task: RepairTask | null; notes: RepairTaskNote[] }>;

@@ -419,6 +419,12 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       return rowToIssue(result.rows[0]);
     },
 
+    async setIssueFixPr(id: string, fixPrUrl: string | null): Promise<IssueSummary | null> {
+      const result = await pool.query('UPDATE issues SET fix_pr_url = $1 WHERE id = $2 RETURNING *', [fixPrUrl, id]);
+      if (result.rows.length === 0) return null;
+      return rowToIssue(result.rows[0]);
+    },
+
     async createRepairTask(input: CreateRepairTaskInput): Promise<RepairTask> {
       const client = await pool.connect();
       const taskId = createId('repair');
@@ -699,6 +705,7 @@ async function ensureSchema(pool: Pool): Promise<void> {
       last_seen_release VARCHAR(255),
       fixed_in_release VARCHAR(255),
       verified_in_release VARCHAR(255),
+      fix_pr_url TEXT,
       status VARCHAR(32) NOT NULL DEFAULT 'open',
       platform_distribution JSONB NOT NULL DEFAULT '{}',
       archived_at BIGINT
@@ -790,6 +797,12 @@ async function ensureSchema(pool: Pool): Promise<void> {
         WHERE table_name = 'issues' AND column_name = 'verified_in_release'
       ) THEN
         ALTER TABLE issues ADD COLUMN verified_in_release VARCHAR(255);
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'issues' AND column_name = 'fix_pr_url'
+      ) THEN
+        ALTER TABLE issues ADD COLUMN fix_pr_url TEXT;
       END IF;
       IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns
@@ -1069,6 +1082,7 @@ function rowToIssue(row: Record<string, unknown>): IssueSummary {
     lastSeenRelease: nullableString(row.last_seen_release),
     fixedInRelease: nullableString(row.fixed_in_release),
     verifiedInRelease: nullableString(row.verified_in_release),
+    fixPrUrl: nullableString(row.fix_pr_url),
     status,
     platformDistribution: (row.platform_distribution as Record<string, number>) ?? {},
     archived,

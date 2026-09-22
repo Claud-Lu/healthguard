@@ -90,7 +90,7 @@ Acceptance:
 
 ## Phase 8.5: Repair Task Agent Workflow ✅
 
-- [x] Repair task API and dashboard workflow.
+- [x] Repair task API and dashboard workflow. Dashboard workflow later simplified to issue-level fix PR tracking; the agent task queue API is kept as experimental.
 - [x] Separate dashboard session authentication from agent bearer-token authentication.
 - [x] `@health-guard/repair-agent` package for scanning local SDK config, authenticating to HealthGuard, fetching issue detail, and matching local source context.
 - [x] Public npm packages released at `0.3.0`.

@@ -73,7 +73,17 @@ export type MessageKey =
   | 'critical'
   | 'noMatchingIssues'
   | 'firstSeen'
-  | 'lastSeen';
+  | 'lastSeen'
+  | 'fixPrTracking'
+  | 'fixPr'
+  | 'noFixPrYet'
+  | 'noFixPrHint'
+  | 'fixPrPlaceholder'
+  | 'saveFixPr'
+  | 'clearFixPr'
+  | 'fixPrFilterAll'
+  | 'fixPrFilterLinked'
+  | 'fixPrFilterMissing';
 
 type Messages = Record<MessageKey, string>;
 
@@ -151,7 +161,17 @@ const messages: Record<Locale, Messages> = {
     critical: 'Critical',
     noMatchingIssues: 'No matching issues found',
     firstSeen: 'First:',
-    lastSeen: 'Last:'
+    lastSeen: 'Last:',
+    fixPrTracking: 'Fix PR Tracking',
+    fixPr: 'Fix PR',
+    noFixPrYet: 'No fix PR links yet.',
+    noFixPrHint: 'Paste the pull request URL in the issue detail to track the fix here.',
+    fixPrPlaceholder: 'https://github.com/owner/repo/pull/123',
+    saveFixPr: 'Save PR link',
+    clearFixPr: 'Clear',
+    fixPrFilterAll: 'All issues',
+    fixPrFilterLinked: 'Has fix PR',
+    fixPrFilterMissing: 'No fix PR'
   },
   'zh-CN': {
     affectedUsers: '影响用户',
@@ -226,7 +246,17 @@ const messages: Record<Locale, Messages> = {
     critical: '异常',
     noMatchingIssues: '未找到匹配的 issue',
     firstSeen: '首次:',
-    lastSeen: '最近:'
+    lastSeen: '最近:',
+    fixPrTracking: '修复 PR 跟踪',
+    fixPr: '修复 PR',
+    noFixPrYet: '暂无修复 PR 链接。',
+    noFixPrHint: '在 Issue 详情中粘贴修复 PR 地址，即可在这里跟踪修复进展。',
+    fixPrPlaceholder: 'https://github.com/owner/repo/pull/123',
+    saveFixPr: '保存 PR 链接',
+    clearFixPr: '清除',
+    fixPrFilterAll: '全部 Issue',
+    fixPrFilterLinked: '有修复 PR',
+    fixPrFilterMissing: '无修复 PR'
   }
 };
 
