@@ -151,3 +151,11 @@ See [Email notifications](./email-notifications.md) for dashboard setup, SMTP cr
 Alert emails include the full request URL and H5 page URL or native page route from the triggering event. Missing page data requires a client SDK upgrade (`@health-guard/sdk-uniapp@0.3.1` for the uni-app route fix) and a new client release; historical events cannot be backfilled. Authentication parameters are masked.
 
 The triggering device model and OS version are also included when reported. Updating the collector enables these fields for existing clients that already send `deviceInfo.model` and `deviceInfo.system`; missing values are marked **Not reported**. The device describes only the occurrence that triggered the email, not all occurrences in the issue.
+
+## Direct repair progress
+
+Use the authenticated owner session with `PATCH /api/issues/:id/repair`. Send any subset of `cause`, `summary`, `commitSha`, `deployment`, `verification`; omitted fields remain unchanged and empty strings clear fields. Text is limited to 4000 characters. Commit SHA is empty or 7–40 hexadecimal characters. `action: "start"` moves the issue to repairing and clears fixed/verified release markers. Notes persist in PostgreSQL `issues.repair_record` (additive migration).
+
+Write evidence at each stage; this API does not execute agents. `/fixed` records code completion and clears stale verification. `/verified` records explicit verification; never call it merely because code was edited or events stopped. PR creation is not required. The experimental repair-task queue is independent and does not automatically update these records.
+
+Deploy the collector before the dashboard because the new UI writes to `/repair`. Keep old frontend assets during deployment for already-open sessions. Back up the collector image and dashboard before replacing them; rollback can leave the additive JSONB column in place.

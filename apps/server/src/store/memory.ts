@@ -3,7 +3,7 @@ import { createMemoryNotifications } from '../notifications/store';
 import { queueIssueAlert } from '../notifications/service';
 import { compareRelease } from './releases';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@health-guard/core';
-import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskAgent, RepairTaskNote, UpdateRepairTaskInput } from './types';
+import type { AppRecord, IssueRepairRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskAgent, RepairTaskNote, UpdateRepairTaskInput } from './types';
 
 const TERMINAL_REPAIR_STATUSES = ['closed', 'failed', 'canceled'] as const;
 
@@ -192,6 +192,7 @@ export function createMemoryStore(): Store {
       const issue = state.issues.get(id) ?? null;
       if (!issue) return null;
       issue.fixedInRelease = fixedInRelease;
+      issue.verifiedInRelease = null;
       issue.status = 'fixed_pending_release';
       issue.archived = false;
       issue.archivedAt = null;
@@ -205,6 +206,20 @@ export function createMemoryStore(): Store {
       issue.status = 'resolved';
       issue.archived = false;
       issue.archivedAt = null;
+      return issue;
+    },
+
+    async updateIssueRepair(id: string, record: Omit<IssueRepairRecord, 'updatedAt'>, start: boolean, updatedAt: number): Promise<IssueSummary | null> {
+      const issue = state.issues.get(id);
+      if (!issue) return null;
+      issue.repair = { ...issue.repair, ...record, updatedAt };
+      if (start) {
+        issue.status = 'repairing';
+        issue.fixedInRelease = null;
+        issue.verifiedInRelease = null;
+        issue.archived = false;
+        issue.archivedAt = null;
+      }
       return issue;
     },
 
@@ -429,14 +444,14 @@ function aggregateHttpIssue(state: MemoryStoreState, event: HttpEvent & { finger
 
 function applyRecurrenceStatus(issue: IssueSummary, release?: string): void {
   if (!issue.fixedInRelease) {
-    issue.status = 'open';
+    if (issue.status !== 'repairing') issue.status = 'open';
     issue.archived = false;
     issue.archivedAt = null;
     return;
   }
 
   if (release && compareRelease(release, issue.fixedInRelease) >= 0) {
-    issue.status = 'open';
+    if (issue.status !== 'repairing') issue.status = 'open';
     issue.archived = false;
     issue.archivedAt = null;
   }

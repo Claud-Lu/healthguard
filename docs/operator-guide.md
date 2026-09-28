@@ -77,19 +77,23 @@ Do not hard-code private company domains, internal IPs, business project names, 
 5. Refresh the dashboard.
 6. Confirm that event, error, failed request, or issue counts update.
 
-## Track Fix Pull Requests
+## Track Direct Repairs
 
-Each issue can carry one fix pull request URL so the dashboard can track "error found → fix in progress → PR merged" without duplicating GitHub's own state.
+The project view uses two columns: issues and issue details. Filter by investigation, repairing, awaiting verification or verified. A PR is optional and collapsed inside the detail view.
 
-1. Open a project, select an issue, and paste the PR URL into the **Fix PR** field in the issue detail.
-2. Linked issues appear in the **Fix PR Tracking** panel and get a `PR` badge in the issue list, with a filter for *Has fix PR / No fix PR*.
-3. The API is `PATCH /api/issues/:id/fix-pr` with `{ "fixPrUrl": "https://..." }` (empty string clears it; only http(s) URLs are accepted).
+1. Copy an issue report for your AI or inspect it in your repository.
+2. Record the root cause, repair summary and optional commit SHA. **Start repair** marks the issue as repairing; recurring events continue to count without stopping that work.
+3. Record the fixed release after the code change. This clears the previous verification marker and means **awaiting verification**, not deployed or recovered.
+4. Save the deployment location/version/time and verification results separately. After checking the deployed version, confirm verification passed with the verified release.
+5. Archive only after verification. Events from the fixed or a newer release reopen the issue; old-release events do not invalidate the fix. Lack of events alone is not proof of recovery.
 
-HealthGuard never edits code or creates pull requests; the repair itself happens in your repository, by you or your coding agent.
+Repair notes must be saved explicitly. They are the latest editable record, not an audit history; starting another round retains the notes for context while clearing old release markers. The dashboard does not run coding agents or automatically deploy software. Existing external agents must explicitly write progress back to the API; there is no inferred synchronization from Git or the experimental task queue.
+
+The optional PR URL still uses `PATCH /api/issues/:id/fix-pr` and accepts an HTTP(S) URL or an empty string to clear it.
 
 ## Configure Repair Agents (experimental)
 
-The agent repair-task queue (`/api/agent/repair-tasks/*`) is **experimental**: nothing in this repository consumes it yet, and the recommended workflow is the lightweight path above — copy the issue report for your AI (or use `@health-guard/repair-agent`) and link the resulting PR back to the issue. The queue APIs remain available for self-hosted experiments.
+The agent repair-task queue (`/api/agent/repair-tasks/*`) is **experimental**: nothing in this repository consumes it yet, and the recommended workflow is the lightweight path above — copy the issue report for your AI (or use `@health-guard/repair-agent`) and record the repair evidence on the issue. The queue APIs remain available for self-hosted experiments.
 
 Repair agent APIs use a separate server-side bearer token instead of a dashboard session token.
 

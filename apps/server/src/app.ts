@@ -1,4 +1,5 @@
 import cors from '@fastify/cors';
+import { z } from 'zod';
 import { registerNotificationRoutes } from './notifications/routes';
 import type { SendMail } from './notifications/service';
 import rateLimit from '@fastify/rate-limit';
@@ -267,6 +268,27 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
       return reply.status(404).send({ message: 'Issue not found' });
     }
 
+    return { issue };
+  });
+
+  app.patch<{ Params: { id: string }; Body: unknown }>('/api/issues/:id/repair', async (request, reply) => {
+    const user = await authenticate(store, request.headers.authorization);
+    if (!user) return reply.status(401).send({ message: 'Unauthorized' });
+    const detail = await store.getIssueDetail(request.params.id, undefined, 1);
+    if (!detail.issue || !(await userOwnsAppKey(store, user.id, detail.issue.appKey))) {
+      return reply.status(404).send({ message: 'Issue not found' });
+    }
+    const text = z.string().trim().max(4000);
+    const parsed = z.object({
+      action: z.literal('start').optional(),
+      cause: text.optional(), summary: text.optional(),
+      commitSha: z.string().trim().regex(/^(?:[a-fA-F0-9]{7,40})?$/).optional(),
+      deployment: text.optional(), verification: text.optional()
+    }).strict().refine(value => Object.keys(value).length > 0).safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ message: 'Invalid repair record' });
+    const { action, ...record } = parsed.data;
+    const issue = await store.updateIssueRepair(request.params.id, record, action === 'start', Date.now());
+    if (!issue) return reply.status(404).send({ message: 'Issue not found' });
     return { issue };
   });
 

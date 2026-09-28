@@ -19,6 +19,15 @@ export interface AppRecord {
   createdAt: number;
 }
 
+export interface IssueRepairRecord {
+  cause?: string;
+  summary?: string;
+  commitSha?: string;
+  deployment?: string;
+  verification?: string;
+  updatedAt: number;
+}
+
 export interface IssueSummary {
   id: string;
   appKey: string;
@@ -33,6 +42,7 @@ export interface IssueSummary {
   fixedInRelease: string | null;
   verifiedInRelease: string | null;
   fixPrUrl: string | null;
+  repair?: IssueRepairRecord | null;
   status: IssueLifecycleStatus;
   platformDistribution: Record<string, number>;
   archived: boolean;
@@ -54,7 +64,7 @@ export interface IssueDetail {
 
 export type RepairTaskStatus = 'pending' | 'claimed' | 'running' | 'pr_created' | 'failed' | 'canceled' | 'closed';
 export type RepairTaskAgent = 'hermes' | 'codex' | 'claude-code' | 'manual';
-export type IssueLifecycleStatus = 'open' | 'fixed_pending_release' | 'verifying' | 'resolved' | 'archived';
+export type IssueLifecycleStatus = 'open' | 'repairing' | 'fixed_pending_release' | 'verifying' | 'resolved' | 'archived';
 
 export interface RepairTask {
   id: string;
@@ -142,6 +152,7 @@ export interface Store {
   reopenIssue(id: string): Promise<IssueSummary | null>;
   markIssueFixed(id: string, fixedInRelease: string): Promise<IssueSummary | null>;
   markIssueVerified(id: string, verifiedInRelease: string): Promise<IssueSummary | null>;
+  updateIssueRepair(id: string, record: Omit<IssueRepairRecord, 'updatedAt'>, start: boolean, updatedAt: number): Promise<IssueSummary | null>;
   setIssueFixPr(id: string, fixPrUrl: string | null): Promise<IssueSummary | null>;
   createRepairTask(input: CreateRepairTaskInput): Promise<RepairTask>;
   listRepairTasks(appKey: string, ownerUserId: string): Promise<RepairTask[]>;

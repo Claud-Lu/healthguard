@@ -5,7 +5,7 @@ import { compareRelease } from './releases';
 import { nanoid } from 'nanoid';
 import { createHttpFingerprint, extractPathname } from '@health-guard/core';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@health-guard/core';
-import type { AppRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskAgent, RepairTaskNote, UpdateRepairTaskInput } from './types';
+import type { AppRecord, IssueRepairRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskAgent, RepairTaskNote, UpdateRepairTaskInput } from './types';
 
 const TERMINAL_REPAIR_STATUSES = ['closed', 'failed', 'canceled'] as const;
 
@@ -24,6 +24,7 @@ export interface PostgresStoreOptions {
 export async function createPostgresStore(options: PostgresStoreOptions): Promise<Store> {
   const { pool, sessionTtlMs = 7 * 24 * 60 * 60 * 1000 } = options;
   await ensureSchema(pool);
+  await pool.query('ALTER TABLE issues ADD COLUMN IF NOT EXISTS repair_record JSONB');
   await ensureNotificationSchema(pool);
   await backfillFailedHttpIssues(pool);
 
@@ -403,7 +404,7 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
 
     async markIssueFixed(id: string, fixedInRelease: string): Promise<IssueSummary | null> {
       const result = await pool.query(
-        "UPDATE issues SET fixed_in_release = $1, archived_at = NULL, status = 'fixed_pending_release' WHERE id = $2 RETURNING *",
+        "UPDATE issues SET fixed_in_release = $1, verified_in_release = NULL, archived_at = NULL, status = 'fixed_pending_release' WHERE id = $2 RETURNING *",
         [fixedInRelease, id]
       );
       if (result.rows.length === 0) return null;
@@ -417,6 +418,19 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       );
       if (result.rows.length === 0) return null;
       return rowToIssue(result.rows[0]);
+    },
+
+    async updateIssueRepair(id: string, record: Omit<IssueRepairRecord, 'updatedAt'>, start: boolean, updatedAt: number): Promise<IssueSummary | null> {
+      const result = await pool.query(
+        `UPDATE issues SET repair_record = COALESCE(repair_record, '{}'::jsonb) || $1::jsonb,
+          status = CASE WHEN $2 THEN 'repairing' ELSE status END,
+          fixed_in_release = CASE WHEN $2 THEN NULL ELSE fixed_in_release END,
+          verified_in_release = CASE WHEN $2 THEN NULL ELSE verified_in_release END,
+          archived_at = CASE WHEN $2 THEN NULL ELSE archived_at END
+         WHERE id = $3 RETURNING *`,
+        [JSON.stringify({ ...record, updatedAt }), start, id]
+      );
+      return result.rows.length ? rowToIssue(result.rows[0]) : null;
     },
 
     async setIssueFixPr(id: string, fixPrUrl: string | null): Promise<IssueSummary | null> {
@@ -999,7 +1013,7 @@ async function updateIssueRecurrence(
            last_seen_release = COALESCE($3, last_seen_release),
            platform_distribution = $4,
            archived_at = NULL,
-           status = 'open'
+           status = CASE WHEN status = 'repairing' THEN 'repairing' ELSE 'open' END
        WHERE id = $5`,
       [input.eventCount, input.lastSeenAt, input.eventRelease ?? null, JSON.stringify(input.platformDistribution), input.id]
     );
@@ -1083,6 +1097,7 @@ function rowToIssue(row: Record<string, unknown>): IssueSummary {
     fixedInRelease: nullableString(row.fixed_in_release),
     verifiedInRelease: nullableString(row.verified_in_release),
     fixPrUrl: nullableString(row.fix_pr_url),
+    repair: (row.repair_record as IssueRepairRecord | null) ?? null,
     status,
     platformDistribution: (row.platform_distribution as Record<string, number>) ?? {},
     archived,
