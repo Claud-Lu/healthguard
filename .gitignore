@@ -13,3 +13,8 @@ logs/
 
 # 敏感词黑名单（本地维护，勿提交）
 .sensitive-deny-list
+
+# Flutter package generated files
+.dart_tool/
+.flutter-plugins*
+packages/sdk-flutter/pubspec.lock
