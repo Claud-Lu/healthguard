@@ -18,3 +18,14 @@ describe('notification addresses', () => {
     expect(notificationAddress('javascript:secret')).toBe('地址格式不支持 / Unsupported URL');
   });
 });
+
+import { issueAlertContent } from './content';
+import type { HealthGuardEvent } from '@health-guard/core';
+it('includes evidence from the triggering event in alert summaries', () => {
+  const event = { eventId: 'e', platform: 'flutter', type: 'http', timestamp: 1, method: 'GET', url: 'https://api.example.com/v1', duration: 10, success: false,
+    networkDiagnostic: { version: 1, category: 'timeout', networkAvailability: 'available', network: { online: true, transport: 'wifi', validated: false }, timing: { availability: 'unavailable' }, recentChanges: [] } } as unknown as HealthGuardEvent;
+  const content = issueAlertContent({ name: 'Demo' } as any, { id: 'i', message: 'Timeout', errorType: 'http', eventCount: 1, lastSeenAt: 1 } as any, event, 'new_issue');
+  expect(content.text).toContain('超时');
+  expect(content.text).toContain('wifi');
+  expect(content.text).toContain('不可用');
+});
