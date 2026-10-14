@@ -10,7 +10,7 @@ describe('collector idempotent network replay', () => {
   it('memory mode preserves one occurrence when acknowledgement is lost', async () => {
     const store = createMemoryStore();
     await store.ingestEvents([event,event]);
-    await store.ingestEvents([event]);
+    await Promise.all([store.ingestEvents([event]), store.ingestEvents([event])]);
     expect((await store.listIssues({ appKey: 'demo' }))[0].eventCount).toBe(1);
     expect((await store.getOverview({ appKey: 'demo' })).events).toBe(1);
   });
@@ -37,6 +37,9 @@ describe('collector idempotent network replay', () => {
       expect(detail.events[0]).toMatchObject({ eventId: event.eventId, timestamp: 1, release: '1.2.3', networkDiagnostic: event.networkDiagnostic });
       await store.ingestEvents([{ ...event, eventId: 'second-failure' }, event]);
       expect((await store.listIssues({ appKey: 'demo' }))[0].eventCount).toBe(2);
+      const restarted = await createPostgresStore({ pool: pool as never });
+      await restarted.ingestEvents([event]);
+      expect((await restarted.listIssues({ appKey: 'demo' }))[0].eventCount).toBe(2);
     } finally { await db.close(); }
   }, 30000);
 });

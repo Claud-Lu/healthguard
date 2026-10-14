@@ -181,3 +181,7 @@ Local URLs:
 ## 📄 License
 
 MIT License © [Claud-Lu](https://github.com/Claud-Lu)
+
+## Network diagnostics / 网络诊断
+
+Web, mini-program and uni-app SDKs support optional network evidence and durable failed-request replay. A standalone Flutter/Dio SDK and Android network-state plugin are in `packages/sdk-flutter`. See [integration, privacy and rollout guidance](./docs/network-diagnostics.md). Source packages and device acceptance are separate from registry publication.

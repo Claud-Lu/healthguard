@@ -56,3 +56,7 @@ For each npm package, open npm package Settings and add a Trusted Publisher:
 - Allowed action: `npm publish`
 
 After that, pushing a `v*` tag from the trusted repository publishes all packages through `.github/workflows/publish.yml` without storing an npm token in GitHub or the repository.
+
+## Reusable network diagnostics
+
+See [Network diagnostics](./network-diagnostics.md) for optional event fields, SDK setup, privacy, bounded replay and rollout verification. Deploy Collector/Dashboard before new SDK consumers, then release each client. JavaScript packages are prepared at 0.4.0; Flutter source is 0.1.0 and is distributed separately from npm. Do not claim deployment, registry publication or device acceptance from a source commit or build alone.

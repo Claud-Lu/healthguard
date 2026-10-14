@@ -159,3 +159,7 @@ Use the authenticated owner session with `PATCH /api/issues/:id/repair`. Send an
 Write evidence at each stage; this API does not execute agents. `/fixed` records code completion and clears stale verification. `/verified` records explicit verification; never call it merely because code was edited or events stopped. PR creation is not required. The experimental repair-task queue is independent and does not automatically update these records.
 
 Deploy the collector before the dashboard because the new UI writes to `/repair`. Keep old frontend assets during deployment for already-open sessions. Back up the collector image and dashboard before replacing them; rollback can leave the additive JSONB column in place.
+
+## Reusable network diagnostics
+
+See [Network diagnostics](./network-diagnostics.md) for optional event fields, SDK setup, privacy, bounded replay and rollout verification. Deploy Collector/Dashboard before new SDK consumers, then release each client. JavaScript packages are prepared at 0.4.0; Flutter source is 0.1.0 and is distributed separately from npm. Do not claim deployment, registry publication or device acceptance from a source commit or build alone.
