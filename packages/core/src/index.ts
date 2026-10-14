@@ -1,10 +1,11 @@
 import { z } from 'zod';
 export * from './network-diagnostics';
+import { networkTargetOrigin } from './network-diagnostics';
 
 export const networkDiagnosticSchema = z.object({
   version: z.literal(1),
   category: z.enum(['offline', 'dns', 'connect', 'tls', 'timeout', 'cancelled', 'http', 'unknown']),
-  targetOrigin: z.string().max(256).optional(),
+  targetOrigin: z.string().max(256).transform((value) => networkTargetOrigin(value)).optional(),
   networkAvailability: z.enum(['available', 'unavailable']),
   network: z.object({
     online: z.boolean().optional(), transport: z.enum(['wifi', 'cellular', 'ethernet', 'vpn', 'none', 'unknown']).optional(),
@@ -222,4 +223,27 @@ function hashString(value: string): string {
   }
 
   return (hash >>> 0).toString(36);
+}
+
+
+// Reused by Dashboard, AI handoff and email so the same event has the same summary.
+export function networkDiagnosticLines(event: { networkDiagnostic?: unknown }, language: 'zh' | 'en' = 'zh'): string[] {
+  const parsed = networkDiagnosticSchema.safeParse(event.networkDiagnostic);
+  if (!parsed.success) return [];
+  const value = parsed.data;
+  const zh = language === 'zh';
+  const unavailable = zh ? '不可用' : 'Unavailable';
+  const unknown = zh ? '未知' : 'Unknown';
+  const categories = zh ? { offline: '设备报告离线', dns: 'DNS 解析失败', connect: '连接失败', tls: 'TLS 失败', timeout: '超时', cancelled: '请求取消', http: 'HTTP 错误响应', unknown: '原因未知' }
+    : { offline: 'Device reports offline', dns: 'DNS failure', connect: 'Connection failure', tls: 'TLS failure', timeout: 'Timeout', cancelled: 'Cancelled', http: 'HTTP error response', unknown: 'Unknown cause' };
+  const bool = (v?: boolean) => v === undefined ? unavailable : v ? (zh ? '是' : 'Yes') : (zh ? '否' : 'No');
+  const timing = (v?: number) => v === undefined ? unavailable : `${v} ms`;
+  return [
+    `${zh ? '网络诊断' : 'Network diagnostic'}: ${categories[value.category]}`,
+    `${zh ? '目标域' : 'Target origin'}: ${value.targetOrigin ?? unavailable}`,
+    `${zh ? '网络状态' : 'Network state'}: ${value.network.transport ?? unavailable}; ${zh ? '在线' : 'Online'}=${bool(value.network.online)}; ${zh ? '系统验证联网' : 'OS validated'}=${bool(value.network.validated)}; VPN=${bool(value.network.vpn)}`,
+    `DNS=${timing(value.timing.dnsMs)}; ${zh ? '连接' : 'Connect'}=${timing(value.timing.connectMs)}; TTFB=${timing(value.timing.ttfbMs)}`,
+    `${zh ? '近两分钟网络变化' : 'Network changes in last two minutes'}: ${value.recentChanges.length ? value.recentChanges.map((c) => `${new Date(c.timestamp).toISOString()} ${c.transport ?? unknown} ${bool(c.online)}`).join('; ') : unavailable}`,
+    zh ? '分类来自本次请求和设备线索，不等于已确认根因。' : 'Classification reflects this request and device hints; it is not a confirmed root cause.'
+  ];
 }

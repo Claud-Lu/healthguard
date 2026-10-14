@@ -1,4 +1,4 @@
-import type { HealthGuardEvent } from '@health-guard/core';
+import { networkDiagnosticLines, type HealthGuardEvent } from '@health-guard/core';
 import type { AppRecord, IssueSummary } from '../store/types';
 import type { NotificationJob } from './types';
 
@@ -72,6 +72,7 @@ export function issueAlertContent(app: AppRecord, issue: IssueSummary, event: He
       `请求错误 / Request error: ${event.errorMessage?.slice(0, 500) || '-'}`, ''
     );
   }
+  lines.push(...networkDiagnosticLines(event, 'zh'), ...(event.networkDiagnostic ? networkDiagnosticLines(event, 'en') : []));
   lines.push(
     `${pageLabel}: ${page ? notificationAddress(page) : missing}`, '',
     `本次版本 / Event release: ${event.release ?? missing}`,

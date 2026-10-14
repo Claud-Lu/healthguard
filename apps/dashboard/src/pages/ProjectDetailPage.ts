@@ -1,3 +1,5 @@
+import { renderNetworkDiagnostic } from '../network-diagnostic';
+import { networkDiagnosticLines } from '@health-guard/core';
 import { computed, h, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { store, messages, loadApps } from '../globalStore';
@@ -239,6 +241,7 @@ export default {
         ]),
         evt.filename ? h('p', { class: 'event-meta' }, `${String(evt.filename)}:${String(evt.lineno ?? '-')}:${String(evt.colno ?? '-')}`) : null,
         evt.stack ? h('pre', { class: 'event-stack' }, String(evt.stack)) : null,
+        renderNetworkDiagnostic(evt, store.locale === 'zh-CN' ? 'zh' : 'en'),
         renderRequestData(getEventRequestData(evt, context)),
         renderBreadcrumbs(evt.breadcrumbs as Array<Record<string, unknown>> | undefined),
         renderOriginalJson(evt)
@@ -313,6 +316,7 @@ export default {
           h('span', `Duration: ${String(evt.duration ?? '-')}ms`),
           evt.errorMessage ? h('span', { class: 'event-error-msg' }, String(evt.errorMessage)) : null
         ]),
+        renderNetworkDiagnostic(evt, store.locale === 'zh-CN' ? 'zh' : 'en'),
         renderRequestData(getEventRequestData(evt, context)),
         renderBreadcrumbs(evt.breadcrumbs as Array<Record<string, unknown>> | undefined),
         renderOriginalJson(evt)
@@ -536,6 +540,7 @@ export default {
           lines.push(`- **耗时:** ${String(evt.duration ?? '-')}ms`);
         }
 
+        lines.push(...networkDiagnosticLines(evt, 'zh').map((line) => `- ${line}`));
         if (page) lines.push(`- **页面:** ${String(page)}`);
         if (scene) lines.push(`- **场景:** ${String(scene)}`);
         if (evt.errorMessage ?? context.errorMessage) lines.push(`- **错误信息:** ${String(evt.errorMessage ?? context.errorMessage)}`);

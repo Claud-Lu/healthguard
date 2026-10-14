@@ -1136,3 +1136,6 @@ pre {
 .fix-pr-editor summary { cursor: pointer; font-weight: 600; color: #64748b; }
 .fix-pr-editor[open] summary { margin-bottom: 12px; }
 @media (max-width: 650px) { .repair-fields { grid-template-columns: 1fr; } .release-action-row { flex-wrap: wrap; } .detail-content { padding: 18px 12px; } }
+
+.network-diagnostic { padding: 12px 16px; border-left: 3px solid var(--primary, #2563eb); background: #f3f6fa; margin: 12px 0; overflow-wrap: anywhere; }
+.network-diagnostic p { margin: 6px 0; font-size: 13px; line-height: 1.5; }
