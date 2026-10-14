@@ -27,12 +27,22 @@ class FailingAdapter implements HttpClientAdapter {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  test('handled Flutter exceptions remain native error events with preserved context', () async {
+  test(
+      'handled Flutter exceptions remain native error events with preserved context',
+      () async {
     final received = <Map<String, dynamic>>[];
-    final client = HealthGuardClient(appKey: 'demo', endpoint: 'https://collector.example.com/events', storage: MemoryStorage(), retryInterval: Duration.zero,
-      transport: (batch) async { received.add(batch); }, networkSnapshot: () async => {});
+    final client = HealthGuardClient(
+        appKey: 'demo',
+        endpoint: 'https://collector.example.com/events',
+        storage: MemoryStorage(),
+        retryInterval: Duration.zero,
+        transport: (batch) async {
+          received.add(batch);
+        },
+        networkSnapshot: () async => {});
     await client.initialize();
-    await client.captureException(StateError('Speech initialization failed'), context: {'operation': 'speech_init', 'token': 'private'});
+    await client.captureException(StateError('Speech initialization failed'),
+        context: {'operation': 'speech_init', 'token': 'private'});
     final event = (received.single['events'] as List).single;
     expect(event['type'], 'error');
     expect(event['errorType'], 'native');

@@ -77,7 +77,7 @@ class HealthGuardClient {
                 e['appKey'] == appKey &&
                 e['eventId'] is String &&
                 e['timestamp'] is num &&
-                e['type'] == 'http')
+                (e['type'] == 'http' || e['type'] == 'error'))
             .map((e) => Map<String, dynamic>.from(e))
             .toList()
             .reversed
@@ -212,13 +212,35 @@ class HealthGuardClient {
       {StackTrace? stackTrace,
       Map<String, dynamic>? context,
       String? eventEnvironment}) async {
-    await captureHttpFailure(
-        method: context?['method'] as String? ?? 'GET',
-        url: context?['url'] as String? ?? '/',
-        status: context?['status'] as int?,
-        durationMs: 0,
-        errorMessage: error.toString(),
-        context: context);
+    if (!enabled) return;
+    await initialize();
+    final message = _safeText(error.toString());
+    final event = <String, dynamic>{
+      'eventId': _id('evt'),
+      'appKey': appKey,
+      'platform': 'flutter',
+      'type': 'error',
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'sessionId': _session,
+      'anonymousId': _anonymous,
+      'release': release,
+      'environment': eventEnvironment ?? environment,
+      'sdkVersion': '0.1.0-flutter',
+      'errorType': 'native',
+      'message': message,
+      if (stackTrace != null) 'stack': _safeText(stackTrace.toString()),
+      'fingerprint': 'native:${_fingerprint(message)}',
+      'breadcrumbs': <dynamic>[],
+      if (context != null) 'context': _safeContext(context),
+    };
+    await _schedule(() async {
+      _pending.add(event);
+      if (_pending.length > _limit) {
+        _pending.removeRange(0, _pending.length - _limit);
+      }
+      await _persist();
+      await _deliver();
+    });
   }
 
   Interceptor interceptor() => _HealthGuardInterceptor(this);
@@ -382,3 +404,23 @@ Map<String, dynamic> _safeContext(Map<String, dynamic> context) {
 
 String _id(String prefix) =>
     '${prefix}_${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 32)}';
+
+String _safeText(String raw) {
+  final text = raw
+      .replaceAllMapped(
+          RegExp(r'https?://[^\s)]+'), (m) => safeRequestUrl(m[0]!))
+      .replaceAllMapped(
+          RegExp(
+              r'(token|password|authorization|cookie|secret|api[_-]?key)\s*[:=]\s*[^\s,;]+',
+              caseSensitive: false),
+          (m) => '${m[1]}=[Filtered]');
+  return text.substring(0, min(4000, text.length));
+}
+
+String _fingerprint(String value) {
+  var hash = 2166136261;
+  for (final unit in value.codeUnits) {
+    hash = ((hash ^ unit) * 16777619) & 0xffffffff;
+  }
+  return hash.toRadixString(36);
+}
