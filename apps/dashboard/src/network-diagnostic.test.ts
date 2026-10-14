@@ -19,3 +19,7 @@ describe('diagnostic presentation', () => {
     expect(text).toContain('https://api.example.com');
   });
 });
+
+it('does not throw when a malformed event contains an out-of-range timestamp', () => {
+  expect(networkDiagnosticLines({ networkDiagnostic: { ...diagnostic, recentChanges: [{ timestamp: 1e100, online: false }] } }, 'zh')).toEqual([]);
+});

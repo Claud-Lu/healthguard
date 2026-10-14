@@ -92,3 +92,17 @@ it('persists every failed request even when diagnostic enrichment is rate limite
   expect(JSON.parse([...data.values()][0])).toHaveLength(3);
   client.dispose();
 });
+
+it('keeps collector failures out of each client queue, including manual/custom transport paths', async () => {
+  const endpoint = 'https://collector.example.com/events';
+  const input = { method: 'POST', url: endpoint, duration: 1, success: false };
+  for (const create of [
+    (transport: any) => createHealthGuardClient({ appKey: 'demo', endpoint, flushIntervalMs: 0, networkDiagnostics: true, transport }),
+    (transport: any) => createUniAppClient({ appKey: 'demo', endpoint, flushIntervalMs: 0, networkDiagnostics: true, transport }),
+    (transport: any) => createMiniProgramClient({ appKey: 'demo', endpoint, wx: { request: () => {} }, flushIntervalMs: 0, networkDiagnostics: true, transport }),
+  ]) {
+    const transport = vi.fn().mockResolvedValue(undefined); const client = create(transport);
+    client.captureHttp(input); await client.flush();
+    expect(transport).not.toHaveBeenCalled(); client.dispose();
+  }
+});
