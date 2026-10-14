@@ -1,4 +1,4 @@
-import { createNetworkDiagnosticCollector, createDiagnosticBuffer, type NetworkDiagnosticsOptions, type NetworkCategory, type NetworkDiagnostic } from '../../core/src/network-diagnostics';
+import { createNetworkDiagnosticCollector, createDiagnosticBuffer, type NetworkDiagnosticsOptions, type NetworkCategory } from '../../core/src/network-diagnostics';
 import {
   createIssueFingerprint,
   sanitizeUrl,
@@ -14,10 +14,10 @@ export interface CaptureHttpInput {
   url: string;
   status?: number;
   duration: number;
+  requestStartedAt?: number;
   success: boolean;
   errorMessage?: string;
   failureKind?: NetworkCategory;
-  networkDiagnostic?: NetworkDiagnostic;
 }
 
 export interface HealthGuardClientOptions {
@@ -91,6 +91,7 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
   queue.push(...pending.restored);
 
   let timer: ReturnType<typeof setInterval> | undefined;
+  let disposed = false;
   let isFlushing = false;
   let inFlight: EventBatch['events'] = [];
   let nextAutomaticFlushAt = 0;
@@ -124,6 +125,7 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
   }
 
   function enqueue(event: EventBatch['events'][number]): void {
+    if (disposed) return;
     queue.push(event);
     if (queue.length > pending.limit) queue.splice(0, queue.length - pending.limit);
     pending.save([...inFlight, ...queue]);
@@ -222,6 +224,7 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
     },
 
     dispose(): void {
+      disposed = true;
       if (timer) clearInterval(timer);
       diagnostics.dispose();
     },
@@ -452,7 +455,8 @@ function installAutoCapture(
           method,
           url,
           status: response.status,
-          duration: Date.now() - startedAt,
+          requestStartedAt: startedAt,
+      duration: Date.now() - startedAt,
           success: response.ok
         });
         return response;
@@ -460,7 +464,8 @@ function installAutoCapture(
         captureHttp({
           method,
           url,
-          duration: Date.now() - startedAt,
+          requestStartedAt: startedAt,
+      duration: Date.now() - startedAt,
           success: false,
           errorMessage: normalizeError(error).message
         });
@@ -490,7 +495,8 @@ function installAutoCapture(
           method,
           url,
           status: xhr.status,
-          duration: Date.now() - startedAt,
+          requestStartedAt: startedAt,
+      duration: Date.now() - startedAt,
           success: xhr.status > 0 && xhr.status < 400
         });
       };

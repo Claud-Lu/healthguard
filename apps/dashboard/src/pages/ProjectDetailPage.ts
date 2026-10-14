@@ -1,3 +1,4 @@
+import { sdkIntegrationSnippet } from '../sdk-integration';
 import { renderNetworkDiagnostic } from '../network-diagnostic';
 import { networkDiagnosticLines } from '@health-guard/core';
 import { computed, h, onMounted, ref, watch } from 'vue';
@@ -46,14 +47,8 @@ export default {
     const selectedApp = computed(() => store.apps.find((item) => item.appKey === appKey.value) ?? null);
 
     const sdkSnippet = computed(() => {
-      const endpoint = apiUrl('/events/batch');
-      if (selectedApp.value?.type === 'uni-app') {
-        return `import { createUniAppClient } from '@health-guard/sdk-uniapp';\n\nconst client = createUniAppClient({\n  appKey: '${appKey.value}',\n  endpoint: '${endpoint}',\n  autoCapture: true\n});`;
-      }
-      if (selectedApp.value?.type === 'flutter') {
-        return `flutter build apk --release \\\n  --dart-define=HEALTHGUARD_ENDPOINT=${endpoint} \\\n  --dart-define=HEALTHGUARD_APP_KEY=${appKey.value} \\\n  --dart-define=HEALTHGUARD_ENV=production`;
-      }
-      return `const client = createHealthGuardClient({\n  appKey: '${appKey.value}',\n  endpoint: '${endpoint}',\n  autoCapture: true\n});`;
+      const endpoint = new URL(apiUrl('/events/batch'), window.location.href).href;
+      return sdkIntegrationSnippet(selectedApp.value?.type ?? 'web', appKey.value, endpoint);
     });
 
     watch(() => route.params.appKey, (newKey) => {

@@ -1,4 +1,4 @@
-import { createNetworkDiagnosticCollector, createDiagnosticBuffer, type NetworkDiagnosticsOptions, type NetworkCategory, type NetworkDiagnostic } from '../../core/src/network-diagnostics';
+import { createNetworkDiagnosticCollector, createDiagnosticBuffer, type NetworkDiagnosticsOptions, type NetworkCategory } from '../../core/src/network-diagnostics';
 import {
   createIssueFingerprint,
   sanitizeUrl,
@@ -21,10 +21,10 @@ export interface CaptureHttpInput {
   url: string;
   status?: number;
   duration: number;
+  requestStartedAt?: number;
   success: boolean;
   errorMessage?: string;
   failureKind?: NetworkCategory;
-  networkDiagnostic?: NetworkDiagnostic;
 }
 
 export interface CapturePerformanceInput {
@@ -282,6 +282,7 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
   queue.push(...pending.restored);
 
   let timer: ReturnType<typeof setInterval> | undefined;
+  let disposed = false;
   let isFlushing = false;
   let inFlight: EventBatch['events'] = [];
   let nextAutomaticFlushAt = 0;
@@ -346,6 +347,7 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
   }
 
   function enqueue(event: EventBatch['events'][number]): void {
+    if (disposed) return;
     queue.push(event);
     if (queue.length > pending.limit) queue.splice(0, queue.length - pending.limit);
     pending.save([...inFlight, ...queue]);
@@ -448,6 +450,7 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
     },
 
     dispose(): void {
+      disposed = true;
       if (timer) clearInterval(timer);
       diagnostics.dispose();
     },
@@ -603,7 +606,8 @@ function installFetchCapture(
         method,
         url,
         status: response.status,
-        duration: Date.now() - startedAt,
+        requestStartedAt: startedAt,
+      duration: Date.now() - startedAt,
         success: response.ok
       });
       return response;
@@ -611,7 +615,8 @@ function installFetchCapture(
       captureHttp({
         method,
         url,
-        duration: Date.now() - startedAt,
+        requestStartedAt: startedAt,
+      duration: Date.now() - startedAt,
         success: false,
         errorMessage: normalizeError(error).message
       });
@@ -655,7 +660,8 @@ function installXhrCapture(
         method,
         url,
         status: xhr.status,
-        duration: Date.now() - startedAt,
+        requestStartedAt: startedAt,
+      duration: Date.now() - startedAt,
         success: xhr.status > 0 && xhr.status < 400
       });
 
@@ -712,7 +718,8 @@ function installUniRequestCapture(
           method,
           url: options.url,
           status: res.statusCode,
-          duration: Date.now() - startedAt,
+          requestStartedAt: startedAt,
+      duration: Date.now() - startedAt,
           success: res.statusCode ? res.statusCode < 400 : true
         });
         options.success?.(response);
@@ -721,7 +728,8 @@ function installUniRequestCapture(
         captureHttp({
           method,
           url: options.url,
-          duration: Date.now() - startedAt,
+          requestStartedAt: startedAt,
+      duration: Date.now() - startedAt,
           success: false,
           errorMessage: error.errMsg
         });

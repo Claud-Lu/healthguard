@@ -386,7 +386,7 @@ String safeRequestUrl(String raw) {
   return uri
       .replace(userInfo: '', query: '', fragment: '')
       .toString()
-      .replaceAll(RegExp(r'[?#]$'), '');
+      .replaceAll(RegExp(r'[?#]+$'), '');
 }
 
 Map<String, dynamic> _safeContext(Map<String, dynamic> context) {

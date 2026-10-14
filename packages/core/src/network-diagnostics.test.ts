@@ -47,9 +47,9 @@ describe('portable network diagnostics', () => {
   });
   it('measures exposed phases and marks unsupported network state explicitly', () => {
     const collector = network.createNetworkDiagnosticCollector({ cooldownMs: 0 }, {
-      performance: { getEntriesByName: () => [{ startTime: 1, domainLookupStart: 1, domainLookupEnd: 3, connectStart: 3, connectEnd: 7, requestStart: 8, responseStart: 12, responseEnd: 15 }] }
+      performance: { timeOrigin: 1000, getEntriesByName: () => [{ startTime: 1, domainLookupStart: 1, domainLookupEnd: 3, connectStart: 3, connectEnd: 7, requestStart: 8, responseStart: 12, responseEnd: 15 }] }
     });
-    const report = collector.capture({ method: 'GET', url: '/v1', duration: 14, success: false });
+    const report = collector.capture({ method: 'GET', url: '/v1', requestStartedAt: 1001, duration: 14, success: false });
     expect(report?.timing).toMatchObject({ availability: 'available', dnsMs: 2, connectMs: 4, ttfbMs: 4 });
     expect(report?.networkAvailability).toBe('unavailable');
   });

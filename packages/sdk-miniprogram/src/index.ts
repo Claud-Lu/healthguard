@@ -128,7 +128,7 @@ export interface MiniProgramClientOptions {
 
 export interface MiniProgramClient {
   captureException(error: unknown, errorType?: ErrorType, context?: Record<string, unknown>): void;
-  captureHttp(input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string; failureKind?: NetworkCategory; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }): void;
+  captureHttp(input: { method: string; url: string; status?: number; duration: number; requestStartedAt?: number; success: boolean; errorMessage?: string; failureKind?: NetworkCategory; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }): void;
   addBreadcrumb(breadcrumb: Omit<Breadcrumb, 'timestamp'> & { timestamp?: number }): void;
   wrapPage<T extends Record<string, any>>(route: string, definition: T): T;
   wrapApp<T extends Record<string, any>>(definition: T): T;
@@ -157,11 +157,13 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
   queue.push(...pending.restored);
 
   let timer: ReturnType<typeof setInterval> | undefined;
+  let disposed = false;
   let isFlushing = false;
   let inFlight: EventBatch['events'] = [];
   let nextAutomaticFlushAt = 0;
 
   function enqueue(event: EventBatch['events'][number]): void {
+    if (disposed) return;
     queue.push(event);
     if (queue.length > pending.limit) queue.splice(0, queue.length - pending.limit);
     pending.save([...inFlight, ...queue]);
@@ -230,7 +232,7 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
     });
   }
 
-  function captureHttp(input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string; failureKind?: NetworkCategory; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }): void {
+  function captureHttp(input: { method: string; url: string; status?: number; duration: number; requestStartedAt?: number; success: boolean; errorMessage?: string; failureKind?: NetworkCategory; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }): void {
     enqueue({
       ...createBaseEvent(options, sessionId, anonymousId),
       type: 'http',
@@ -304,6 +306,7 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
       });
     },
     dispose(): void {
+      disposed = true;
       if (timer) clearInterval(timer);
       diagnostics.dispose();
     },
@@ -393,7 +396,7 @@ function getMiniProgramDeviceInfo(wx: MiniProgramWxLike) {
 
 function installRequestCapture(
   wx: MiniProgramWxLike,
-  captureHttp: (input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string; failureKind?: NetworkCategory; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }) => void,
+  captureHttp: (input: { method: string; url: string; status?: number; duration: number; requestStartedAt?: number; success: boolean; errorMessage?: string; failureKind?: NetworkCategory; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }) => void,
   endpoint: string
 ): void {
   const originalRequest = wx.request.bind(wx);
@@ -419,7 +422,8 @@ function installRequestCapture(
           method,
           url: options.url,
           status: result.status,
-          duration: Date.now() - startedAt,
+          requestStartedAt: startedAt,
+      duration: Date.now() - startedAt,
           success: result.success,
           errorMessage: result.errorMessage,
           context,
@@ -434,7 +438,8 @@ function installRequestCapture(
           method,
           url: options.url,
           status: getMiniProgramErrorStatus(error),
-          duration: Date.now() - startedAt,
+          requestStartedAt: startedAt,
+      duration: Date.now() - startedAt,
           success: false,
           errorMessage: getMiniProgramErrorMessage(error),
           context: {

@@ -36,6 +36,7 @@ export interface DiagnosticRequest {
   method: string;
   url: string;
   duration: number;
+  requestStartedAt?: number;
   success: boolean;
   status?: number;
   errorMessage?: string;
@@ -46,7 +47,7 @@ export interface DiagnosticRequest {
 interface Runtime {
   navigator?: { onLine?: boolean; connection?: { effectiveType?: string; addEventListener?: (name: string, cb: () => void) => void; removeEventListener?: (name: string, cb: () => void) => void } };
   location?: { href: string };
-  performance?: { getEntriesByName(name: string): ArrayLike<unknown> };
+  performance?: { timeOrigin?: number; getEntriesByName(name: string): ArrayLike<unknown> };
   addEventListener?: (name: string, cb: () => void) => void;
   removeEventListener?: (name: string, cb: () => void) => void;
   getNetworkType?: (options: { success: (value: { networkType?: string }) => void }) => void;
@@ -120,7 +121,7 @@ export function createNetworkDiagnosticCollector(config: boolean | NetworkDiagno
   };
   const platformChanged = (value: { isConnected?: boolean; networkType?: string }) => {
     if (disposed) return;
-    const name = value.networkType;
+    const name = value.networkType?.toLowerCase();
     const transport: NetworkSnapshot['transport'] = name === 'wifi' ? 'wifi' : name === 'none' ? 'none' : /^(2g|3g|4g|5g|cellular)$/.test(name ?? '') ? 'cellular' : 'unknown';
     cached = { transport, ...(typeof value.isConnected === 'boolean' ? { online: value.isConnected } : name && name !== 'unknown' ? { online: name !== 'none' } : {}) };
     changed();
@@ -141,7 +142,7 @@ export function createNetworkDiagnosticCollector(config: boolean | NetworkDiagno
         if (lastCapture.has(key) && now - lastCapture.get(key)! < cooldown) return undefined;
         lastCapture.delete(key); lastCapture.set(key, now);
         if (lastCapture.size > 20) lastCapture.delete(lastCapture.keys().next().value!);
-        const report = createNetworkDiagnostic({ ...input, snapshot: input.snapshot ?? snapshot(), timing: input.timing ?? resourceTiming(runtime, input.url) });
+        const report = createNetworkDiagnostic({ ...input, snapshot: input.snapshot ?? snapshot(), timing: input.timing ?? resourceTiming(runtime, input.url, input.requestStartedAt) });
         report.targetOrigin = origin;
         report.recentChanges = changes.filter((item) => now - item.timestamp <= 120000).slice(-5);
         return report;
@@ -155,14 +156,15 @@ export function createNetworkDiagnosticCollector(config: boolean | NetworkDiagno
     }
   };
 }
-function resourceTiming(runtime: Runtime, url: string): NetworkTiming {
+function resourceTiming(runtime: Runtime, url: string, startedAt?: number): NetworkTiming {
   const result: NetworkTiming = { availability: 'unavailable' };
   try {
+    if (startedAt === undefined || runtime.performance?.timeOrigin === undefined) return result;
     let name = url;
     try { name = new URL(url, runtime.location?.href).href; } catch { /* relative */ }
     const entries = runtime.performance?.getEntriesByName(name);
     const entry = entries?.[entries.length - 1] as Record<string, unknown> | undefined;
-    if (!entry) return result;
+    if (!entry || typeof entry.startTime !== 'number' || runtime.performance.timeOrigin + entry.startTime < startedAt - 1) return result;
     for (const [key, start, end] of [ ['dnsMs', 'domainLookupStart', 'domainLookupEnd'], ['connectMs', 'connectStart', 'connectEnd'], ['ttfbMs', 'requestStart', 'responseStart'] ] as const) {
       const a = entry[start], b = entry[end];
       // Cross-origin protected zeros are unavailable, never reported as measured zero.
@@ -174,7 +176,7 @@ function resourceTiming(runtime: Runtime, url: string): NetworkTiming {
   return result;
 }
 
-// Persist only diagnostic HTTP evidence, with bounded storage and no body/headers.
+// Persist failed HTTP evidence, with bounded storage and no body/headers.
 // In-flight events remain in storage until transport acknowledgement.
 export function createDiagnosticBuffer<T>(config: boolean | NetworkDiagnosticsOptions | undefined, appKey: string, endpoint: string, fallbackStorage?: DiagnosticStorage) {
   const options = typeof config === 'object' ? config : {};
@@ -184,14 +186,14 @@ export function createDiagnosticBuffer<T>(config: boolean | NetworkDiagnosticsOp
   let saved: T[] = [];
   try {
     const data: unknown = JSON.parse(storage?.getItem(key) ?? '[]');
-    if (Array.isArray(data)) saved = data.filter((item) => item?.appKey === appKey && item?.type === 'http' && item?.networkDiagnostic?.version === 1).slice(-limit);
+    if (Array.isArray(data)) saved = data.filter((item) => item?.appKey === appKey && item?.type === 'http' && item?.success !== true).slice(-limit);
   } catch { /* unavailable */ }
   return {
     restored: saved,
     limit,
     save(queue: T[]) {
       try {
-        const evidence = queue.filter((item: any) => item.type === 'http' && item.networkDiagnostic).slice(-limit).map((item: any) => {
+        const evidence = queue.filter((item: any) => item.type === 'http' && item.success !== true).slice(-limit).map((item: any) => {
           const { type, eventId, appKey, platform, timestamp, sessionId, anonymousId, sdkVersion, release, environment, method, url, status, duration, success, networkDiagnostic } = item;
           return { type, eventId, appKey, platform, timestamp, sessionId, anonymousId, sdkVersion, release, environment, method, url: safeNetworkRequestUrl(url), status, duration, success, networkDiagnostic };
         });
