@@ -82,3 +82,13 @@ describe('transport acknowledgement and enrichment boundaries', () => {
     client.dispose();
   });
 });
+
+it('persists every failed request even when diagnostic enrichment is rate limited', async () => {
+  const data = new Map<string, string>();
+  const storage = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => data.set(k, v) };
+  const client = createHealthGuardClient({ appKey: 'demo', endpoint: 'https://collector.example.com/events', flushIntervalMs: 0, networkDiagnostics: { storage }, transport: vi.fn().mockRejectedValue(new Error('offline')) });
+  for (let i=0;i<3;i++) client.captureHttp({ method: 'GET', url: 'https://api.example.com/v1', duration: 1, success: false });
+  await client.flush();
+  expect(JSON.parse([...data.values()][0])).toHaveLength(3);
+  client.dispose();
+});
