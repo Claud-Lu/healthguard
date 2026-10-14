@@ -3,7 +3,7 @@ import { createHealthGuardClient } from './sdk-web/src/index';
 import { createMiniProgramClient } from './sdk-miniprogram/src/index';
 import { createUniAppClient } from './sdk-uniapp/src/index';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); });
 describe('SDK network enrichment', () => {
   it('captures browser fetch failures with explicit unknown cause and preserves rejection', async () => {
     const failure = new TypeError('Failed to fetch');

@@ -1,3 +1,4 @@
+import { createNetworkDiagnosticCollector, createDiagnosticBuffer, type NetworkDiagnosticsOptions, type NetworkCategory, type NetworkDiagnostic } from '../../core/src/network-diagnostics';
 import {
   createIssueFingerprint,
   sanitizeUrl,
@@ -6,7 +7,7 @@ import {
   type EventBatch
 } from '@health-guard/core';
 
-const SDK_VERSION = '0.1.0';
+const SDK_VERSION = '0.4.0';
 
 export interface CaptureHttpInput {
   method: string;
@@ -15,9 +16,12 @@ export interface CaptureHttpInput {
   duration: number;
   success: boolean;
   errorMessage?: string;
+  failureKind?: NetworkCategory;
+  networkDiagnostic?: NetworkDiagnostic;
 }
 
 export interface HealthGuardClientOptions {
+  networkDiagnostics?: boolean | NetworkDiagnosticsOptions;
   appKey: string;
   endpoint: string;
   release?: string;
@@ -36,6 +40,7 @@ export interface HealthGuardClient {
   captureHttp(input: CaptureHttpInput): void;
   capturePerformance(input: CapturePerformanceInput): void;
   addBreadcrumb(breadcrumb: Omit<Breadcrumb, 'timestamp'> & { timestamp?: number }): void;
+  dispose(): void;
   flush(): Promise<void>;
 }
 
@@ -53,6 +58,8 @@ export interface CapturePerformanceInput {
 }
 
 export interface BrowserLikeTarget {
+  navigator?: { onLine?: boolean; connection?: { effectiveType?: string; addEventListener?: (name: string, cb: () => void) => void; removeEventListener?: (name: string, cb: () => void) => void } };
+  performance?: { getEntriesByName(name: string): ArrayLike<unknown> };
   location?: {
     href: string;
   };
@@ -72,8 +79,20 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
   const transport = options.transport ?? defaultTransport;
   const target = options.target ?? getDefaultTarget();
 
+  const diagnostics = createNetworkDiagnosticCollector(options.networkDiagnostics, target);
+  const pending = createDiagnosticBuffer<EventBatch['events'][number]>(options.networkDiagnostics, options.appKey, options.endpoint, {
+    getItem(key) {
+      return globalThis.localStorage?.getItem(key) ?? null;
+    },
+    setItem(key, value) {
+      globalThis.localStorage?.setItem(key, value);
+    }
+  });
+  queue.push(...pending.restored);
+
   let timer: ReturnType<typeof setInterval> | undefined;
   let isFlushing = false;
+  let inFlight: EventBatch['events'] = [];
   let nextAutomaticFlushAt = 0;
 
   async function flush(force = false): Promise<void> {
@@ -87,6 +106,7 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
 
     isFlushing = true;
     const events = queue.splice(0, maxBatchSize);
+    inFlight = events;
     try {
       await transport({ appKey: options.appKey, events }, options.endpoint);
       nextAutomaticFlushAt = 0;
@@ -96,12 +116,17 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
         nextAutomaticFlushAt = Date.now() + transportFailureRetryDelayMs;
       }
     } finally {
+      inFlight = [];
+      if (queue.length > pending.limit) queue.splice(0, queue.length - pending.limit);
+      pending.save(queue);
       isFlushing = false;
     }
   }
 
   function enqueue(event: EventBatch['events'][number]): void {
     queue.push(event);
+    if (queue.length > pending.limit) queue.splice(0, queue.length - pending.limit);
+    pending.save([...inFlight, ...queue]);
 
     if (queue.length >= maxBatchSize) {
       void flush().catch(() => {});
@@ -151,6 +176,7 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
       status: input.status,
       duration: input.duration,
       success: input.success,
+      networkDiagnostic: diagnostics.capture(input),
       errorMessage: input.errorMessage
     });
   });
@@ -169,7 +195,8 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
         status: input.status,
         duration: input.duration,
         success: input.success,
-        errorMessage: input.errorMessage
+        networkDiagnostic: diagnostics.capture(input),
+      errorMessage: input.errorMessage
       });
     },
 
@@ -194,6 +221,10 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
       }
     },
 
+    dispose(): void {
+      if (timer) clearInterval(timer);
+      diagnostics.dispose();
+    },
     async flush(): Promise<void> {
       if (timer && queue.length === 0) {
         clearInterval(timer);
@@ -456,7 +487,7 @@ function installAutoCapture(
           url,
           status: xhr.status,
           duration: Date.now() - startedAt,
-          success: xhr.status < 400
+          success: xhr.status > 0 && xhr.status < 400
         });
       };
 

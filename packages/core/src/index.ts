@@ -1,4 +1,18 @@
 import { z } from 'zod';
+export * from './network-diagnostics';
+
+export const networkDiagnosticSchema = z.object({
+  version: z.literal(1),
+  category: z.enum(['offline', 'dns', 'connect', 'tls', 'timeout', 'cancelled', 'http', 'unknown']),
+  targetOrigin: z.string().max(256).optional(),
+  networkAvailability: z.enum(['available', 'unavailable']),
+  network: z.object({
+    online: z.boolean().optional(), transport: z.enum(['wifi', 'cellular', 'ethernet', 'vpn', 'none', 'unknown']).optional(),
+    effectiveType: z.enum(['slow-2g', '2g', '3g', '4g']).optional(), validated: z.boolean().optional(), metered: z.boolean().optional(), vpn: z.boolean().optional()
+  }),
+  timing: z.object({ availability: z.enum(['available', 'unavailable']), dnsMs: z.number().min(0).max(3600000).optional(), connectMs: z.number().min(0).max(3600000).optional(), ttfbMs: z.number().min(0).max(3600000).optional() }),
+  recentChanges: z.array(z.object({ timestamp: z.number(), online: z.boolean().optional(), transport: z.enum(['wifi', 'cellular', 'ethernet', 'vpn', 'none', 'unknown']).optional() })).max(5)
+});
 
 export const sensitiveQueryKeys = new Set([
   'authorization',
@@ -50,7 +64,8 @@ export const baseEventSchema = z.object({
   environment: z.enum(['development', 'test', 'production']).optional(),
   pageUrl: z.string().optional(),
   sdkVersion: z.string().min(1),
-  deviceInfo: deviceInfoSchema.optional()
+  deviceInfo: deviceInfoSchema.optional(),
+  networkDiagnostic: networkDiagnosticSchema.optional()
 });
 
 export const errorEventSchema = baseEventSchema.extend({

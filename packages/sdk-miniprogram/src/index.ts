@@ -1,4 +1,5 @@
-const SDK_VERSION = '0.1.0';
+import { createNetworkDiagnosticCollector, createDiagnosticBuffer, type NetworkDiagnosticsOptions, type NetworkCategory, type NetworkDiagnostic } from '../../core/src/network-diagnostics';
+const SDK_VERSION = '0.4.0';
 
 const sensitiveQueryKeys = new Set([
   'authorization',
@@ -39,6 +40,7 @@ export interface BaseEvent {
   sessionId: string;
   anonymousId: string;
   sdkVersion: string;
+  networkDiagnostic?: NetworkDiagnostic;
   release?: string;
   environment?: HealthGuardEnvironment;
   userId?: string;
@@ -65,6 +67,7 @@ export interface HttpEvent extends BaseEvent {
   duration: number;
   success: boolean;
   errorMessage?: string;
+  failureKind?: NetworkCategory;
   context?: Record<string, unknown>;
   requestData?: Record<string, unknown>;
   page?: string;
@@ -79,6 +82,11 @@ export interface EventBatch {
 export interface MiniProgramWxLike {
   onError?: (handler: (message: string) => void) => void;
   onUnhandledRejection?: (handler: (event: { reason: unknown }) => void) => void;
+  getStorageSync?: (key: string) => unknown;
+  setStorageSync?: (key: string, value: string) => void;
+  getNetworkType?: (options: { success: (value: { networkType?: string }) => void }) => void;
+  onNetworkStatusChange?: (cb: (value: { isConnected?: boolean; networkType?: string }) => void) => void;
+  offNetworkStatusChange?: (cb: (value: { isConnected?: boolean; networkType?: string }) => void) => void;
   request: (options: WxRequestOptions) => unknown;
   getCurrentPages?: () => Array<{ route?: string; __route__?: string }>;
 }
@@ -103,6 +111,7 @@ export interface MiniProgramAutoCaptureOptions {
 }
 
 export interface MiniProgramClientOptions {
+  networkDiagnostics?: boolean | NetworkDiagnosticsOptions;
   appKey: string;
   endpoint: string;
   wx: MiniProgramWxLike;
@@ -119,10 +128,11 @@ export interface MiniProgramClientOptions {
 
 export interface MiniProgramClient {
   captureException(error: unknown, errorType?: ErrorType, context?: Record<string, unknown>): void;
-  captureHttp(input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }): void;
+  captureHttp(input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string; failureKind?: NetworkCategory; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }): void;
   addBreadcrumb(breadcrumb: Omit<Breadcrumb, 'timestamp'> & { timestamp?: number }): void;
   wrapPage<T extends Record<string, any>>(route: string, definition: T): T;
   wrapApp<T extends Record<string, any>>(definition: T): T;
+  dispose(): void;
   flush(): Promise<void>;
 }
 
@@ -135,12 +145,26 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
   const transportFailureRetryDelayMs = options.transportFailureRetryDelayMs ?? 30000;
   const transport = options.transport ?? createRequestTransport(options.wx);
 
+  const diagnostics = createNetworkDiagnosticCollector(options.networkDiagnostics, options.wx);
+  const pending = createDiagnosticBuffer<EventBatch['events'][number]>(options.networkDiagnostics, options.appKey, options.endpoint, {
+    getItem(key) {
+      return options.wx.getStorageSync?.(key) as string ?? null;
+    },
+    setItem(key, value) {
+      options.wx.setStorageSync?.(key, value);
+    }
+  });
+  queue.push(...pending.restored);
+
   let timer: ReturnType<typeof setInterval> | undefined;
   let isFlushing = false;
+  let inFlight: EventBatch['events'] = [];
   let nextAutomaticFlushAt = 0;
 
   function enqueue(event: EventBatch['events'][number]): void {
     queue.push(event);
+    if (queue.length > pending.limit) queue.splice(0, queue.length - pending.limit);
+    pending.save([...inFlight, ...queue]);
 
     if (queue.length >= maxBatchSize) {
       void flush().catch(() => {});
@@ -158,6 +182,7 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
 
     isFlushing = true;
     const events = queue.splice(0, maxBatchSize);
+    inFlight = events;
     try {
       await transport({ appKey: options.appKey, events }, options.endpoint);
       nextAutomaticFlushAt = 0;
@@ -167,6 +192,9 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
         nextAutomaticFlushAt = Date.now() + transportFailureRetryDelayMs;
       }
     } finally {
+      inFlight = [];
+      if (queue.length > pending.limit) queue.splice(0, queue.length - pending.limit);
+      pending.save(queue);
       isFlushing = false;
     }
   }
@@ -202,7 +230,7 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
     });
   }
 
-  function captureHttp(input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }): void {
+  function captureHttp(input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string; failureKind?: NetworkCategory; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }): void {
     enqueue({
       ...createBaseEvent(options, sessionId, anonymousId),
       type: 'http',
@@ -211,6 +239,7 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
       status: input.status,
       duration: input.duration,
       success: input.success,
+      networkDiagnostic: diagnostics.capture(input),
       errorMessage: input.errorMessage,
       context: sanitizeContext(input.context),
       requestData: sanitizeRecord(input.requestData),
@@ -273,6 +302,10 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
         onShow: 'App onShow',
         onHide: 'App onHide'
       });
+    },
+    dispose(): void {
+      if (timer) clearInterval(timer);
+      diagnostics.dispose();
     },
     async flush(): Promise<void> {
       if (timer && queue.length === 0) {
@@ -360,7 +393,7 @@ function getMiniProgramDeviceInfo(wx: MiniProgramWxLike) {
 
 function installRequestCapture(
   wx: MiniProgramWxLike,
-  captureHttp: (input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }) => void,
+  captureHttp: (input: { method: string; url: string; status?: number; duration: number; success: boolean; errorMessage?: string; failureKind?: NetworkCategory; context?: Record<string, unknown>; requestData?: Record<string, unknown>; page?: string; scene?: string }) => void,
   endpoint: string
 ): void {
   const originalRequest = wx.request.bind(wx);

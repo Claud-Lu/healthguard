@@ -1,3 +1,4 @@
+import { createNetworkDiagnosticCollector, createDiagnosticBuffer, type NetworkDiagnosticsOptions, type NetworkCategory, type NetworkDiagnostic } from '../../core/src/network-diagnostics';
 import {
   createIssueFingerprint,
   sanitizeUrl,
@@ -6,7 +7,7 @@ import {
   type EventBatch
 } from '@health-guard/core';
 
-const SDK_VERSION = '0.3.1';
+const SDK_VERSION = '0.4.0';
 
 // uni-app exposes this as a global API, not as a method on `uni`.
 declare const getCurrentPages: undefined | (() => Array<{ route?: string; __route__?: string; $page?: { fullPath?: string } }>);
@@ -22,6 +23,8 @@ export interface CaptureHttpInput {
   duration: number;
   success: boolean;
   errorMessage?: string;
+  failureKind?: NetworkCategory;
+  networkDiagnostic?: NetworkDiagnostic;
 }
 
 export interface CapturePerformanceInput {
@@ -39,6 +42,7 @@ export interface UniAppAutoCaptureOptions {
 }
 
 export interface UniAppClientOptions {
+  networkDiagnostics?: boolean | NetworkDiagnosticsOptions;
   appKey: string;
   endpoint: string;
   release?: string;
@@ -56,6 +60,7 @@ export interface UniAppClient {
   captureHttp(input: CaptureHttpInput): void;
   capturePerformance(input: CapturePerformanceInput): void;
   addBreadcrumb(breadcrumb: Omit<Breadcrumb, 'timestamp'> & { timestamp?: number }): void;
+  dispose(): void;
   flush(): Promise<void>;
 }
 
@@ -256,8 +261,20 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
   const platform = detectPlatform();
   const h5 = isH5();
 
+  const diagnostics = createNetworkDiagnosticCollector(options.networkDiagnostics, h5 ? window : (globalThis as any).uni);
+  const pending = createDiagnosticBuffer<EventBatch['events'][number]>(options.networkDiagnostics, options.appKey, options.endpoint, {
+    getItem(key) {
+      return getStorageItem(key);
+    },
+    setItem(key, value) {
+      setStorageItem(key, value);
+    }
+  });
+  queue.push(...pending.restored);
+
   let timer: ReturnType<typeof setInterval> | undefined;
   let isFlushing = false;
+  let inFlight: EventBatch['events'] = [];
   let nextAutomaticFlushAt = 0;
 
   function createBaseEvent(): Pick<
@@ -302,6 +319,7 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
 
     isFlushing = true;
     const events = queue.splice(0, maxBatchSize);
+    inFlight = events;
     try {
       await transport({ appKey: options.appKey, events }, options.endpoint);
       nextAutomaticFlushAt = 0;
@@ -311,12 +329,17 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
         nextAutomaticFlushAt = Date.now() + transportFailureRetryDelayMs;
       }
     } finally {
+      inFlight = [];
+      if (queue.length > pending.limit) queue.splice(0, queue.length - pending.limit);
+      pending.save(queue);
       isFlushing = false;
     }
   }
 
   function enqueue(event: EventBatch['events'][number]): void {
     queue.push(event);
+    if (queue.length > pending.limit) queue.splice(0, queue.length - pending.limit);
+    pending.save([...inFlight, ...queue]);
 
     if (queue.length >= maxBatchSize) {
       void flush().catch(() => {});
@@ -370,6 +393,7 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
       status: input.status,
       duration: input.duration,
       success: input.success,
+      networkDiagnostic: diagnostics.capture(input),
       errorMessage: input.errorMessage
     });
   });
@@ -388,7 +412,8 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
         status: input.status,
         duration: input.duration,
         success: input.success,
-        errorMessage: input.errorMessage
+        networkDiagnostic: diagnostics.capture(input),
+      errorMessage: input.errorMessage
       });
     },
 
@@ -413,6 +438,10 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
       }
     },
 
+    dispose(): void {
+      if (timer) clearInterval(timer);
+      diagnostics.dispose();
+    },
     async flush(): Promise<void> {
       if (timer && queue.length === 0) {
         clearInterval(timer);
@@ -618,7 +647,7 @@ function installXhrCapture(
         url,
         status: xhr.status,
         duration: Date.now() - startedAt,
-        success: xhr.status < 400
+        success: xhr.status > 0 && xhr.status < 400
       });
 
       if (typeof originalOnloadend === 'function') {

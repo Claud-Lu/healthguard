@@ -11,7 +11,7 @@ describe('portable network diagnostics', () => {
     [{ success: false, failureKind: 'cancelled' }, 'cancelled'],
     [{ success: false, snapshot: { online: false } }, 'offline'],
   ])('classifies evidence without guessing CORS/DNS from generic errors', (input, expected) => {
-    expect(network.createNetworkDiagnostic({ method: 'GET', url: 'https://api.example.com/items', duration: 5, ...input }).category).toBe(expected);
+    expect(network.createNetworkDiagnostic({ method: 'GET', url: 'https://api.example.com/items', duration: 5, success: false, ...input as Partial<network.DiagnosticRequest> }).category).toBe(expected);
   });
   it('keeps only permitted network fields and removes URL credentials, query, fragment and path identifiers', () => {
     const report = network.createNetworkDiagnostic({ method: 'GET', url: 'https://user:pass@api.example.com/users/123?token=private#secret', duration: 5, success: false,
