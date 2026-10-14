@@ -112,6 +112,11 @@ class HealthGuardClient {
       required int durationMs,
       String? errorMessage,
       String? failureKind,
+      DateTime? occurredAt,
+      String? eventEnvironment,
+      String? deviceModel,
+      String? deviceSystem,
+      String? fingerprint,
       Map<String, dynamic>? context}) async {
     if (!enabled || _isCollector(url)) return;
     await initialize();
@@ -173,12 +178,18 @@ class HealthGuardClient {
       'appKey': appKey,
       'platform': 'flutter',
       'type': 'http',
-      'timestamp': now.millisecondsSinceEpoch,
+      'timestamp': (occurredAt ?? now).millisecondsSinceEpoch,
       'sessionId': _session,
       'anonymousId': _anonymous,
       'release': release,
-      'environment': environment,
-      'sdkVersion': '0.1.0-flutter',
+      'environment': eventEnvironment ?? environment,
+      'sdkVersion': '0.1.1-flutter',
+      if (deviceModel != null || deviceSystem != null)
+        'deviceInfo': {
+          if (deviceModel != null) 'model': _safeText(deviceModel),
+          if (deviceSystem != null) 'system': _safeText(deviceSystem),
+        },
+      if (fingerprint != null) 'fingerprint': _safeText(fingerprint),
       'method': method.toUpperCase(),
       'url': safeRequestUrl(url),
       if (status != null) 'status': status,
@@ -188,6 +199,7 @@ class HealthGuardClient {
       if (attach)
         'networkDiagnostic': {
           'version': 1,
+          'sampledAt': now.millisecondsSinceEpoch,
           'category': category,
           if (origin != null) 'targetOrigin': origin,
           'networkAvailability': network.isEmpty ? 'unavailable' : 'available',
@@ -211,7 +223,9 @@ class HealthGuardClient {
   Future<void> captureException(Object error,
       {StackTrace? stackTrace,
       Map<String, dynamic>? context,
-      String? eventEnvironment}) async {
+      String? eventEnvironment,
+      String? deviceModel,
+      String? deviceSystem}) async {
     if (!enabled) return;
     await initialize();
     final message = _safeText(error.toString());
@@ -225,7 +239,12 @@ class HealthGuardClient {
       'anonymousId': _anonymous,
       'release': release,
       'environment': eventEnvironment ?? environment,
-      'sdkVersion': '0.1.0-flutter',
+      'sdkVersion': '0.1.1-flutter',
+      if (deviceModel != null || deviceSystem != null)
+        'deviceInfo': {
+          if (deviceModel != null) 'model': _safeText(deviceModel),
+          if (deviceSystem != null) 'system': _safeText(deviceSystem),
+        },
       'errorType': 'native',
       'message': message,
       if (stackTrace != null) 'stack': _safeText(stackTrace.toString()),
@@ -393,13 +412,107 @@ Map<String, dynamic> _safeContext(Map<String, dynamic> context) {
   final result = <String, dynamic>{};
   for (final key in ['method', 'operation', 'failureKind']) {
     if (context[key] is String) {
-      result[key] = (context[key] as String)
-          .substring(0, min(80, (context[key] as String).length));
+      final text = _safeText(context[key] as String);
+      result[key] = text.substring(0, min(80, text.length));
     }
   }
   if (context['status'] is num) result['status'] = context['status'];
   if (context['url'] is String) result['url'] = safeRequestUrl(context['url']);
+  for (final key in ['networkDiagnostics', 'originalError']) {
+    if (context[key] is Map) {
+      result[key] = _safeDiagnostic(context[key], 0);
+    }
+  }
   return result;
+}
+
+// Only transport evidence is retained; arbitrary application payloads, user
+// identifiers, credentials and network identifiers are never copied wholesale.
+const _diagnosticKeys = {
+  'schemaVersion',
+  'requestId',
+  'startedAt',
+  'failedAt',
+  'networkAtStart',
+  'networkAtFailure',
+  'networkChangedDuringRequest',
+  'changesDuringRequest',
+  'platformEventsDuringRequest',
+  'recentNetworkChanges',
+  'inFlightAtStart',
+  'otherRequestsInFlightAtFailure',
+  'lastSuccessfulResponse',
+  'originalError',
+  'probes',
+  'assessment',
+  'category',
+  'causeConfirmed',
+  'networkChangeObserved',
+  'requiresServerLogs',
+  'summary',
+  'available',
+  'connected',
+  'online',
+  'validated',
+  'metered',
+  'revision',
+  'transport',
+  'observedAt',
+  'sampledAt',
+  'finishedAt',
+  'eventAt',
+  'reason',
+  'eventScope',
+  'scope',
+  'at',
+  'androidSdk',
+  'deviceModel',
+  'manufacturer',
+  'captivePortal',
+  'powerSaveMode',
+  'proxyConfigured',
+  'callbackRegistered',
+  'dioType',
+  'underlyingType',
+  'message',
+  'status',
+  'osErrorCode',
+  'osErrorMessage',
+  'cached',
+  'timing',
+  'results',
+  'skipped',
+  'dns',
+  'tcp',
+  'tls',
+  'health',
+  'outcome',
+  'durationMs',
+  'errorType',
+  'families',
+  'addressCount',
+  'code',
+};
+dynamic _safeDiagnostic(dynamic value, int depth) {
+  if (depth > 7) return null;
+  if (value is Map) {
+    return <String, dynamic>{
+      for (final entry in value.entries.take(64))
+        if (_diagnosticKeys.contains(entry.key))
+          entry.key as String: entry.key == 'causeConfirmed'
+              ? false
+              : _safeDiagnostic(entry.value, depth + 1),
+    };
+  }
+  if (value is List) {
+    return value.take(40).map((v) => _safeDiagnostic(v, depth + 1)).toList();
+  }
+  if (value is String) {
+    final text = _safeText(value);
+    return text.substring(0, min(500, text.length));
+  }
+  if (value is num || value is bool || value == null) return value;
+  return null;
 }
 
 String _id(String prefix) =>
