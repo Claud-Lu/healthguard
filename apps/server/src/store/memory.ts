@@ -19,6 +19,7 @@ export interface MemoryStoreState {
 
 export function createMemoryStore(): Store {
   const notifications = createMemoryNotifications();
+  const acceptedEventIds = new Set<string>();
   const state: MemoryStoreState = {
     users: [],
     sessions: new Map(),
@@ -69,6 +70,8 @@ export function createMemoryStore(): Store {
 
     async ingestEvents(events: HealthGuardEvent[]): Promise<void> {
       for (const event of events) {
+        if (acceptedEventIds.has(event.eventId)) continue;
+        acceptedEventIds.add(event.eventId);
         let payload = event;
 
         if (event.type === 'http' && !event.success) {

@@ -88,6 +88,11 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
 
     async ingestEvents(events: HealthGuardEvent[]): Promise<void> {
       if (events.length === 0) return;
+      const batchIds = new Set<string>();
+      events = events.filter((event) => {
+        if (batchIds.has(event.eventId)) return false;
+        batchIds.add(event.eventId); return true;
+      });
 
       const client = await pool.connect();
       try {
@@ -136,15 +141,17 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
           );
         }
 
-        await client.query(
+        const inserted = await client.query(
           `INSERT INTO events (
             event_id, app_key, platform, type, timestamp, session_id, user_id,
             anonymous_id, release, environment, page_url, sdk_version, payload
-          ) VALUES ${placeholders.join(', ')}`,
+          ) VALUES ${placeholders.join(', ')} ON CONFLICT (event_id) DO NOTHING RETURNING event_id`,
           values
         );
 
+        const insertedIds = new Set(inserted.rows.map((row) => String(row.event_id)));
         for (const event of events) {
+          if (!insertedIds.has(event.eventId)) continue;
           const alertApp = alertApps.get(event.appKey);
           const fingerprint = event.type === 'error' ? event.fingerprint : event.type === 'http' && !event.success ? createHttpFingerprint(event) : null;
           const issueId = fingerprint ? `${event.appKey}:${fingerprint}` : null;
