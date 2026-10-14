@@ -128,3 +128,14 @@ The triggering device model and OS version are also included when reported. Upda
 ## Reusable network diagnostics
 
 See [Network diagnostics](./network-diagnostics.md) for optional event fields, SDK setup, privacy, bounded replay and rollout verification. Deploy Collector/Dashboard before new SDK consumers, then release each client. JavaScript packages are prepared at 0.4.0; Flutter source is 0.1.0 and is distributed separately from npm. Do not claim deployment, registry publication or device acceptance from a source commit or build alone.
+
+
+## Flutter migration compatibility (source 0.1.1)
+
+For manual HTTP reports, captureHttpFailure accepts occurredAt, eventEnvironment, deviceModel, deviceSystem and fingerprint. Diagnostic context retains bounded allowlisted networkDiagnostics and originalError fields; passive snapshot sampledAt records collection time separately from the original failure time.
+
+Applications may configure additionalContextKeys for explicitly approved scalar business evidence. Credential keys and nested business payloads are excluded even when requested. Select a single manual or automatic HTTP reporting path to prevent duplicate alerts.
+
+Existing application queues and installation IDs can be migrated through HealthGuardStorage. Persist the new queue before clearing old storage and retain original event IDs, timestamps and releases. A custom transport must throw unless the collector acknowledges the full batch.
+
+The package is source-only, not published to pub.dev. Pin reviewed commit 1e95665f978f4347120c969a9771bbc64531cdca. Registry publication, server deployment and device acceptance are separate steps.

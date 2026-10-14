@@ -121,3 +121,14 @@ flutter analyze
 参考：[Android 网络状态](https://developer.android.com/develop/connectivity/network-ops/reading-network-state)、[ConnectivityManager](https://developer.android.com/reference/android/net/ConnectivityManager)、[Resource Timing](https://developer.mozilla.org/en-US/docs/Web/API/PerformanceResourceTiming)、[Dio](https://pub.dev/packages/dio)。
 
 数据库去重测试使用 PGlite 执行真实 PostgreSQL SQL 语义，覆盖重复批次、响应丢失重试和重建 Store 后回放。它不能证明独立 PostgreSQL 服务的连接池、多进程 advisory lock 或线上数据库验收。既有服务级集成测试需要 `TEST_DATABASE_URL`，缺失时跳过，不能计为通过。
+
+
+## Flutter migration compatibility (source 0.1.1)
+
+For manual HTTP reports, captureHttpFailure accepts occurredAt, eventEnvironment, deviceModel, deviceSystem and fingerprint. Diagnostic context retains bounded allowlisted networkDiagnostics and originalError fields; passive snapshot sampledAt records collection time separately from the original failure time.
+
+Applications may configure additionalContextKeys for explicitly approved scalar business evidence. Credential keys and nested business payloads are excluded even when requested. Select a single manual or automatic HTTP reporting path to prevent duplicate alerts.
+
+Existing application queues and installation IDs can be migrated through HealthGuardStorage. Persist the new queue before clearing old storage and retain original event IDs, timestamps and releases. A custom transport must throw unless the collector acknowledges the full batch.
+
+The package is source-only, not published to pub.dev. Pin reviewed commit 1e95665f978f4347120c969a9771bbc64531cdca. Registry publication, server deployment and device acceptance are separate steps.
