@@ -125,7 +125,7 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
   }
 
   function enqueue(event: EventBatch['events'][number]): void {
-    if (disposed) return;
+    if (disposed || (event.type === 'http' && isCollectorEndpoint(event.url, options.endpoint))) return;
     queue.push(event);
     if (queue.length > pending.limit) queue.splice(0, queue.length - pending.limit);
     pending.save([...inFlight, ...queue]);

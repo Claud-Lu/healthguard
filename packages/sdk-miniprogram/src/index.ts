@@ -163,7 +163,7 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
   let nextAutomaticFlushAt = 0;
 
   function enqueue(event: EventBatch['events'][number]): void {
-    if (disposed) return;
+    if (disposed || (event.type === 'http' && isHealthGuardEndpoint(event.url, options.endpoint))) return;
     queue.push(event);
     if (queue.length > pending.limit) queue.splice(0, queue.length - pending.limit);
     pending.save([...inFlight, ...queue]);

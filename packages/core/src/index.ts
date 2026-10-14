@@ -12,7 +12,7 @@ export const networkDiagnosticSchema = z.object({
     effectiveType: z.enum(['slow-2g', '2g', '3g', '4g']).optional(), validated: z.boolean().optional(), metered: z.boolean().optional(), vpn: z.boolean().optional()
   }),
   timing: z.object({ availability: z.enum(['available', 'unavailable']), dnsMs: z.number().min(0).max(3600000).optional(), connectMs: z.number().min(0).max(3600000).optional(), ttfbMs: z.number().min(0).max(3600000).optional() }),
-  recentChanges: z.array(z.object({ timestamp: z.number(), online: z.boolean().optional(), transport: z.enum(['wifi', 'cellular', 'ethernet', 'vpn', 'none', 'unknown']).optional() })).max(5)
+  recentChanges: z.array(z.object({ timestamp: z.number().int().min(0).max(8640000000000000), online: z.boolean().optional(), transport: z.enum(['wifi', 'cellular', 'ethernet', 'vpn', 'none', 'unknown']).optional() })).max(5)
 });
 
 export const sensitiveQueryKeys = new Set([
