@@ -213,7 +213,7 @@ function isSdkInternalError(message: string | undefined): boolean {
 /*                               Default transport                            */
 /* -------------------------------------------------------------------------- */
 
-async function defaultTransport(batch: EventBatch, endpoint: string): Promise<void> {
+async function defaultTransport(batch: EventBatch, endpoint: string, requireAcknowledgement = false): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const uniGlobal = (globalThis as any).uni;
 
@@ -224,7 +224,12 @@ async function defaultTransport(batch: EventBatch, endpoint: string): Promise<vo
         method: 'POST',
         header: { 'content-type': 'application/json' },
         data: batch,
-        success: () => resolve(),
+        success: (response: { statusCode?: number; data?: { accepted?: number } }) => {
+          if (requireAcknowledgement && (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300 || response.data?.accepted !== batch.events.length)) {
+            reject(new Error('Collector did not acknowledge the batch')); return;
+          }
+          resolve();
+        },
         fail: (err: { errMsg?: string }) => {
           reject(new Error(err?.errMsg || 'uni.request failed'));
         }
@@ -244,6 +249,10 @@ async function defaultTransport(batch: EventBatch, endpoint: string): Promise<vo
   if (!response.ok) {
     throw new Error(`Transport failed: ${response.status}`);
   }
+  if (requireAcknowledgement) {
+    const body = await response.json();
+    if (body?.accepted !== batch.events.length) throw new Error('Collector did not acknowledge the batch');
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -257,7 +266,7 @@ export function createUniAppClient(options: UniAppClientOptions): UniAppClient {
   const anonymousId = getAnonymousId();
   const maxBatchSize = options.maxBatchSize ?? 10;
   const transportFailureRetryDelayMs = options.transportFailureRetryDelayMs ?? 30000;
-  const transport = options.transport ?? defaultTransport;
+  const transport = options.transport ?? ((batch: EventBatch, endpoint: string) => defaultTransport(batch, endpoint, Boolean(options.networkDiagnostics)));
   const platform = detectPlatform();
   const h5 = isH5();
 
@@ -763,7 +772,7 @@ function isCollectorEndpoint(url: string, endpoint: string): boolean {
   try {
     const current = new URL(url, 'http://healthguard.local');
     const collector = new URL(endpoint, 'http://healthguard.local');
-    return current.pathname === collector.pathname;
+    return current.origin === collector.origin && current.pathname === collector.pathname;
   } catch {
     return url === endpoint;
   }

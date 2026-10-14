@@ -143,7 +143,7 @@ export function createMiniProgramClient(options: MiniProgramClientOptions): Mini
   const anonymousId = createId('anon');
   const maxBatchSize = options.maxBatchSize ?? 10;
   const transportFailureRetryDelayMs = options.transportFailureRetryDelayMs ?? 30000;
-  const transport = options.transport ?? createRequestTransport(options.wx);
+  const transport = options.transport ?? createRequestTransport(options.wx, Boolean(options.networkDiagnostics));
 
   const diagnostics = createNetworkDiagnosticCollector(options.networkDiagnostics, options.wx);
   const pending = createDiagnosticBuffer<EventBatch['events'][number]>(options.networkDiagnostics, options.appKey, options.endpoint, {
@@ -455,7 +455,7 @@ function isHealthGuardEndpoint(url: string, endpoint: string): boolean {
   try {
     const urlObj = new URL(url, 'http://healthguard.local');
     const endpointObj = new URL(endpoint, 'http://healthguard.local');
-    return urlObj.pathname === endpointObj.pathname;
+    return urlObj.origin === endpointObj.origin && urlObj.pathname === endpointObj.pathname;
   } catch {
     return false;
   }
@@ -525,7 +525,7 @@ function getBusinessErrorMessage(
   return message;
 }
 
-function createRequestTransport(wx: MiniProgramWxLike): (batch: EventBatch, endpoint: string) => Promise<void> {
+function createRequestTransport(wx: MiniProgramWxLike, requireAcknowledgement = false): (batch: EventBatch, endpoint: string) => Promise<void> {
   const request = wx.request.bind(wx);
 
   return (batch: EventBatch, endpoint: string) => new Promise((resolve, reject) => {
@@ -536,12 +536,15 @@ function createRequestTransport(wx: MiniProgramWxLike): (batch: EventBatch, endp
       header: {
         'content-type': 'application/json'
       },
-      success(response: { statusCode?: number }) {
+      success(response: { statusCode?: number; data?: unknown }) {
         if (response.statusCode && response.statusCode >= 400) {
           reject(new Error(`HealthGuard transport failed with status ${response.statusCode}`));
           return;
         }
 
+        if (requireAcknowledgement && (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300 || (response.data as { accepted?: number } | undefined)?.accepted !== batch.events.length)) {
+          reject(new Error('Collector did not acknowledge the batch')); return;
+        }
         resolve();
       },
       fail(error: { errMsg?: string }) {

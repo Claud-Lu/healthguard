@@ -76,7 +76,7 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
   const anonymousId = getAnonymousId();
   const maxBatchSize = options.maxBatchSize ?? 10;
   const transportFailureRetryDelayMs = options.transportFailureRetryDelayMs ?? 30000;
-  const transport = options.transport ?? defaultTransport;
+  const transport = options.transport ?? ((batch: EventBatch, endpoint: string) => defaultTransport(batch, endpoint, Boolean(options.networkDiagnostics)));
   const target = options.target ?? getDefaultTarget();
 
   const diagnostics = createNetworkDiagnosticCollector(options.networkDiagnostics, target);
@@ -308,7 +308,7 @@ function isSdkInternalError(message: string | undefined): boolean {
   );
 }
 
-async function defaultTransport(batch: EventBatch, endpoint: string): Promise<void> {
+async function defaultTransport(batch: EventBatch, endpoint: string, requireAcknowledgement = false): Promise<void> {
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -320,6 +320,10 @@ async function defaultTransport(batch: EventBatch, endpoint: string): Promise<vo
 
   if (!response.ok) {
     throw new Error(`Transport failed: ${response.status}`);
+  }
+  if (requireAcknowledgement) {
+    const body = await response.json();
+    if (body?.accepted !== batch.events.length) throw new Error('Collector did not acknowledge the batch');
   }
 }
 
@@ -525,7 +529,7 @@ function isCollectorEndpoint(url: string, endpoint: string): boolean {
   try {
     const current = new URL(url, 'http://healthguard.local');
     const collector = new URL(endpoint, 'http://healthguard.local');
-    return current.pathname === collector.pathname;
+    return current.origin === collector.origin && current.pathname === collector.pathname;
   } catch {
     return url === endpoint;
   }
