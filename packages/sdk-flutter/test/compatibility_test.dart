@@ -119,21 +119,29 @@ void main() {
         'request-2');
     client.dispose();
   });
-  test('explicit scalar context keys preserve business evidence but reject secrets', () async {
+  test(
+      'explicit scalar context keys preserve business evidence but reject secrets',
+      () async {
     final events = <dynamic>[];
     final client = HealthGuardClient(
-      appKey: 'demo', endpoint: 'https://collector.example.com/events',
-      storage: TestStorage(), retryInterval: Duration.zero,
+      appKey: 'demo',
+      endpoint: 'https://collector.example.com/events',
+      storage: TestStorage(),
+      retryInterval: Duration.zero,
       additionalContextKeys: {'resourceId', 'serverCode', 'token', 'payload'},
       networkSnapshot: () async => {},
-      transport: (batch) async { events.addAll(batch['events']); },
+      transport: (batch) async {
+        events.addAll(batch['events']);
+      },
     );
     await client.captureException('handled', context: {
-      'resourceId': 'resource-1', 'serverCode': 'BUSY',
-      'token': 'private', 'payload': {'password': 'private'},
+      'resourceId': 'resource-1',
+      'serverCode': 'BUSY',
+      'token': 'private',
+      'payload': {'password': 'private'},
     });
-    expect(events.single['context'], {'resourceId': 'resource-1', 'serverCode': 'BUSY'});
+    expect(events.single['context'],
+        {'resourceId': 'resource-1', 'serverCode': 'BUSY'});
     client.dispose();
   });
-
 }

@@ -35,10 +35,12 @@ class HealthGuardClient {
     Future<Map<String, dynamic>> Function()? networkSnapshot,
     this.retryInterval = const Duration(seconds: 30),
     this.cooldown = const Duration(seconds: 30),
+    Set<String> additionalContextKeys = const {},
     int maxPendingEvents = 100,
   })  : _storage = storage ?? _PreferencesStorage(),
         _transport = transport,
         _snapshot = networkSnapshot,
+        _contextKeys = Set.unmodifiable(additionalContextKeys),
         _limit = maxPendingEvents.clamp(1, 100);
 
   final String appKey, endpoint, environment;
@@ -46,6 +48,7 @@ class HealthGuardClient {
   final HealthGuardStorage _storage;
   final Future<void> Function(Map<String, dynamic>)? _transport;
   final Future<Map<String, dynamic>> Function()? _snapshot;
+  final Set<String> _contextKeys;
   final int _limit;
   final Duration retryInterval, cooldown;
   final List<Map<String, dynamic>> _pending = [];
@@ -207,7 +210,7 @@ class HealthGuardClient {
           'timing': {'availability': 'unavailable'},
           'recentChanges': recent.reversed.take(5).toList().reversed.toList()
         },
-      if (context != null) 'context': _safeContext(context),
+      if (context != null) 'context': _safeContext(context, _contextKeys),
     };
     await _schedule(() async {
       _pending.add(event);
@@ -250,7 +253,7 @@ class HealthGuardClient {
       if (stackTrace != null) 'stack': _safeText(stackTrace.toString()),
       'fingerprint': 'native:${_fingerprint(message)}',
       'breadcrumbs': <dynamic>[],
-      if (context != null) 'context': _safeContext(context),
+      if (context != null) 'context': _safeContext(context, _contextKeys),
     };
     await _schedule(() async {
       _pending.add(event);
@@ -408,7 +411,8 @@ String safeRequestUrl(String raw) {
       .replaceAll(RegExp(r'[?#]+$'), '');
 }
 
-Map<String, dynamic> _safeContext(Map<String, dynamic> context) {
+Map<String, dynamic> _safeContext(
+    Map<String, dynamic> context, Set<String> extraKeys) {
   final result = <String, dynamic>{};
   for (final key in ['method', 'operation', 'failureKind']) {
     if (context[key] is String) {
@@ -421,6 +425,21 @@ Map<String, dynamic> _safeContext(Map<String, dynamic> context) {
   for (final key in ['networkDiagnostics', 'originalError']) {
     if (context[key] is Map) {
       result[key] = _safeDiagnostic(context[key], 0);
+    }
+  }
+  for (final key in extraKeys.take(16)) {
+    if (key.length > 80 ||
+        RegExp('token|password|authorization|cookie|secret|api.?key|ssid|bssid|ipaddress',
+                caseSensitive: false)
+            .hasMatch(key)) {
+      continue;
+    }
+    final value = context[key];
+    if (value is String) {
+      final text = _safeText(value);
+      result[key] = text.substring(0, min(500, text.length));
+    } else if (value is bool || (value is num && value.isFinite)) {
+      result[key] = value;
     }
   }
   return result;
