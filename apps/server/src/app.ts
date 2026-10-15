@@ -208,6 +208,11 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
       return reply.status(401).send({ message: 'Unauthorized' });
     }
 
+    const detail = await store.getIssueDetail(request.params.id, undefined, 1);
+    if (!detail.issue || !(await userOwnsAppKey(store, user.id, detail.issue.appKey))) {
+      return reply.status(404).send({ message: 'Issue not found' });
+    }
+
     const fixedInRelease = parseReleaseBodyValue(request.body, 'fixedInRelease');
     if (!fixedInRelease) {
       return reply.status(400).send({ message: 'fixedInRelease is required' });
@@ -225,6 +230,11 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
     const user = await authenticate(store, request.headers.authorization);
     if (!user) {
       return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const detail = await store.getIssueDetail(request.params.id, undefined, 1);
+    if (!detail.issue || !(await userOwnsAppKey(store, user.id, detail.issue.appKey))) {
+      return reply.status(404).send({ message: 'Issue not found' });
     }
 
     const verifiedInRelease = parseReleaseBodyValue(request.body, 'verifiedInRelease');
@@ -265,6 +275,11 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
     const user = await authenticate(store, request.headers.authorization);
     if (!user) {
       return reply.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const detail = await store.getIssueDetail(request.params.id, undefined, 1);
+    if (!detail.issue || !(await userOwnsAppKey(store, user.id, detail.issue.appKey))) {
+      return reply.status(404).send({ message: 'Issue not found' });
     }
 
     const raw = typeof request.body?.fixPrUrl === 'string' ? request.body.fixPrUrl.trim() : '';

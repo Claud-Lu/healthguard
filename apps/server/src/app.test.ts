@@ -713,7 +713,8 @@ describe('collector api', () => {
   });
 
   it('sets, validates, and clears issue fix PR links', async () => {
-    const app = createServerApp(createMemoryStore());
+    const store = createMemoryStore();
+    const app = createServerApp(store);
 
     const register = await app.inject({
       method: 'POST',
@@ -721,6 +722,7 @@ describe('collector api', () => {
       payload: { email: 'owner@example.com', password: 'secret123' }
     });
     const headers = { authorization: `Bearer ${register.json().token}` };
+    await store.createApp({ id: 'owned-demo', appKey: 'demo-app', name: 'Demo', type: 'web', ownerUserId: register.json().user.id, createdAt: 1 });
 
     await app.inject({
       method: 'POST',
@@ -803,7 +805,8 @@ describe('collector api', () => {
   });
 
   it('keeps verified issues resolved for older-release recurrences and reopens them for fixed-or-newer releases', async () => {
-    const app = createServerApp(createMemoryStore());
+    const store = createMemoryStore();
+    const app = createServerApp(store);
 
     const register = await app.inject({
       method: 'POST',
@@ -811,6 +814,7 @@ describe('collector api', () => {
       payload: { email: 'owner@example.com', password: 'secret123' }
     });
     const headers = { authorization: `Bearer ${register.json().token}` };
+    await store.createApp({ id: 'owned-demo', appKey: 'demo-app', name: 'Demo', type: 'web', ownerUserId: register.json().user.id, createdAt: 1 });
 
     await app.inject({
       method: 'POST',
