@@ -18,7 +18,14 @@ for (const mode of ['memory', 'postgres']) describe(mode + ' HTTP evidence', () 
       expect(issue.lastSeenRelease).toBe('1.0.53');
       expect(issue.message).toContain('latest connection error');
       expect(issue.eventCount).toBe(2);
-      if (db) { store = await createPostgresStore({ pool: pool as never }); expect((await store.listIssues({ appKey: 'demo' }))[0]).toMatchObject({ lastSeenRelease: '1.0.53', lastSeenAt: 300 }); }
+      if (db) {
+        store = await createPostgresStore({ pool: pool as never });
+        expect((await store.listIssues({ appKey: 'demo' }))[0]).toMatchObject({ lastSeenRelease: '1.0.53', lastSeenAt: 300 });
+        // Historical events may exist before an Issue record was first created.
+        await db.query('DELETE FROM issues');
+        store = await createPostgresStore({ pool: pool as never });
+        expect((await store.listIssues({ appKey: 'demo' }))[0]).toMatchObject({ lastSeenRelease: '1.0.53', lastSeenAt: 300, eventCount: 2 });
+      }
       await store.ingestEvents([{ ...base, eventId: 'receive', timestamp: 400, context: { originalError: { dioType: 'receiveTimeout' } } }]);
       expect(await store.listIssues({ appKey: 'demo' })).toHaveLength(2);
     } finally { await db?.close(); }
