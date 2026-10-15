@@ -79,7 +79,7 @@ Then verify:
 
 Call `PATCH /api/apps/:appKey` using the owner's bearer session and JSON `{ "name": "Recognizable project name" }`. Only `name` is accepted. The server trims it and enforces 1–100 characters. Returns `{ "app": { "id", "name", "appKey", "type", "createdAt" } }` (field names shown; actual values are returned). Errors: `401` unauthenticated, `400 INVALID_APP_NAME` invalid input, `404 APP_NOT_FOUND` absent or not owned by the caller.
 
-Renaming updates only `apps.name`, without a schema migration. Keep the original app key and client SDK configuration. Deploy the Collector before the Dashboard. Verify the new name after reload and that historical events, issues and notification rules remain intact. The Dashboard exposes Rename in both project sidebars.
+Renaming updates only `apps.name`, without a schema migration. Keep the original app key and client SDK configuration. Deploy the Collector before the Dashboard. Verify the new name after reload and that historical events, issues and notification rules remain intact. The Dashboard exposes Rename to the right of each title in both project sidebars (Chinese label: 改名); long titles truncate with an ellipsis.
 
 ## Private Deployment Pattern
 

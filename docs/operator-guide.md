@@ -52,7 +52,7 @@ Refreshing the dashboard keeps the current project detail only when a project is
 
 ## Rename A Project
 
-Select **Rename** below a project in the sidebar, either from the project list or project detail. Enter a recognizable name (Chinese is supported), then save. Names are trimmed and must contain 1–100 characters. Cancel or Escape leaves the name unchanged; failed saves keep the dialog open for retry.
+Select **Rename** to the right of a project title in the sidebar, either from the project list or project detail. Long titles use an ellipsis and show the full name on hover. Enter a recognizable name (Chinese is supported), then save. Names are trimmed and must contain 1–100 characters. Cancel or Escape leaves the name unchanged; failed saves keep the dialog open for retry.
 
 Only the display name changes. The app key, SDK settings, event/issue history and notification rules remain attached to the same project. The new name appears immediately and persists after refresh in PostgreSQL deployments. Only the project owner may rename it.
 

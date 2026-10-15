@@ -16,7 +16,7 @@ export default defineComponent({
     const saving = ref(false);
     const error = ref('');
     const text = () => store.locale === 'zh-CN'
-      ? { rename: '修改名称', title: '修改项目名称', name: '项目名称', hint: '仅修改显示名称，接入配置与历史数据保持不变。', invalid: '请输入 1–100 个字符的项目名称。', cancel: '取消', save: '保存', saving: '保存中…', missing: '项目不存在或无权修改，请刷新列表。' }
+      ? { rename: '改名', title: '修改项目名称', name: '项目名称', hint: '仅修改显示名称，接入配置与历史数据保持不变。', invalid: '请输入 1–100 个字符的项目名称。', cancel: '取消', save: '保存', saving: '保存中…', missing: '项目不存在或无权修改，请刷新列表。' }
       : { rename: 'Rename', title: 'Rename project', name: 'Project name', hint: 'Only the display name changes. Integration settings and history are preserved.', invalid: 'Enter a project name between 1 and 100 characters.', cancel: 'Cancel', save: 'Save', saving: 'Saving…', missing: 'Project not found or access denied. Refresh the list.' };
 
     async function open(): Promise<void> {
@@ -48,7 +48,7 @@ export default defineComponent({
       const hintId = `rename-hint-${props.app.id}`;
       return h('div', { class: 'project-row' }, [
         h('button', { type: 'button', class: props.active ? 'app-row active' : 'app-row', onClick: () => router.push(`/projects/${props.app.appKey}`) }, [
-          h('span', props.app.name), h('small', props.app.type), h('small', props.app.appKey)
+          h('span', { class: 'project-row-title', title: props.app.name }, props.app.name), h('small', props.app.type), h('small', props.app.appKey)
         ]),
         h('button', { type: 'button', class: 'rename-project-button', 'aria-label': `${t.rename}: ${props.app.name}`, onClick: open }, t.rename),
         h('dialog', { ref: dialog, class: 'rename-dialog', 'aria-labelledby': titleId, 'aria-describedby': hintId, onCancel: (event: Event) => { if (saving.value) event.preventDefault(); } }, [
