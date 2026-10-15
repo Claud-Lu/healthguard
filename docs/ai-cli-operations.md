@@ -75,6 +75,10 @@ Then verify:
 8. Trigger a test event from a demo or consuming app.
 9. Refresh the selected project detail and confirm the event appears.
 
+## Brand Home Navigation
+
+The shared brand header links to `/` through Vue Router, preserving the configured deployment base path. Authenticated sessions redirect to `/projects`; logged-out sessions redirect to `/login`. Logo, title and subtitle share the link, including keyboard Enter activation.
+
 ## Rename A Project
 
 Call `PATCH /api/apps/:appKey` using the owner's bearer session and JSON `{ "name": "Recognizable project name" }`. Only `name` is accepted. The server trims it and enforces 1–100 characters. Returns `{ "app": { "id", "name", "appKey", "type", "createdAt" } }` (field names shown; actual values are returned). Errors: `401` unauthenticated, `400 INVALID_APP_NAME` invalid input, `404 APP_NOT_FOUND` absent or not owned by the caller.

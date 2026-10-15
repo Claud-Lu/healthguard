@@ -88,6 +88,10 @@ select {
   gap: 4px;
 }
 
+.brand-home-link { color: inherit; text-decoration: none; border-radius: 6px; }
+.brand-home-link:hover strong { color: #2dd4bf; }
+.brand-home-link:focus-visible { outline: 2px solid #2dd4bf; outline-offset: 6px; }
+
 .brand-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand-logo { display: block; flex: 0 0 32px; width: 32px; height: 32px; }
 .brand-subtitle { overflow-wrap: anywhere; }

@@ -50,6 +50,10 @@ After login, the dashboard home shows the project list. It does not load `demo-w
 
 Refreshing the dashboard keeps the current project detail only when a project is selected. If no project is selected, refresh reloads the project list only.
 
+## Return To The Project Home
+
+Click the HealthGuard brand area (logo, title or account) at the top of the sidebar to return to the project list. It is also a keyboard-accessible link: focus it with Tab and press Enter. Logged-out users stay on the login page.
+
 ## Rename A Project
 
 Select **Rename** to the right of a project title in the sidebar, either from the project list or project detail. Long titles use an ellipsis and show the full name on hover. Enter a recognizable name (Chinese is supported), then save. Names are trimmed and must contain 1–100 characters. Cancel or Escape leaves the name unchanged; failed saves keep the dialog open for retry.
