@@ -934,7 +934,7 @@ async function upsertIssue(poolOrClient: Pool | PoolClient, event: ErrorEvent): 
     fixedInRelease: nullableString(row.fixed_in_release),
     eventRelease: event.release,
     eventTimestamp: event.timestamp,
-    message: event.type === 'http' ? httpEventSummary(event) : event.message
+    message: event.message
   });
 }
 
@@ -964,7 +964,7 @@ async function upsertHttpIssue(poolOrClient: Pool | PoolClient, event: HttpEvent
     fixedInRelease: nullableString(row.fixed_in_release),
     eventRelease: event.release,
     eventTimestamp: event.timestamp,
-    message: event.type === 'http' ? httpEventSummary(event) : event.message
+    message: httpEventSummary(event)
   });
 }
 

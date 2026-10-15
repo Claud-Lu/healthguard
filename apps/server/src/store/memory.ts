@@ -389,7 +389,7 @@ function aggregateError(state: MemoryStoreState, event: ErrorEvent): void {
     if (event.timestamp >= existing.lastSeenAt) {
       existing.lastSeenAt = event.timestamp;
       existing.lastSeenRelease = event.release ?? existing.lastSeenRelease;
-      existing.message = event.type === 'http' ? httpEventSummary(event) : event.message;
+      existing.message = event.message;
     }
     existing.platformDistribution[event.platform] = (existing.platformDistribution[event.platform] ?? 0) + 1;
     applyRecurrenceStatus(existing, event.release);
@@ -427,7 +427,7 @@ function aggregateHttpIssue(state: MemoryStoreState, event: HttpEvent & { finger
     if (event.timestamp >= existing.lastSeenAt) {
       existing.lastSeenAt = event.timestamp;
       existing.lastSeenRelease = event.release ?? existing.lastSeenRelease;
-      existing.message = event.type === 'http' ? httpEventSummary(event) : event.message;
+      existing.message = httpEventSummary(event);
     }
     existing.platformDistribution[event.platform] = (existing.platformDistribution[event.platform] ?? 0) + 1;
     applyRecurrenceStatus(existing, event.release);

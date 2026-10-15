@@ -240,8 +240,8 @@ describe('email notification API and delivery', () => {
     const { request, root, store } = await fixture();
     await request('PUT', '/api/notifications/sender', sender);
     await request('PUT', root, { ...defaultRule, onNewIssue: false, threshold: 2 });
-    const first: HttpEvent = { ...event('first'), type: 'http', method: 'POST', url: 'https://old.example.com/api/orders', status: 503, duration: 120, success: false, pageUrl: 'https://shop.example.com/old', release: 'newer-release', timestamp: Date.now() + 10_000, deviceInfo: { model: 'Other phone', system: 'Other OS' } };
-    // Same fingerprint on a different host/page. The triggering event can arrive out of order.
+    const first: HttpEvent = { ...event('first'), type: 'http', method: 'POST', url: 'https://api.example.com/api/orders', environment: 'test', status: 503, duration: 120, success: false, pageUrl: 'https://shop.example.com/old', release: 'newer-release', timestamp: Date.now() + 10_000, deviceInfo: { model: 'Other phone', system: 'Other OS' } };
+    // Same target/environment but different page and occurrence metadata. The triggering event can arrive out of order.
     const trigger: HttpEvent = { ...first, eventId: 'trigger', timestamp: Date.now(), release: 'trigger-release', environment: 'test', url: 'https://api.example.com/api/orders?token=request-secret&order=42', pageUrl: 'https://shop.example.com/app?lang=zh#/orders/detail?id=42&token=page-secret', errorMessage: 'Unavailable', deviceInfo: { model: 'Example phone', system: 'Android 14' } };
     await store.ingestEvents([first, trigger]);
     const [job] = await store.notifications.listJobs('u1', 'app-one');
