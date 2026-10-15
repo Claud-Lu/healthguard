@@ -490,8 +490,9 @@ describe('collector api', () => {
     await app.close();
   });
 
-  it('archives issues, keeps them searchable in history, and reopens them when the fingerprint recurs', async () => {
-    const app = createServerApp(createMemoryStore());
+  it('archives owned issues, keeps recurrence in history, and supports explicit reopening', async () => {
+    const store = createMemoryStore();
+    const app = createServerApp(store);
 
     const register = await app.inject({
       method: 'POST',
@@ -499,6 +500,7 @@ describe('collector api', () => {
       payload: { email: 'owner@example.com', password: 'secret123' }
     });
     const headers = { authorization: `Bearer ${register.json().token}` };
+    await store.createApp({ id: 'owned-demo', appKey: 'demo-app', name: 'Demo', type: 'web', ownerUserId: register.json().user.id, createdAt: 1 });
 
     await app.inject({
       method: 'POST',
@@ -581,6 +583,9 @@ describe('collector api', () => {
       }
     });
 
+    const stillArchived = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app&status=archived', headers });
+    expect(stillArchived.json().issues[0]).toMatchObject({ archived: true, eventCount: 2 });
+    await app.inject({ method: 'PATCH', url: '/api/issues/demo-app%3Ajs%3Aboom/reopen', headers });
     const reopenedIssues = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app', headers });
     const archivedAfterRecurrence = await app.inject({ method: 'GET', url: '/api/issues?appKey=demo-app&status=archived', headers });
 
@@ -597,7 +602,8 @@ describe('collector api', () => {
   });
 
   it('tracks issue releases and supports fixed and verified release workflow', async () => {
-    const app = createServerApp(createMemoryStore());
+    const store = createMemoryStore();
+    const app = createServerApp(store);
 
     const register = await app.inject({
       method: 'POST',
@@ -605,6 +611,7 @@ describe('collector api', () => {
       payload: { email: 'owner@example.com', password: 'secret123' }
     });
     const headers = { authorization: `Bearer ${register.json().token}` };
+    await store.createApp({ id: 'owned-demo', appKey: 'demo-app', name: 'Demo', type: 'web', ownerUserId: register.json().user.id, createdAt: 1 });
 
     await app.inject({
       method: 'POST',
@@ -675,7 +682,7 @@ describe('collector api', () => {
       url: '/api/issues/demo-app%3Ajs%3Aboom/archive',
       headers
     });
-    expect(archiveBeforeVerification.statusCode).toBe(409);
+    expect(archiveBeforeVerification.statusCode).toBe(200);
 
     const verified = await app.inject({
       method: 'PATCH',

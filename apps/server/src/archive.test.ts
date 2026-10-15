@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createServerApp } from './app';
 import { createMemoryStore } from './store';
 async function fixture() {
@@ -42,4 +42,16 @@ describe('manual archive with optional note',()=>{
  it.each([{note:3},{note:'x'.repeat(4001)},{unknown:true}])('rejects invalid archive payloads',async payload=>{
   const f=await fixture();try{expect((await f.app.inject({method:'PATCH',url:`/api/issues/${encodeURIComponent(f.id)}/archive`,headers:f.headers,payload})).statusCode).toBe(400);}finally{await f.app.close();}
  });
+ it('rejects missing issues, orphan issues, invalid sessions and concurrent disappearance',async()=>{
+  const f=await fixture();try{
+   for(const action of ['archive','reopen']){
+    expect((await f.app.inject({method:'PATCH',url:`/api/issues/missing/${action}`,headers:f.headers})).statusCode).toBe(404);
+    for(const authorization of ['Basic bad','Bearer ','Bearer invalid'])expect((await f.app.inject({method:'PATCH',url:`/api/issues/${encodeURIComponent(f.id)}/${action}`,headers:{authorization}})).statusCode).toBe(401);
+    const spy=vi.spyOn(f.store,action==='archive'?'archiveIssue':'reopenIssue').mockResolvedValueOnce(null);
+    expect((await f.app.inject({method:'PATCH',url:`/api/issues/${encodeURIComponent(f.id)}/${action}`,headers:f.headers})).statusCode).toBe(404);spy.mockRestore();
+   }
+   expect((await f.app.inject({method:'PATCH',url:`/api/issues/${encodeURIComponent(f.id)}/archive`,headers:{...f.headers,'content-type':'application/json'},payload:'null'})).statusCode).toBe(400);
+  }finally{await f.app.close();}
+ });
+
 });
