@@ -1,3 +1,4 @@
+import BrandHeader from '../components/BrandHeader';
 import { h, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { store, messages, setLocale, loginOrRegister } from '../globalStore';
@@ -35,10 +36,7 @@ export default {
 
       return h('main', { class: 'auth-page' }, [
         h('section', { class: 'auth-card' }, [
-          h('div', { class: 'brand' }, [
-            h('strong', 'HealthGuard'),
-            h('span', authMode.value === 'login' ? t.login : t.register)
-          ]),
+          h(BrandHeader, { subtitle: authMode.value === 'login' ? t.login : t.register }),
           h('div', { class: 'language-row' }, [
             h('span', t.language),
             languageButton('English', 'en-US', store.locale, setLocale),

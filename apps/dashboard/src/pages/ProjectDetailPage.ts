@@ -1,3 +1,4 @@
+import BrandHeader from '../components/BrandHeader';
 import ProjectRow from '../components/ProjectRow';
 import { sdkIntegrationSnippet } from '../sdk-integration';
 import { renderNetworkDiagnostic } from '../network-diagnostic';
@@ -607,7 +608,7 @@ export default {
 
       return h('main', { class: 'layout' }, [
         h('aside', { class: 'sidebar detail-sidebar' }, [
-          h('div', { class: 'brand' }, [h('strong', 'HealthGuard'), h('span', store.user?.email ?? '')]),
+          h(BrandHeader, { subtitle: store.user?.email ?? '' }),
           h('div', { class: 'panel-title' }, t.projectList),
           h(
             'div',

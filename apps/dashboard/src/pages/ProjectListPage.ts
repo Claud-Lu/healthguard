@@ -1,3 +1,4 @@
+import BrandHeader from '../components/BrandHeader';
 import ProjectRow from '../components/ProjectRow';
 import { h, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -121,10 +122,7 @@ export default {
 
       return h('main', { class: 'layout' }, [
         h('aside', { class: 'sidebar' }, [
-          h('div', { class: 'brand' }, [
-            h('strong', 'HealthGuard'),
-            h('span', store.user?.email ?? '')
-          ]),
+          h(BrandHeader, { subtitle: store.user?.email ?? '' }),
           h('div', { class: 'language-row' }, [
             h('span', t.language),
             languageButton('EN', 'en-US', store.locale, setLocale),
