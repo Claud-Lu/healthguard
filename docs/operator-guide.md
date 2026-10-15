@@ -192,3 +192,7 @@ New HTTP issues separate target origin, environment and original failure phase. 
 Opening a historical HTTP issue replaces its path-only display title with the newest matching event’s recorded absolute request URL, retaining the complete error text. The selected list row and Copy to AI report use the same display title. Matching requires the same method and path; absent, relative or mismatched evidence leaves the stored summary visible without inventing a domain. Authentication query parameters remain masked and URL credentials are omitted. Titles wrap without truncation; stored messages, grouping and repair state are unchanged.
 
 Issue row metadata keeps type and event count on the left, with status, platform and timestamps grouped on the right. The group wraps within narrow rows while the full error title remains on its own line.
+
+## Compact project detail layout
+
+The active project is identified in the sidebar; its duplicate main heading and description are omitted. Filters and actions share a wrapping toolbar, and all five metrics remain in one compact horizontal row with label and value on the same line (scrollable on narrow screens). Repair-stage filters appear as small underline tabs attached to the Issue list panel, without a separate gap above the list. Filtering, detail selection, request titles and repair actions retain their existing behavior.

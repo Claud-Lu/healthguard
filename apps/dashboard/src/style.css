@@ -1186,3 +1186,36 @@ pre {
 .issue-action-feedback { position: fixed; z-index: 110; top: 20px; right: 20px; display: flex; align-items: center; gap: 14px; box-sizing: border-box; max-width: min(440px, calc(100vw - 40px)); padding: 12px 16px; border: 1px solid #99d3c5; border-radius: 8px; color: #115e59; background: #f0fdfa; box-shadow: 0 6px 20px rgb(16 24 32 / 12%); }
 .issue-action-feedback.error { border-color: #f5c1b9; color: #9f2417; background: #fff5f3; }
 .issue-action-feedback button { flex: 0 0 auto; padding: 0 4px; color: inherit; background: transparent; font-size: 22px; }
+
+
+/* Compact project controls leave the viewport for issue browsing. */
+.detail-content { gap: 12px; padding-top: 20px; }
+.project-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; min-width: 0; }
+.project-toolbar .project-filters { justify-content: flex-start; align-items: center; gap: 8px 12px; min-width: 0; }
+.project-toolbar .topbar { margin-left: auto; min-width: 0; }
+.project-toolbar .topbar-actions { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.project-toolbar .outline-button { padding: 6px 10px; font-size: 13px; }
+.project-toolbar .field { gap: 6px; font-size: 13px; }
+.project-toolbar select, .project-toolbar input { min-width: 140px; padding: 6px 10px; font-size: 13px; }
+.project-toolbar .segment { padding: 6px 10px; font-size: 12px; }
+.detail-content > .metrics { display: flex; gap: 8px; overflow-x: auto; min-width: 0; }
+.detail-content .metric { display: flex; align-items: center; justify-content: flex-start; flex: 1 0 auto; gap: 8px; padding: 8px 12px; min-height: 20px; }
+.detail-content .metric span { font-size: 13px; white-space: nowrap; }
+.detail-content .metric strong { font-size: 16px; line-height: 20px; white-space: nowrap; }
+.issue-list-panel { padding: 0; overflow: hidden; }
+.issue-list-panel > .repair-filters { flex-wrap: nowrap; overflow-x: auto; gap: 18px; padding: 0 16px; margin: 0; border-bottom: 1px solid #d8e1e6; }
+.issue-list-panel > .repair-filters button { flex-shrink: 0; height: 35px; padding: 0 2px; margin: 0; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: #60717d; font-size: 13px; white-space: nowrap; }
+.issue-list-panel > .repair-filters button.active { color: #0f766e; border-bottom-color: #0f766e; background: transparent; }
+.issue-list-panel > .repair-filters button span { margin-left: 5px; font-size: 11px; }
+.issue-list-panel > .panel-head { margin-bottom: 10px; padding: 12px 16px 0; }
+.issue-list-panel > .panel-head h2 { font-size: 18px; }
+.issue-list-panel > .issue-search { padding: 0 16px 10px; }
+.issue-list-panel > .issue-list { padding: 0 16px 16px; }
+.issue-list-panel > .empty { padding: 0 16px 16px; }
+@media (max-width: 600px) {
+  .detail-content { padding: 16px; }
+  .project-toolbar .project-filters { flex: 1 1 100%; }
+  .project-toolbar .field { flex-wrap: wrap; }
+  .project-toolbar select, .project-toolbar input { min-width: 0; max-width: 100%; }
+  .project-toolbar .custom-date-range { flex-wrap: wrap; }
+}

@@ -656,19 +656,9 @@ export default {
           h('div', { class: 'sidebar-version' }, [])
         ]),
 
-        h('section', { class: 'content detail-content' }, [
-          h('header', { class: 'topbar' }, [
-            h('div', [h('h1', selectedApp.value.name), h('p', t.inspectSubtitle)]),
-            h('div', { class: 'topbar-actions' }, [
-              h('span', { class: 'version-badge' }, `v${__APP_VERSION__}`),
-              h('button', { type: 'button', class: 'outline-button', onClick: () => router.push({ path: '/notifications', query: { appKey: appKey.value } }) }, store.locale === 'zh-CN' ? '通知设置' : 'Notifications'),
-              h('button', { type: 'button', class: 'outline-button', onClick: () => { void loadProjectData(); if (selectedIssue.value) void openIssue(selectedIssue.value.issue); }, disabled: store.loading || saving.value }, t.refresh),
-              h('button', { type: 'button', class: 'outline-button', onClick: () => router.push('/projects') }, t.projectList)
-            ]),
-            store.errorMessage ? h('p', { class: 'error' }, store.errorMessage) : null
-          ]),
-
-          h('section', { class: 'project-filters' }, [
+        h('section', { class: 'content detail-content', 'aria-label': selectedApp.value.name }, [
+          h('div', { class: 'project-toolbar' }, [
+            h('section', { class: 'project-filters' }, [
             h('div', { class: 'segmented-control', role: 'tablist', 'aria-label': t.issues }, [
               h('button', {
                 type: 'button',
@@ -742,6 +732,16 @@ export default {
                 ])
               : null
           ]),
+            h('header', { class: 'topbar' }, [
+            h('div', { class: 'topbar-actions' }, [
+              h('span', { class: 'version-badge' }, `v${__APP_VERSION__}`),
+              h('button', { type: 'button', class: 'outline-button', onClick: () => router.push({ path: '/notifications', query: { appKey: appKey.value } }) }, store.locale === 'zh-CN' ? '通知设置' : 'Notifications'),
+              h('button', { type: 'button', class: 'outline-button', onClick: () => { void loadProjectData(); if (selectedIssue.value) void openIssue(selectedIssue.value.issue); }, disabled: store.loading || saving.value }, t.refresh),
+              h('button', { type: 'button', class: 'outline-button', onClick: () => router.push('/projects') }, t.projectList)
+            ]),
+            store.errorMessage ? h('p', { class: 'error' }, store.errorMessage) : null
+          ]),
+          ]),
 
           h('section', { class: 'metrics' }, [
             metricCard(t.events, overview.value.events),
@@ -751,15 +751,15 @@ export default {
             metricCard(t.issues, overview.value.issues)
           ]),
 
-          h('nav', { class: 'repair-filters', 'aria-label': repairText.value.title }, [
+          h('section', { class: selectedIssue.value ? 'grid issue-workspace has-selection' : 'grid issue-workspace no-selection' }, [
+            h('div', { class: 'panel issue-list-panel' }, [
+              h('nav', { class: 'repair-filters', 'aria-label': repairText.value.title }, [
             ...(['all', 'pending', 'repairing', 'verification', 'resolved'] as const).map(stage => h('button', {
               type: 'button', class: progressFilter.value === stage ? 'active' : '', 'aria-pressed': progressFilter.value === stage,
               onClick: () => { progressFilter.value = stage; }
             }, [repairText.value[stage], h('span', String(issues.value.filter(issue => stage === 'all' || repairStage(issue) === stage).length))])),
             selectedMetricFilter.value !== 'all' ? h('button', { onClick: () => { selectedMetricFilter.value = 'all'; } }, repairText.value.clearMetric) : null
           ]),
-          h('section', { class: selectedIssue.value ? 'grid issue-workspace has-selection' : 'grid issue-workspace no-selection' }, [
-            h('div', { class: 'panel' }, [
               (() => {
                 const filteredIssues = issues.value.filter(issue => matchesIssueFilters(issue, searchQuery.value, selectedMetricFilter.value, progressFilter.value));
                 return [
