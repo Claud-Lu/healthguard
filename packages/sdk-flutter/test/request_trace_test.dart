@@ -172,4 +172,43 @@ void main() {
       await server.close(force: true);
     }
   });
+  test(
+      'cancelled acquisition freezes evidence and uses the actual request ID header',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var requests = 0;
+    server.listen((r) {
+      requests++;
+      r.response.close();
+    });
+    final gate = Completer<void>();
+    final cancel = CancelToken();
+    final dio = Dio()
+      ..httpClientAdapter = HealthGuardIoHttpClientAdapter(
+          createHttpClient: () => DelayedClient(gate));
+    try {
+      final future = dio
+          .get('http://127.0.0.1:${server.port}/calls',
+              cancelToken: cancel,
+              options: Options(headers: {'x-request-id': 'invalid/id'}))
+          .then<Object>((v) => v, onError: (Object e) => e);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      cancel.cancel('leaving page');
+      final error = await future as DioException;
+      expect(error.type, DioExceptionType.cancel);
+      final trace =
+          error.requestOptions.extra[healthGuardRequestTraceKey] as Map;
+      expect(trace['connectionAcquisition']['outcome'], 'cancelled');
+      expect(trace['requestId'], error.requestOptions.headers['x-request-id']);
+      final before = trace.toString();
+      gate.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(error.requestOptions.extra[healthGuardRequestTraceKey].toString(),
+          before);
+      expect(requests, 0);
+    } finally {
+      dio.close(force: true);
+      await server.close(force: true);
+    }
+  });
 }

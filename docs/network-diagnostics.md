@@ -6,7 +6,7 @@
 
 1. 先部署更新后的 Collector 和 Dashboard；新字段为可选字段，旧客户端仍可上报。
 2. 验收后发布 npm `@health-guard/core`、Web、小程序和 uni-app SDK `0.4.0`。本仓库版本提升不代表已经发布到 npm。
-3. Flutter 新增 `packages/sdk-flutter` / `healthguard_flutter@0.2.0`，当前可以通过 Git/path 引入；它不在 npm 发布流程中。pub.dev 发布须单独执行。
+3. Flutter 新增 `packages/sdk-flutter` / `healthguard_flutter@0.2.1`，当前可以通过 Git/path 引入；它不在 npm 发布流程中。pub.dev 发布须单独执行。
 4. 业务端升级并重新构建发布。旧 App 不能通过后台升级获得新采集能力，历史事件不回填。
 5. 替换业务端拦截器时删除重复 HTTP 上报路径；原有已处理异常调用、业务上下文和真实配置需要逐项核对，不自动删除。
 
@@ -123,7 +123,7 @@ flutter analyze
 数据库去重测试使用 PGlite 执行真实 PostgreSQL SQL 语义，覆盖重复批次、响应丢失重试和重建 Store 后回放。它不能证明独立 PostgreSQL 服务的连接池、多进程 advisory lock 或线上数据库验收。既有服务级集成测试需要 `TEST_DATABASE_URL`，缺失时跳过，不能计为通过。
 
 
-## Flutter migration compatibility (source 0.2.0)
+## Flutter migration compatibility (source 0.2.1)
 
 For manual HTTP reports, captureHttpFailure accepts occurredAt, eventEnvironment, deviceModel, deviceSystem and fingerprint. Diagnostic context retains bounded allowlisted networkDiagnostics and originalError fields; passive snapshot sampledAt records collection time separately from the original failure time.
 
@@ -131,10 +131,10 @@ Applications may configure additionalContextKeys for explicitly approved scalar 
 
 Existing application queues and installation IDs can be migrated through HealthGuardStorage. Persist the new queue before clearing old storage and retain original event IDs, timestamps and releases. A custom transport must throw unless the collector acknowledges the full batch.
 
-The package is source-only, not published to pub.dev. Pin reviewed commit b9ad8bea6afcee848c99e67a8f141faa17a52fd3. Registry publication, server deployment and device acceptance are separate steps.
+The package is source-only, not published to pub.dev. Pin reviewed commit 792e323348083657ae519cabac104479314d9cfd. Registry publication, server deployment and device acceptance are separate steps.
 
 
-## Detailed Flutter diagnostics (source 0.2.0)
+## Detailed Flutter diagnostics (source 0.2.1)
 
 NetworkDiagnostics now lives in the SDK. It provides beginRequest, endRequest,
 collect and dispose; applications supply allowedHosts and healthPath and connect
@@ -156,3 +156,15 @@ cache bound probe traffic. Probe results are collected after failure and retain
 their actual sampling time. They are separate requests and never reproduce the
 original business connection. No authentication, business queries, redirects or
 TLS bypass are used. Manual and interceptor cancellation creates no alert.
+
+## HTTP 事件聚合与原请求证据（未发布）
+
+HTTP 新指纹为 `http:v2:<hash>`，使用目标 origin、路径、方法、平台、环境、状态及故障阶段；不使用查询参数、请求编号或耗时。阶段优先采用原始 Dio 类型，HTTP 状态优先表示已收到错误响应；仅明确的 SocketException 域名解析错误细分为 DNS。旧客户端无细节时保留 unknown，不凭事后探测确定原请求根因。服务端统一生成指纹，不直接信任客户端自定义分组。
+
+已有历史事件/问题保留原指纹、Issue ID 和修复关联；首次升级可能与新分组并存。启动回填以时间最新的事件更新摘要和最近版本，延迟到达的旧事件不覆盖新摘要。历史混合问题不会自动继承为新分组的已修复状态。部署后请按时间、请求编号、原始错误和单次版本排查。
+
+Flutter 原生 IO 连接证据需在创建 Dio 后配置 `dio.httpClientAdapter = HealthGuardIoHttpClientAdapter()`。自定义 HttpClient/TLS/代理配置通过 createHttpClient 传入，叶证书验证通过 validateCertificate 保留。不要覆盖其他必要的自定义 adapter。自动上报只挂载一个 SDK interceptor；已有手动上报只从 `error.requestOptions.extra[healthGuardRequestTraceKey]` 传入 `context.requestTrace`，继续保留 `context.originalError`。
+
+requestTrace 只记录原请求编号、开始时间、配置的超时、连接取得与响应头等待结果/单调耗时。连接取得包含潜在池等待、DNS、TCP、TLS 或代理阶段，未分别测量；responseHeaders 已收到不代表响应体读取完成。超时或取消后证据冻结，迟到连接被中止。原请求子阶段不可用就显示 unavailable，禁止用独立探测的 DNS/TCP/TLS 时间替代。
+
+邮件区分「本次异常」和「历史聚合摘要」。Dashboard、AI 报告及邮件共享原始类型、请求编号、探测采样时间和缓存标记。后端若要关联失败请求，需保留 X-Request-ID；未形成 HTTP 请求的连接失败可能没有访问日志。原始连接的进一步分层定位仍需平台跟踪或现场抓包。
