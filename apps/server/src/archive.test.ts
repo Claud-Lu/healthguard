@@ -54,4 +54,12 @@ describe('manual archive with optional note',()=>{
   }finally{await f.app.close();}
  });
 
+ it('does not let legacy write endpoints bypass ownership and reopen another owner archive',async()=>{
+  const f=await fixture();try{
+   for(const [action,payload] of [['fixed',{fixedInRelease:'2.0.0'}],['verified',{verifiedInRelease:'2.0.0'}],['fix-pr',{fixPrUrl:''}]] as const){
+    expect((await f.app.inject({method:'PATCH',url:`/api/issues/${encodeURIComponent(f.id)}/${action}`,headers:f.foreign,payload})).statusCode).toBe(404);
+   }
+  }finally{await f.app.close();}
+ });
+
 });
