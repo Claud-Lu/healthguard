@@ -1170,3 +1170,8 @@ pre {
 .issue-detail-heading-actions { display: flex; align-items: center; gap: 10px; min-width: 0; margin-left: auto; }
 .issue-detail-heading-actions .issue-id { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .close-issue-detail { white-space: nowrap; }
+
+.detail-content { grid-template-columns: minmax(0, 1fr); }
+.issue-workspace .detail-body { grid-template-columns: minmax(0, 1fr); }
+.issue-workspace input, .issue-workspace textarea { box-sizing: border-box; max-width: 100%; min-width: 0; }
+@media (max-width: 980px) { .issue-workspace.has-selection { grid-template-columns: minmax(0, 1fr); } }
