@@ -158,6 +158,16 @@ export function logout(): void {
   localStorage.removeItem('healthguard_token');
 }
 
+export async function renameApp(appKey: string, name: string): Promise<void> {
+  const response = await requestJson<{ app: AppRecord }>(
+    apiUrl(`/apps/${encodeURIComponent(appKey)}`),
+    { method: 'PATCH', body: JSON.stringify({ name: name.trim() }) },
+    store.token
+  );
+  const app = store.apps.find(item => item.appKey === appKey);
+  if (app) Object.assign(app, response.app);
+}
+
 export async function createApp(name: string, type: AppType): Promise<string | null> {
   if (!store.token || !name.trim()) return null;
   store.loading = true;

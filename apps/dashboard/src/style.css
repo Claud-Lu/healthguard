@@ -1139,3 +1139,16 @@ pre {
 
 .network-diagnostic { padding: 12px 16px; border-left: 3px solid var(--primary, #2563eb); background: #f3f6fa; margin: 12px 0; overflow-wrap: anywhere; }
 .network-diagnostic p { margin: 6px 0; font-size: 13px; line-height: 1.5; }
+
+/* Project navigation and rename are sibling controls, never nested buttons. */
+.project-row { background: #17232d; border-radius: 6px; min-width: 0; }
+.project-row .app-row { width: 100%; min-width: 0; }
+.project-row .app-row span, .project-row .app-row small { overflow-wrap: anywhere; }
+.rename-project-button { margin: 0 12px 10px; padding: 5px 9px; border: 1px solid #46616f; background: transparent; color: #dbe7ed; font-size: 12px; }
+.rename-project-button:hover { background: #29404d; }
+.rename-dialog { box-sizing: border-box; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; border: 1px solid #d8e1e6; border-radius: 10px; padding: 24px; color: #18232b; background: white; }
+.rename-dialog::backdrop { background: rgb(16 24 32 / 55%); }
+.rename-form { display: grid; gap: 16px; }
+.rename-form h2, .rename-form p { margin: 0; }
+.rename-form p { line-height: 1.6; }
+.rename-form input { box-sizing: border-box; width: 100%; min-width: 0; }

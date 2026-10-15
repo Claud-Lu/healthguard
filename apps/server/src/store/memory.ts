@@ -58,6 +58,13 @@ export function createMemoryStore(): Store {
       state.apps.push(app);
     },
 
+    async renameApp(appKey: string, ownerUserId: string, name: string): Promise<AppRecord | null> {
+      const record = state.apps.find(app => app.appKey === appKey && app.ownerUserId === ownerUserId);
+      if (!record) return null;
+      record.name = name;
+      return record;
+    },
+
     async findAppByKey(appKey: string): Promise<AppRecord | null> {
       return state.apps.find((record) => record.appKey === appKey) ?? null;
     },

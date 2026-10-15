@@ -72,6 +72,14 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       );
     },
 
+    async renameApp(appKey: string, ownerUserId: string, name: string): Promise<AppRecord | null> {
+      const result = await pool.query(
+        'UPDATE apps SET name = $1 WHERE app_key = $2 AND owner_user_id = $3 RETURNING *',
+        [name, appKey, ownerUserId]
+      );
+      return result.rows[0] ? rowToApp(result.rows[0]) : null;
+    },
+
     async findAppByKey(appKey: string): Promise<AppRecord | null> {
       const result = await pool.query('SELECT * FROM apps WHERE app_key = $1', [appKey]);
       if (result.rows.length === 0) return null;

@@ -140,6 +140,7 @@ export interface Store {
   findUserBySessionToken(token: string): Promise<UserRecord | null>;
 
   createApp(app: AppRecord): Promise<void>;
+  renameApp(appKey: string, ownerUserId: string, name: string): Promise<AppRecord | null>;
   findAppByKey(appKey: string): Promise<AppRecord | null>;
   listAppsByUser(userId: string): Promise<AppRecord[]>;
 

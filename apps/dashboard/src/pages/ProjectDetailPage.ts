@@ -1,3 +1,4 @@
+import ProjectRow from '../components/ProjectRow';
 import { sdkIntegrationSnippet } from '../sdk-integration';
 import { renderNetworkDiagnostic } from '../network-diagnostic';
 import { networkDiagnosticLines } from '@health-guard/core';
@@ -611,17 +612,7 @@ export default {
           h(
             'div',
             { class: 'app-list' },
-            store.apps.map((item) =>
-              h(
-                'button',
-                {
-                  type: 'button',
-                  class: item.appKey === appKey.value ? 'app-row active' : 'app-row',
-                  onClick: () => router.push(`/projects/${item.appKey}`)
-                },
-                [h('span', item.name), h('small', item.type), h('small', item.appKey)]
-              )
-            )
+            store.apps.map(item => h(ProjectRow, { key: item.appKey, app: item, active: item.appKey === appKey.value }))
           ),
           h('section', { class: 'sdk-sidebar' }, [
             h('div', { class: 'panel-title' }, t.sdkIntegration),

@@ -19,7 +19,7 @@ async function fixture() {
 describe('project rename API', () => {
   it('updates only the display name, retains history and accepts events with the original key', async () => {
     const { app, store, headers, project } = await fixture();
-    const event = { eventId: 'rename-before', appKey: project.appKey, timestamp: Date.now(), type: 'error' as const, platform: 'web' as const, errorType: 'js', message: 'Example error', fingerprint: 'example', sessionId: 's', anonymousId: 'a', sdkVersion: 'test', breadcrumbs: [] };
+    const event = { eventId: 'rename-before', appKey: project.appKey, timestamp: Date.now(), type: 'error' as const, platform: 'web' as const, errorType: 'js' as const, message: 'Example error', fingerprint: 'example', sessionId: 's', anonymousId: 'a', sdkVersion: 'test', breadcrumbs: [] };
     await store.ingestEvents([event]);
     await store.notifications.saveRule(project.appKey, { enabled: false, recipients: ['team@example.com'], onNewIssue: true, onRegression: true, threshold: 10, cooldownMinutes: 30 });
     const result = await app.inject({ method: 'PATCH', url: `/api/apps/${project.appKey}`, headers, payload: { name: '  示例司机端  ' } });

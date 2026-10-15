@@ -1,3 +1,4 @@
+import ProjectRow from '../components/ProjectRow';
 import { h, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { store, messages, loadApps, logout, createApp, setLocale } from '../globalStore';
@@ -140,17 +141,7 @@ export default {
           h(
             'div',
             { class: 'app-list' },
-            store.apps.map((item) =>
-              h(
-                'button',
-                {
-                  type: 'button',
-                  class: 'app-row',
-                  onClick: () => router.push(`/projects/${item.appKey}`)
-                },
-                [h('span', item.name), h('small', item.type), h('small', item.appKey)]
-              )
-            )
+            store.apps.map(item => h(ProjectRow, { key: item.appKey, app: item }))
           ),
         ]),
         h('section', { class: 'content' }, [

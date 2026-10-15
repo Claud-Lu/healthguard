@@ -1,3 +1,4 @@
+import { registerProjectRoutes } from './project-routes';
 import cors from '@fastify/cors';
 import { z } from 'zod';
 import { registerNotificationRoutes } from './notifications/routes';
@@ -23,6 +24,7 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
     timeWindow: '1 minute'
   });
   registerNotificationRoutes(app, store, options);
+  registerProjectRoutes(app, store);
 
   const healthPayload = {
     ok: true,
