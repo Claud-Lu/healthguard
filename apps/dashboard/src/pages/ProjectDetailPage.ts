@@ -763,16 +763,19 @@ export default {
               (() => {
                 const filteredIssues = issues.value.filter(issue => matchesIssueFilters(issue, searchQuery.value, selectedMetricFilter.value, progressFilter.value));
                 return [
-                  h('div', { class: 'panel-head' }, [h('h2', issueStatus.value === 'archived' ? t.issueHistory : t.issues), h('span', `${filteredIssues.length} ${t.groups}`)]),
-                  h('div', { class: 'issue-search' }, [
-                    h('input', {
-                      type: 'text',
-                      placeholder: repairText.value.search,
-                      value: searchQuery.value,
-                      onInput: (event: Event) => {
-                        searchQuery.value = (event.target as HTMLInputElement).value;
-                      }
-                    })
+                  h('div', { class: 'panel-head' }, [
+                    h('h2', issueStatus.value === 'archived' ? t.issueHistory : t.issues),
+                    h('div', { class: 'issue-search' }, [
+                      h('input', {
+                        type: 'text',
+                        placeholder: repairText.value.search,
+                        'aria-label': repairText.value.search,
+                        value: searchQuery.value,
+                        onInput: (event: Event) => {
+                          searchQuery.value = (event.target as HTMLInputElement).value;
+                        }
+                      })
+                    ])
                   ]),
                   filteredIssues.length === 0
                     ? h('p', { class: 'empty' }, searchQuery.value || selectedMetricFilter.value !== 'all' ? t.noMatchingIssues : t.emptyIssues)

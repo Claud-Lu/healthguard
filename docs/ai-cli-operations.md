@@ -235,3 +235,5 @@ Issue row metadata keeps type and event count on the left, with status, platform
 ## Compact project detail layout
 
 The active project is identified in the sidebar; its duplicate main heading and description are omitted. Filters and actions share a wrapping toolbar, and all five metrics remain in one compact horizontal row with label and value on the same line (scrollable on narrow screens). Repair-stage filters appear as small underline tabs attached to the Issue list panel, without a separate gap above the list. Filtering, detail selection, request titles and repair actions retain their existing behavior.
+
+The Issue heading and search field share one row; the redundant group total is omitted because repair-stage tabs already show counts. Filter chevrons are inset 12px with 36px reserved for text, and selectors/date fields share a 38px height. Keyboard focus remains visible.
