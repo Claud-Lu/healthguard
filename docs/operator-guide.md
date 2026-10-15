@@ -50,6 +50,12 @@ After login, the dashboard home shows the project list. It does not load `demo-w
 
 Refreshing the dashboard keeps the current project detail only when a project is selected. If no project is selected, refresh reloads the project list only.
 
+## Rename A Project
+
+Select **Rename** below a project in the sidebar, either from the project list or project detail. Enter a recognizable name (Chinese is supported), then save. Names are trimmed and must contain 1–100 characters. Cancel or Escape leaves the name unchanged; failed saves keep the dialog open for retry.
+
+Only the display name changes. The app key, SDK settings, event/issue history and notification rules remain attached to the same project. The new name appears immediately and persists after refresh in PostgreSQL deployments. Only the project owner may rename it.
+
 ## Integrate The Web SDK
 
 Install `@health-guard/sdk-web`, then initialize the client in the target web application:

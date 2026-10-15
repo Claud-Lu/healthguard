@@ -75,6 +75,12 @@ Then verify:
 8. Trigger a test event from a demo or consuming app.
 9. Refresh the selected project detail and confirm the event appears.
 
+## Rename A Project
+
+Call `PATCH /api/apps/:appKey` using the owner's bearer session and JSON `{ "name": "Recognizable project name" }`. Only `name` is accepted. The server trims it and enforces 1–100 characters. Returns `{ "app": { "id", "name", "appKey", "type", "createdAt" } }` (field names shown; actual values are returned). Errors: `401` unauthenticated, `400 INVALID_APP_NAME` invalid input, `404 APP_NOT_FOUND` absent or not owned by the caller.
+
+Renaming updates only `apps.name`, without a schema migration. Keep the original app key and client SDK configuration. Deploy the Collector before the Dashboard. Verify the new name after reload and that historical events, issues and notification rules remain intact. The Dashboard exposes Rename in both project sidebars.
+
 ## Private Deployment Pattern
 
 Build the dashboard with deployment-specific environment variables outside tracked source files:
@@ -174,3 +180,7 @@ Applications may configure additionalContextKeys for explicitly approved scalar 
 Existing application queues and installation IDs can be migrated through HealthGuardStorage. Persist the new queue before clearing old storage and retain original event IDs, timestamps and releases. A custom transport must throw unless the collector acknowledges the full batch.
 
 The package is source-only, not published to pub.dev. Pin reviewed commit 1e95665f978f4347120c969a9771bbc64531cdca. Registry publication, server deployment and device acceptance are separate steps.
+
+## Project rename verification
+
+Run `yarn vitest run apps/server/src/project-rename.test.ts apps/server/src/store/project-rename.test.ts` for API validation and PostgreSQL WASM persistence. For browser verification, start a disposable in-memory Collector and a Dashboard proxying it, then run `RENAME_TEST_URL=http://127.0.0.1:5198 node scripts/verify-project-rename.cjs` with Playwright and Chrome available. `PLAYWRIGHT_MODULE` may point to an existing Playwright installation. The script refuses non-local hosts, creates only test data, and checks list/detail rename, blank names, failed-save retry, cancellation, reload, localization and dialog geometry at desktop/mobile widths.

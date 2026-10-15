@@ -26,6 +26,7 @@ It is designed for teams shipping browser, mini-program, and uni-app experiences
 
 ## ✨ Features
 
+- **Project names** — Rename projects in the sidebar without changing app keys or monitoring history.
 - **Repair progress** — Investigate, repair, deploy and verify directly with your AI; record evidence and optionally link a PR.
 - **🔌 Multi-Platform SDKs** — H5, WeChat Mini Program, Alipay Mini Program via uni-app, and uni-app multi-end runtimes
 - **📊 Real-time Dashboard** — Error tracking, HTTP request monitoring, performance metrics, breadcrumbs

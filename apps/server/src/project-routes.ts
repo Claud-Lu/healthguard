@@ -14,7 +14,8 @@ export function registerProjectRoutes(app: FastifyInstance, store: Store): void 
     }
     const record = await store.renameApp(request.params.appKey, user.id, parsed.data.name);
     if (!record) return reply.status(404).send({ code: 'APP_NOT_FOUND', message: 'App not found' });
-    return { app: ((({ id, name, appKey, type, createdAt }) => ({ id, name, appKey, type, createdAt }))(record)) };
+    const { id, name, appKey, type, createdAt } = record;
+    return { app: { id, name, appKey, type, createdAt } };
   });
 
 }
