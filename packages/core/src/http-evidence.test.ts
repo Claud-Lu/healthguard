@@ -37,3 +37,7 @@ it('handles old clients, malformed context and privacy boundaries conservatively
     expect(networkDiagnosticLines({ context: { requestTrace: { source: 'original_request', connectionAcquisition: {} } } }, language).join(' ')).toMatch(/不可用|Unavailable/);
   }
 });
+
+it('distinguishes explicit DNS evidence from a generic connection exception', () => {
+  expect(httpFailurePhase({ context: { originalError: { dioType: 'connectionError', message: "Failed host lookup: 'api.example.com'", underlyingType: 'SocketException' } } })).toBe('dns');
+});
