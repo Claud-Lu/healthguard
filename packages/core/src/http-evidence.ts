@@ -9,15 +9,17 @@ export function evidenceRecord(value: unknown): Record<string, unknown> {
 export function httpFailurePhase(event: Partial<Evidence>): string {
   if (event.status !== undefined && event.status >= 400) return 'http';
   const original = evidenceRecord(event.context?.originalError);
-  if (typeof original.dioType === 'string' && phases[original.dioType]) return phases[original.dioType];
+  if (original.dioType === 'connectionError' && original.underlyingType === 'SocketException' && typeof original.message === 'string' && /failed host lookup|name or service not known|no address associated with hostname/i.test(original.message.slice(0, 500))) return 'dns';
+  if (typeof original.dioType === 'string' && Object.prototype.hasOwnProperty.call(phases, original.dioType)) return phases[original.dioType];
   const diagnostic = evidenceRecord(event.networkDiagnostic);
   return ['offline', 'dns', 'connect', 'tls', 'timeout', 'cancelled', 'http'].includes(String(diagnostic.category)) ? String(diagnostic.category) : 'unknown';
 }
 export function httpTarget(event: Pick<Evidence, 'url'>): string {
   try {
     const uri = new URL(event.url, 'https://healthguard.invalid');
+    if (!['http:', 'https:'].includes(uri.protocol)) return '[Unavailable]';
     return `${networkTargetOrigin(event.url) ?? ''}${uri.pathname}`;
-  } catch { return event.url.split(/[?#]/)[0]; }
+  } catch { return '[Unavailable]'; }
 }
 export function evidenceText(value: unknown): string {
   if (typeof value !== 'string') return '';

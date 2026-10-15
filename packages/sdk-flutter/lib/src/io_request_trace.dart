@@ -59,7 +59,7 @@ class _RequestTrace {
             RegExp(r'^[A-Za-z0-9._:-]{1,128}$').hasMatch(existing)
         ? existing
         : 'hg-io-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-${++_sequence}';
-    if (header == null) options.headers['X-Request-ID'] = requestId;
+    options.headers[header?.key ?? 'X-Request-ID'] = requestId;
     for (final entry in {
       'connectMs': options.connectTimeout,
       'sendMs': options.sendTimeout,

@@ -25,6 +25,9 @@ it('handles old clients, malformed context and privacy boundaries conservatively
   expect(httpFailurePhase({ status: 502, context: { originalError: { dioType: 'connectionTimeout' } } })).toBe('http');
   expect(httpFailurePhase({ networkDiagnostic: { category: 'dns' } } as any)).toBe('dns');
   expect(httpFailurePhase({ context: { originalError: [] } })).toBe('unknown');
+  expect(httpFailurePhase({ context: { originalError: { dioType: 'constructor' } } })).toBe('unknown');
+  expect(httpTarget({ url: 'https://user:secret@[invalid?token=secret' })).toBe('[Unavailable]');
+  expect(httpTarget({ url: 'javascript:private' })).toBe('[Unavailable]');
   expect(httpFailurePhase({ context: { originalError: { dioType: 'not-a-known-phase' } } })).toBe('unknown');
   expect(httpTarget({ url: 'https://[invalid?token=secret' })).not.toContain('secret');
   expect(httpTarget({ url: '/calls?token=secret' })).toBe('/calls');

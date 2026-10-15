@@ -23,3 +23,11 @@ describe('diagnostic presentation', () => {
 it('does not throw when a malformed event contains an out-of-range timestamp', () => {
   expect(networkDiagnosticLines({ networkDiagnostic: { ...diagnostic, recentChanges: [{ timestamp: 1e100, online: false }] } }, 'zh')).toEqual([]);
 });
+
+it('renders original failure phase and independent probe times for old SDK payloads', async () => {
+  const html = await renderToString(renderNetworkDiagnostic({ context: { originalError: { dioType: 'connectionTimeout' }, networkDiagnostics: { requestId: 'request-42', probes: { cached: true, sampledAt: 1000 } } } }, 'zh')!);
+  expect(html).toContain('connectionTimeout');
+  expect(html).toContain('request-42');
+  expect(html).toContain('1970-01-01T00:00:01.000Z');
+  expect(html).toContain('不是原请求');
+});
