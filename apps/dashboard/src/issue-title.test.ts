@@ -17,7 +17,7 @@ describe('HTTP issue display titles', () => {
     const title = 'GET https://recorded.example.com/v1/calls [timeout] - original';
     expect(issueDisplayTitle({ ...issue, message: title }, [event('https://other.example.com/v1/calls')])).toBe(title);
   });
-  it.each([[], [event('/v1/calls')], [event('invalid')], [event('javascript:alert(1)')], [event(undefined)]])('never invents a missing host from unavailable evidence: %j', events => {
+  it.each([[], [event('/v1/calls')], [event('invalid')], [event('javascript:alert(1)')], [event(undefined)], [event('https://api.example.com/v1/calls', { type: 'error' })]].map(events => ({ events })))('never invents a missing host from unavailable evidence: $events', ({ events }) => {
     expect(issueDisplayTitle(issue, events)).toBe(issue.message);
   });
   it('leaves native errors and non-request titles alone', () => {

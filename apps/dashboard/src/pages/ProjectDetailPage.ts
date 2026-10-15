@@ -1,4 +1,5 @@
 import BrandHeader from '../components/BrandHeader';
+import { issueDisplayTitle } from '../issue-title';
 import ProjectRow from '../components/ProjectRow';
 import { sdkIntegrationSnippet } from '../sdk-integration';
 import { renderNetworkDiagnostic } from '../network-diagnostic';
@@ -29,6 +30,7 @@ export default {
 
     const overview = ref<OverviewTotals>({ events: 0, errors: 0, failedRequests: 0, affectedUsers: 0, issues: 0 });
     const issues = ref<IssueSummary[]>([]);
+    const displayTitles = ref<Record<string, string>>({});
     const selectedIssue = ref<IssueDetailResponse | null>(null);
     const selectedPlatform = ref('');
     const searchQuery = ref('');
@@ -56,6 +58,7 @@ export default {
 
     watch(() => route.params.appKey, (newKey) => {
       appKey.value = String(newKey);
+      displayTitles.value = {};
       closeIssue();
       progressFilter.value = 'all';
       searchQuery.value = '';
@@ -120,6 +123,7 @@ export default {
         const detail = await requestJson<IssueDetailResponse>(apiUrl(`/issues/${encodeURIComponent(issue.id)}?${buildIssueQuery(false)}`), undefined, store.token);
         if (request !== detailRequest || project !== appKey.value) return;
         selectedIssue.value = detail;
+        displayTitles.value[issue.id] = issueDisplayTitle(detail.issue, detail.events);
         void nextTick(() => {
           if (window.matchMedia('(max-width: 980px)').matches) document.getElementById('issue-detail-panel')?.scrollIntoView({ block: 'start' });
         });
@@ -533,7 +537,7 @@ export default {
       lines.push('');
       lines.push(`**Issue ID:** ${issue.id}`);
       lines.push(`**错误类型:** ${issue.errorType}`);
-      lines.push(`**错误信息:** ${issue.message}`);
+      lines.push(`**错误信息:** ${issueDisplayTitle(issue, events)}`);
       lines.push(`**出现次数:** ${issue.eventCount}`);
       lines.push(`**首次出现:** ${formatTime(issue.firstSeenAt)}`);
       lines.push(`**最近出现:** ${formatTime(issue.lastSeenAt)}`);
@@ -786,7 +790,7 @@ export default {
                               onClick: () => void openIssue(issue)
                             },
                             [
-                              h('strong', { title: issue.message }, issue.message),
+                              h('strong', { title: displayTitles.value[issue.id] ?? issue.message }, displayTitles.value[issue.id] ?? issue.message),
                               h('div', { class: 'issue-row-meta' }, [
                               h('span', `${issue.errorType} / ${issue.eventCount} ${t.events}`),
                               h('span', { class: `repair-badge ${repairStage(issue)}` }, repairText.value[repairStage(issue)]),
@@ -820,7 +824,7 @@ export default {
                 ? (() => {
                     const issue = selectedIssue.value.issue;
                     return h('div', { class: 'detail-body' }, [
-                      h('h3', issue.message),
+                      h('h3', issueDisplayTitle(issue, selectedIssue.value!.events)),
                       h('div', { class: 'detail-info-bar' }, [
                         h('span', { class: issue.errorType === 'http' || issue.errorType === 'request' ? 'badge-http' : 'badge-error' }, issue.errorType.toUpperCase()),
                         issue.archived ? h('span', { class: 'badge-archived' }, t.archivedIssues) : null,

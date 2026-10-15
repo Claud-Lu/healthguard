@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore recorded full request URLs in historical HTTP detail titles, selected rows and AI handoff while retaining complete wrapping error text and unchanged issue state.
+
 ### Issue 操作反馈
 - 归档条件未满足时明确提示原因，归档/恢复成功及失败均有当前画面可见的反馈；相邻操作按钮高度统一。
 - 列表和详情隐藏内部 Issue 编号及错误指纹，保留内部归组和 AI 报告数据。

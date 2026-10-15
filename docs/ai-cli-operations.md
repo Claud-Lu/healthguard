@@ -225,3 +225,7 @@ TLS bypass are used. Manual and interceptor cancellation creates no alert.
 ## HTTP occurrence evidence (unreleased)
 
 New HTTP issues separate target origin, environment and original failure phase. Alerts lead with the triggering event, with historical summaries explicitly labeled; late events cannot overwrite newer summaries/releases. Historical Issue IDs and repair links remain intact and may coexist with v2 groups. Flutter 0.2.1 optionally uses HealthGuardIoHttpClientAdapter; manual reporters forward context.requestTrace without a duplicate HTTP interceptor. Original DNS/TCP/TLS subphases remain unavailable; independent probes retain separate sample times and never establish the original root cause. See [network diagnostics](./network-diagnostics.md) for configuration and deployment boundaries.
+
+## Full request URLs in issue titles
+
+Opening a historical HTTP issue replaces its path-only display title with the newest matching event’s recorded absolute request URL, retaining the complete error text. The selected list row and Copy to AI report use the same display title. Matching requires the same method and path; absent, relative or mismatched evidence leaves the stored summary visible without inventing a domain. Authentication query parameters remain masked and URL credentials are omitted. Titles wrap without truncation; stored messages, grouping and repair state are unchanged.
