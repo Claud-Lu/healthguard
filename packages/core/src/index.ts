@@ -1,5 +1,7 @@
 import { z } from 'zod';
 export * from './network-diagnostics';
+export * from './http-evidence';
+import { httpFailurePhase, httpOccurrenceLines } from './http-evidence';
 import { networkTargetOrigin } from './network-diagnostics';
 
 export const networkDiagnosticSchema = z.object({
@@ -201,10 +203,10 @@ export function createIssueFingerprint(input: FingerprintInput): string {
   return `${input.errorType}:${hashString(source)}`;
 }
 
-export function createHttpFingerprint(event: { method: string; url: string; status?: number; platform?: string }): string {
+export function createHttpFingerprint(event: Pick<HttpEvent, 'method' | 'url'> & Partial<HttpEvent>): string {
   const pathname = extractPathname(event.url);
-  const source = `http|${event.method}|${pathname}|${event.status ?? 'unknown'}|${event.platform ?? 'unknown'}`;
-  return `http:${hashString(source)}`;
+  const source = JSON.stringify(['http-v2', event.method.toUpperCase(), networkTargetOrigin(event.url) ?? 'relative', pathname, event.status ?? 'unknown', event.platform ?? 'unknown', event.environment ?? 'unknown', httpFailurePhase(event)]);
+  return `http:v2:${hashString(source)}`;
 }
 
 export function extractPathname(url: string): string {
@@ -227,9 +229,10 @@ function hashString(value: string): string {
 
 
 // Reused by Dashboard, AI handoff and email so the same event has the same summary.
-export function networkDiagnosticLines(event: { networkDiagnostic?: unknown }, language: 'zh' | 'en' = 'zh'): string[] {
+export function networkDiagnosticLines(event: { networkDiagnostic?: unknown; context?: unknown }, language: 'zh' | 'en' = 'zh'): string[] {
   const parsed = networkDiagnosticSchema.safeParse(event.networkDiagnostic);
-  if (!parsed.success) return [];
+  const occurrence = httpOccurrenceLines(event, language);
+  if (!parsed.success) return occurrence;
   const value = parsed.data;
   const zh = language === 'zh';
   const unavailable = zh ? '不可用' : 'Unavailable';
@@ -239,6 +242,7 @@ export function networkDiagnosticLines(event: { networkDiagnostic?: unknown }, l
   const bool = (v?: boolean) => v === undefined ? unavailable : v ? (zh ? '是' : 'Yes') : (zh ? '否' : 'No');
   const timing = (v?: number) => v === undefined ? unavailable : `${v} ms`;
   return [
+    ...occurrence,
     `${zh ? '网络诊断' : 'Network diagnostic'}: ${categories[value.category]}`,
     `${zh ? '目标域' : 'Target origin'}: ${value.targetOrigin ?? unavailable}`,
     `${zh ? '网络状态' : 'Network state'}: ${value.network.transport ?? unavailable}; ${zh ? '在线' : 'Online'}=${bool(value.network.online)}; ${zh ? '系统验证联网' : 'OS validated'}=${bool(value.network.validated)}; VPN=${bool(value.network.vpn)}`,

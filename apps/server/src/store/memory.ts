@@ -1,4 +1,4 @@
-import { createHttpFingerprint, extractPathname } from '@health-guard/core';
+import { createHttpFingerprint, httpEventSummary } from '@health-guard/core';
 import { createMemoryNotifications } from '../notifications/store';
 import { queueIssueAlert } from '../notifications/service';
 import { compareRelease } from './releases';
@@ -386,8 +386,11 @@ function aggregateError(state: MemoryStoreState, event: ErrorEvent): void {
 
   if (existing) {
     existing.eventCount += 1;
-    existing.lastSeenAt = Math.max(existing.lastSeenAt, event.timestamp);
-    existing.lastSeenRelease = event.release ?? existing.lastSeenRelease;
+    if (event.timestamp >= existing.lastSeenAt) {
+      existing.lastSeenAt = event.timestamp;
+      existing.lastSeenRelease = event.release ?? existing.lastSeenRelease;
+      existing.message = event.type === 'http' ? httpEventSummary(event) : event.message;
+    }
     existing.platformDistribution[event.platform] = (existing.platformDistribution[event.platform] ?? 0) + 1;
     applyRecurrenceStatus(existing, event.release);
     return;
@@ -417,15 +420,15 @@ function aggregateError(state: MemoryStoreState, event: ErrorEvent): void {
 function aggregateHttpIssue(state: MemoryStoreState, event: HttpEvent & { fingerprint: string }): void {
   const key = `${event.appKey}:${event.fingerprint}`;
   const existing = state.issues.get(key);
-  const pathname = extractPathname(event.url);
-  const message = event.errorMessage
-    ? `${event.method} ${pathname} - ${event.errorMessage}`
-    : `${event.method} ${pathname}`;
+  const message = httpEventSummary(event);
 
   if (existing) {
     existing.eventCount += 1;
-    existing.lastSeenAt = Math.max(existing.lastSeenAt, event.timestamp);
-    existing.lastSeenRelease = event.release ?? existing.lastSeenRelease;
+    if (event.timestamp >= existing.lastSeenAt) {
+      existing.lastSeenAt = event.timestamp;
+      existing.lastSeenRelease = event.release ?? existing.lastSeenRelease;
+      existing.message = event.type === 'http' ? httpEventSummary(event) : event.message;
+    }
     existing.platformDistribution[event.platform] = (existing.platformDistribution[event.platform] ?? 0) + 1;
     applyRecurrenceStatus(existing, event.release);
     return;

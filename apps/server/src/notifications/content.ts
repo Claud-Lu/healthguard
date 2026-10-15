@@ -1,4 +1,4 @@
-import { networkDiagnosticLines, type HealthGuardEvent } from '@health-guard/core';
+import { httpEventSummary, networkDiagnosticLines, type HealthGuardEvent } from '@health-guard/core';
 import type { AppRecord, IssueSummary } from '../store/types';
 import type { NotificationJob } from './types';
 
@@ -53,7 +53,10 @@ export function issueAlertContent(app: AppRecord, issue: IssueSummary, event: He
   const lines = [
     labels[reason], '',
     `项目 / Project: ${app.name}`,
-    `异常 / Issue: ${issue.message.slice(0, 500)}`,
+    ...(event.type === 'http' ? [
+      `本次异常 / Current occurrence: ${httpEventSummary(event)}`,
+      ...(issue.message === httpEventSummary(event) ? [] : [`历史聚合摘要 / Historical issue summary: ${issue.message.slice(0, 500)}`])
+    ] : [`异常 / Issue: ${issue.message.slice(0, 500)}`]),
     `类型 / Type: ${issue.errorType}`,
     `平台 / Platform: ${event.platform}`,
     `环境 / Environment: ${event.environment ?? missing}`,
@@ -72,7 +75,7 @@ export function issueAlertContent(app: AppRecord, issue: IssueSummary, event: He
       `请求错误 / Request error: ${event.errorMessage?.slice(0, 500) || '-'}`, ''
     );
   }
-  lines.push(...networkDiagnosticLines(event, 'zh'), ...(event.networkDiagnostic ? networkDiagnosticLines(event, 'en') : []));
+  lines.push(...networkDiagnosticLines(event, 'zh'), ...networkDiagnosticLines(event, 'en'));
   lines.push(
     `${pageLabel}: ${page ? notificationAddress(page) : missing}`, '',
     `本次版本 / Event release: ${event.release ?? missing}`,

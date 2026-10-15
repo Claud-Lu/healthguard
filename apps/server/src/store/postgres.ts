@@ -3,18 +3,12 @@ import { createPostgresNotifications, ensureNotificationSchema } from '../notifi
 import { queueIssueAlert } from '../notifications/service';
 import { compareRelease } from './releases';
 import { nanoid } from 'nanoid';
-import { createHttpFingerprint, extractPathname } from '@health-guard/core';
+import { createHttpFingerprint, httpEventSummary } from '@health-guard/core';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@health-guard/core';
 import type { AppRecord, IssueRepairRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskAgent, RepairTaskNote, UpdateRepairTaskInput } from './types';
 
 const TERMINAL_REPAIR_STATUSES = ['closed', 'failed', 'canceled'] as const;
 
-function httpIssueMessage(event: { method: string; url: string; errorMessage?: string }): string {
-  const pathname = extractPathname(event.url);
-  return event.errorMessage
-    ? `${event.method} ${pathname} - ${event.errorMessage}`
-    : `${event.method} ${pathname}`;
-}
 
 export interface PostgresStoreOptions {
   pool: Pool;
@@ -895,6 +889,7 @@ async function backfillFailedHttpIssues(pool: Pool): Promise<void> {
     if (existing) {
       existing.count += 1;
       existing.firstSeenAt = Math.min(existing.firstSeenAt, event.timestamp);
+      if (event.timestamp >= existing.lastSeenAt) existing.event = event;
       existing.lastSeenAt = Math.max(existing.lastSeenAt, event.timestamp);
       existing.platformDistribution[event.platform] = (existing.platformDistribution[event.platform] ?? 0) + 1;
       continue;
@@ -937,13 +932,15 @@ async function upsertIssue(poolOrClient: Pool | PoolClient, event: ErrorEvent): 
     lastSeenAt: Math.max(Number(row.last_seen_at), event.timestamp),
     platformDistribution: distribution,
     fixedInRelease: nullableString(row.fixed_in_release),
-    eventRelease: event.release
+    eventRelease: event.release,
+    eventTimestamp: event.timestamp,
+    message: event.type === 'http' ? httpEventSummary(event) : event.message
   });
 }
 
 async function upsertHttpIssue(poolOrClient: Pool | PoolClient, event: HttpEvent & { fingerprint: string }): Promise<void> {
   const id = `${event.appKey}:${event.fingerprint}`;
-  const message = httpIssueMessage(event);
+  const message = httpEventSummary(event);
   const existing = await poolOrClient.query('SELECT event_count, last_seen_at, platform_distribution, fixed_in_release FROM issues WHERE id = $1', [id]);
 
   if (existing.rows.length === 0) {
@@ -965,7 +962,9 @@ async function upsertHttpIssue(poolOrClient: Pool | PoolClient, event: HttpEvent
     lastSeenAt: Math.max(Number(row.last_seen_at), event.timestamp),
     platformDistribution: distribution,
     fixedInRelease: nullableString(row.fixed_in_release),
-    eventRelease: event.release
+    eventRelease: event.release,
+    eventTimestamp: event.timestamp,
+    message: event.type === 'http' ? httpEventSummary(event) : event.message
   });
 }
 
@@ -981,7 +980,7 @@ async function upsertHttpIssueSnapshot(
 ): Promise<void> {
   const { event } = aggregate;
   const id = `${event.appKey}:${event.fingerprint}`;
-  const message = httpIssueMessage(event);
+  const message = httpEventSummary(event);
   const existing = await pool.query('SELECT event_count, last_seen_at, platform_distribution FROM issues WHERE id = $1', [id]);
 
   if (existing.rows.length === 0) {
@@ -1004,8 +1003,9 @@ async function upsertHttpIssueSnapshot(
   }
 
   await pool.query(
-    `UPDATE issues SET event_count = $1, last_seen_at = $2, last_seen_release = COALESCE($3, last_seen_release), platform_distribution = $4 WHERE id = $5`,
-    [aggregate.count, aggregate.lastSeenAt, aggregate.event.release ?? null, JSON.stringify(aggregate.platformDistribution), id]
+    `UPDATE issues SET event_count = $1, last_seen_at = $2, last_seen_release = CASE WHEN $6 >= last_seen_at THEN COALESCE($3, last_seen_release) ELSE last_seen_release END,
+           message = CASE WHEN $6 >= last_seen_at THEN $7 ELSE message END, platform_distribution = $4 WHERE id = $5`,
+    [aggregate.count, aggregate.lastSeenAt, aggregate.event.release ?? null, JSON.stringify(aggregate.platformDistribution), id, aggregate.event.timestamp, httpEventSummary(aggregate.event)]
   );
 }
 
@@ -1018,6 +1018,8 @@ async function updateIssueRecurrence(
     platformDistribution: Record<string, number>;
     fixedInRelease: string | null;
     eventRelease?: string;
+    eventTimestamp: number;
+    message: string;
   }
 ): Promise<void> {
   if (!input.fixedInRelease || (input.eventRelease && compareRelease(input.eventRelease, input.fixedInRelease) >= 0)) {
@@ -1025,12 +1027,13 @@ async function updateIssueRecurrence(
       `UPDATE issues
        SET event_count = $1,
            last_seen_at = $2,
-           last_seen_release = COALESCE($3, last_seen_release),
+           last_seen_release = CASE WHEN $6 >= last_seen_at THEN COALESCE($3, last_seen_release) ELSE last_seen_release END,
+           message = CASE WHEN $6 >= last_seen_at THEN $7 ELSE message END,
            platform_distribution = $4,
            archived_at = NULL,
            status = CASE WHEN status = 'repairing' THEN 'repairing' ELSE 'open' END
        WHERE id = $5`,
-      [input.eventCount, input.lastSeenAt, input.eventRelease ?? null, JSON.stringify(input.platformDistribution), input.id]
+      [input.eventCount, input.lastSeenAt, input.eventRelease ?? null, JSON.stringify(input.platformDistribution), input.id, input.eventTimestamp, input.message]
     );
     return;
   }
@@ -1039,10 +1042,11 @@ async function updateIssueRecurrence(
     `UPDATE issues
      SET event_count = $1,
          last_seen_at = $2,
-         last_seen_release = COALESCE($3, last_seen_release),
+         last_seen_release = CASE WHEN $6 >= last_seen_at THEN COALESCE($3, last_seen_release) ELSE last_seen_release END,
+           message = CASE WHEN $6 >= last_seen_at THEN $7 ELSE message END,
          platform_distribution = $4
      WHERE id = $5`,
-    [input.eventCount, input.lastSeenAt, input.eventRelease ?? null, JSON.stringify(input.platformDistribution), input.id]
+    [input.eventCount, input.lastSeenAt, input.eventRelease ?? null, JSON.stringify(input.platformDistribution), input.id, input.eventTimestamp, input.message]
   );
 }
 
