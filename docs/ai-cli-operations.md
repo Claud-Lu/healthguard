@@ -189,6 +189,11 @@ The package is source-only, not published to pub.dev. Pin reviewed commit b9ad8b
 
 Run `yarn vitest run apps/server/src/project-rename.test.ts apps/server/src/store/project-rename.test.ts` for API validation and PostgreSQL WASM persistence. For browser verification, start a disposable in-memory Collector and a Dashboard proxying it, then run `RENAME_TEST_URL=http://127.0.0.1:5198 node scripts/verify-project-rename.cjs` with Playwright and Chrome available. `PLAYWRIGHT_MODULE` may point to an existing Playwright installation. The script refuses non-local hosts, creates only test data, and checks list/detail rename, blank names, failed-save retry, cancellation, reload, localization and dialog geometry at desktop/mobile widths.
 
+
+## Archive actions and readable issue details
+
+The dashboard hides internal issue IDs and fingerprints from lists and detail headers; grouping and AI handoff identifiers remain available internally. Action buttons share the same height. Archiving still requires a verified repair: clicking an ineligible issue shows the requirement immediately instead of silently ignoring the click. Successful archive/reopen and failed requests show dismissible on-screen feedback, including after the detail panel closes.
+
 ## Browse Issues Before Selecting Details
 
 The initial project view shows a full-width list with one issue per row. Detail is hidden until an issue is selected. Error messages display in full and wrap as needed; type, counts, status, platform, time and fingerprint appear in a separate metadata row. Select a card to show its details beside the list, or below it on narrow screens (automatically brought into view). **Close details** returns to the full list and restores focus to the selected card. Search/filter/project changes clear the selection. Closing also invalidates pending detail responses so an old request cannot reopen the panel. No API or storage changes are required.

@@ -42,6 +42,7 @@ export default {
     const repairDraft = ref({ cause: '', summary: '', commitSha: '', deployment: '', verification: '' });
     const saving = ref(false);
     const savedMessage = ref('');
+    const actionFeedback = ref<{ message: string; error: boolean } | null>(null);
     const fixPrInput = ref('');
     const fixedReleaseInput = ref('');
     const verifiedReleaseInput = ref('');
@@ -114,6 +115,7 @@ export default {
     async function openIssue(issue: IssueSummary): Promise<void> {
       const request = ++detailRequest;
       const project = appKey.value;
+      actionFeedback.value = null;
       try {
         const detail = await requestJson<IssueDetailResponse>(apiUrl(`/issues/${encodeURIComponent(issue.id)}?${buildIssueQuery(false)}`), undefined, store.token);
         if (request !== detailRequest || project !== appKey.value) return;
@@ -138,6 +140,7 @@ export default {
       saving.value = true;
       savedMessage.value = '';
       store.errorMessage = '';
+      actionFeedback.value = null;
       try {
         const response = await requestJson<{ issue: IssueSummary }>(apiUrl(`/issues/${encodeURIComponent(issue.id)}/${action}`), { method: 'PATCH', body: JSON.stringify(body) }, store.token);
         if (selectedIssue.value?.issue.id === issue.id) {
@@ -148,13 +151,22 @@ export default {
           savedMessage.value = repairText.value.saved;
         }
         await loadProjectData();
-      } catch (error) { store.errorMessage = (error as Error).message; }
+        if (action === 'archive' || action === 'reopen') actionFeedback.value = {
+          message: store.locale === 'zh-CN'
+            ? action === 'archive' ? '已归档，可在「已归档」中查看。' : '已恢复到当前错误列表。'
+            : action === 'archive' ? 'Archived. View it in Archived issues.' : 'Restored to current issues.',
+          error: false
+        };
+      } catch (error) {
+        store.errorMessage = (error as Error).message;
+        actionFeedback.value = { message: (error as Error).message, error: true };
+      }
       finally { saving.value = false; }
     }
 
     async function archiveIssue(issue: IssueSummary): Promise<void> {
       if (issue.status !== 'resolved' || !issue.verifiedInRelease) {
-        store.errorMessage = repairText.value.archiveHint;
+        actionFeedback.value = { message: repairText.value.archiveHint, error: true };
         return;
       }
       await updateIssue(issue, 'archive', {});
@@ -620,6 +632,10 @@ export default {
       }
 
       return h('main', { class: 'layout' }, [
+        actionFeedback.value ? h('div', { class: actionFeedback.value.error ? 'issue-action-feedback error' : 'issue-action-feedback', role: actionFeedback.value.error ? 'alert' : 'status' }, [
+          h('span', actionFeedback.value.message),
+          h('button', { type: 'button', 'aria-label': store.locale === 'zh-CN' ? '关闭提示' : 'Dismiss message', onClick: () => { actionFeedback.value = null; } }, '×')
+        ]) : null,
         h('aside', { class: 'sidebar detail-sidebar' }, [
           h(BrandHeader, { subtitle: store.user?.email ?? '' }),
           h('div', { class: 'panel-title' }, t.projectList),
@@ -785,7 +801,6 @@ export default {
                                   )
                                 : null,
                               h('p', { class: 'issue-last-seen' }, formatTime(issue.lastSeenAt)),
-                              h('small', issue.fingerprint)
                               ])
                             ]
                           )
@@ -798,7 +813,6 @@ export default {
               h('div', { class: 'panel-head' }, [
                 h('h2', t.issueDetail),
                 h('div', { class: 'issue-detail-heading-actions' }, [
-                  h('span', { class: 'issue-id', title: selectedIssue.value.issue.id }, selectedIssue.value.issue.id.slice(0, 12) + '...'),
                   h('button', { type: 'button', class: 'outline-button close-issue-detail', disabled: saving.value, onClick: () => closeIssue(true) }, store.locale === 'zh-CN' ? '收起详情' : 'Close details')
                 ])
               ]),
@@ -814,7 +828,6 @@ export default {
                         h('span', `${t.firstSeen} ${formatTime(issue.firstSeenAt)}`),
                         h('span', `${t.lastSeen} ${formatTime(issue.lastSeenAt)}`),
                         issue.archived && issue.archivedAt ? h('span', `${t.archivedAt} ${formatTime(issue.archivedAt)}`) : null,
-                        h('span', { class: 'detail-fingerprint' }, issue.fingerprint),
                         Object.keys(issue.platformDistribution).length > 0
                           ? h(
                               'div',
@@ -846,7 +859,7 @@ export default {
                           : h('button', {
                               type: 'button',
                               class: 'outline-button detail-action-button danger-action',
-                              disabled: issue.status !== 'resolved' || !issue.verifiedInRelease,
+                              disabled: saving.value,
                               title: issue.status === 'resolved' ? t.archiveIssue : repairText.value.archiveHint,
                               onClick: () => {
                                 void archiveIssue(issue);

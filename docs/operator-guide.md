@@ -150,6 +150,11 @@ Existing application queues and installation IDs can be migrated through HealthG
 
 The package is source-only, not published to pub.dev. Pin reviewed commit b9ad8bea6afcee848c99e67a8f141faa17a52fd3. Registry publication, server deployment and device acceptance are separate steps.
 
+
+## Archive actions and readable issue details
+
+The dashboard hides internal issue IDs and fingerprints from lists and detail headers; grouping and AI handoff identifiers remain available internally. Action buttons share the same height. Archiving still requires a verified repair: clicking an ineligible issue shows the requirement immediately instead of silently ignoring the click. Successful archive/reopen and failed requests show dismissible on-screen feedback, including after the detail panel closes.
+
 ## Browse Issues Before Selecting Details
 
 The initial project view shows a full-width list with one issue per row. Detail is hidden until an issue is selected. Error messages display in full and wrap as needed; type, counts, status, platform, time and fingerprint appear in a separate metadata row. Select a card to show its details beside the list, or below it on narrow screens (automatically brought into view). **Close details** returns to the full list and restores focus to the selected card. Search/filter/project changes clear the selection. Closing also invalidates pending detail responses so an old request cannot reopen the panel. No API or storage changes are required.
