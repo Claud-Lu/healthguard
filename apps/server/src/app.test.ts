@@ -384,7 +384,7 @@ describe('collector api', () => {
     expect(issues).toHaveLength(2);
     const httpIssue = issues.find((i: { errorType: string }) => i.errorType === 'http');
     expect(httpIssue).toBeDefined();
-    expect(httpIssue.message).toBe('GET /fail - Internal Server Error');
+    expect(httpIssue.message).toBe('GET https://api.example.com/fail [http; HTTP 500] - Internal Server Error');
 
     const httpDetail = await app.inject({ method: 'GET', url: `/api/issues/${encodeURIComponent(httpIssue.id)}`, headers });
     expect(httpDetail.statusCode).toBe(200);

@@ -1,5 +1,5 @@
 name: healthguard_flutter
-version: 0.2.0
+version: 0.2.1
 description: Privacy-preserving HealthGuard client with Dio and Android network diagnostics.
 homepage: https://github.com/Claud-Lu/healthguard
 repository: https://github.com/Claud-Lu/healthguard/tree/master/packages/sdk-flutter

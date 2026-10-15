@@ -1,6 +1,8 @@
 library;
 
 export 'src/network_diagnostics.dart';
+export 'src/io_request_trace.dart';
+import 'src/network_diagnostics.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -188,7 +190,7 @@ class HealthGuardClient {
       'anonymousId': _anonymous,
       'release': release,
       'environment': eventEnvironment ?? environment,
-      'sdkVersion': '0.2.0-flutter',
+      'sdkVersion': '0.2.1-flutter',
       if (deviceModel != null || deviceSystem != null)
         'deviceInfo': {
           if (deviceModel != null) 'model': _safeText(deviceModel),
@@ -244,7 +246,7 @@ class HealthGuardClient {
       'anonymousId': _anonymous,
       'release': release,
       'environment': eventEnvironment ?? environment,
-      'sdkVersion': '0.2.0-flutter',
+      'sdkVersion': '0.2.1-flutter',
       if (deviceModel != null || deviceSystem != null)
         'deviceInfo': {
           if (deviceModel != null) 'model': _safeText(deviceModel),
@@ -366,7 +368,13 @@ class _HealthGuardInterceptor extends Interceptor {
           status: error.response?.statusCode,
           durationMs: _started[error.requestOptions]?.elapsedMilliseconds ?? 0,
           failureKind: kind,
-          errorMessage: error.error?.toString()));
+          errorMessage: error.error?.toString(),
+          context: {
+            'originalError': NetworkDiagnostics.errorDetails(error),
+            if (error.requestOptions.extra['healthguardRequestTrace'] is Map)
+              'requestTrace':
+                  error.requestOptions.extra['healthguardRequestTrace'],
+          }));
     }
     handler.next(error);
   }
@@ -424,7 +432,7 @@ Map<String, dynamic> _safeContext(
   }
   if (context['status'] is num) result['status'] = context['status'];
   if (context['url'] is String) result['url'] = safeRequestUrl(context['url']);
-  for (final key in ['networkDiagnostics', 'originalError']) {
+  for (final key in ['networkDiagnostics', 'originalError', 'requestTrace']) {
     if (context[key] is Map) {
       result[key] = _safeDiagnostic(context[key], 0);
     }
@@ -450,6 +458,14 @@ Map<String, dynamic> _safeContext(
 // Only transport evidence is retained; arbitrary application payloads, user
 // identifiers, credentials and network identifiers are never copied wholesale.
 const _diagnosticKeys = {
+  'source',
+  'connectionAcquisition',
+  'responseHeaders',
+  'availability',
+  'timeouts',
+  'connectMs',
+  'sendMs',
+  'receiveMs',
   'schemaVersion',
   'requestId',
   'startedAt',

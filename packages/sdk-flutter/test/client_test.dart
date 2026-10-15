@@ -121,6 +121,10 @@ void main() {
         (received.single['events'] as List).single['networkDiagnostic']
             ['category'],
         'timeout');
+    expect(
+        (received.single['events'] as List).single['context']['originalError']
+            ['dioType'],
+        'receiveTimeout');
     client.dispose();
   });
   test(

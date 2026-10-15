@@ -68,6 +68,17 @@ void main() {
           'message': 'timeout',
           'token': 'private'
         },
+        'requestTrace': {
+          'source': 'original_request',
+          'requestId': 'request-1',
+          'connectionAcquisition': {
+            'outcome': 'connectionTimeout',
+            'durationMs': 10000
+          },
+          'timeouts': {'connectMs': 10000},
+          'dns': {'availability': 'unavailable'},
+          'headers': {'Authorization': 'private'},
+        },
         'token': 'private',
       },
     );
@@ -82,6 +93,12 @@ void main() {
             ['outcome'],
         'ok');
     expect(event['context']['originalError']['dioType'], 'connectionTimeout');
+    expect(event['context']['requestTrace']['source'], 'original_request');
+    expect(
+        event['context']['requestTrace']['connectionAcquisition']['durationMs'],
+        10000);
+    expect(
+        event['context']['requestTrace']['dns']['availability'], 'unavailable');
     expect(event['url'], 'https://api.example.com/calls');
     expect(event.toString(), isNot(contains('private')));
     client.dispose();
