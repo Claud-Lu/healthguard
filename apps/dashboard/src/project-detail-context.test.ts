@@ -27,27 +27,16 @@ describe('project detail mini-program context rendering', () => {
     expect(source).toContain("status=${encodeURIComponent(issueStatus.value)}");
     expect(source).toContain("type TimePreset = 'all' | '1d' | '7d' | '30d' | 'custom'");
     expect(source).toContain("timePreset = ref<TimePreset>('all')");
-    expect(source).toContain("updateIssue(issue, 'archive'");
+    expect(source).toContain('ArchiveIssueDialog');
     expect(source).toContain("updateIssue(issue, 'reopen'");
   });
 
-  it('keeps PR links optional within issue details', () => {
-    expect(source).toContain('function setIssueFixPr');
-    expect(source).toContain('function renderFixPrEditor');
-    expect(source).toContain("h('details', { class: 'fix-pr-editor' }");
-    expect(source).not.toContain('renderFixPrPanel');
-    expect(source).not.toContain('fixPrFilter');
-  });
-
-  it('exposes issue release workflow actions and status messaging', () => {
-    expect(source).toContain('fixedReleaseInput = ref');
-    expect(source).toContain('verifiedReleaseInput = ref');
-    expect(source).toContain('function markIssueFixed');
-    expect(source).toContain('function markIssueVerified');
-    expect(source).toContain("updateIssue(issue, 'fixed'");
-    expect(source).toContain("updateIssue(issue, 'verified'");
-    expect(source).toContain('renderIssueReleaseWorkflow');
-    expect(source).toContain('repair-steps');
-    expect(source).toContain('t.oldRelease');
+  it('uses a confirmation dialog instead of manual repair and PR controls', () => {
+    expect(source).toContain('archiveTarget.value = issue');
+    expect(source).toContain('archiveRecord.note');
+    expect(source).not.toContain('renderIssueReleaseWorkflow');
+    expect(source).not.toContain('renderFixPrEditor');
+    expect(source).not.toContain('repair-filters');
+    expect(source).not.toContain('repair-badge');
   });
 });

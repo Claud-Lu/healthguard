@@ -1,4 +1,5 @@
 import BrandHeader from '../components/BrandHeader';
+import ArchiveIssueDialog from '../components/ArchiveIssueDialog';
 import { issueDisplayTitle } from '../issue-title';
 import ProjectRow from '../components/ProjectRow';
 import { sdkIntegrationSnippet } from '../sdk-integration';
@@ -8,7 +9,7 @@ import { computed, h, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { store, messages, loadApps } from '../globalStore';
 import { apiUrl, formatTime, requestJson } from '../api';
-import { repairStage, matchesIssueFilters, repairLabels, type RepairFilter } from '../repair-progress';
+import { matchesIssueFilters, repairLabels } from '../repair-progress';
 import { extractPathname } from '@health-guard/core';
 import type { IssueSummary, OverviewTotals } from '../globalStore';
 
@@ -39,15 +40,10 @@ export default {
     const timePreset = ref<TimePreset>('all');
     const customStartDate = ref('');
     const customEndDate = ref('');
-    const progressFilter = ref<RepairFilter>('all');
     const repairText = computed(() => repairLabels[store.locale]);
-    const repairDraft = ref({ cause: '', summary: '', commitSha: '', deployment: '', verification: '' });
     const saving = ref(false);
-    const savedMessage = ref('');
+    const archiveTarget = ref<IssueSummary | null>(null);
     const actionFeedback = ref<{ message: string; error: boolean } | null>(null);
-    const fixPrInput = ref('');
-    const fixedReleaseInput = ref('');
-    const verifiedReleaseInput = ref('');
 
     const selectedApp = computed(() => store.apps.find((item) => item.appKey === appKey.value) ?? null);
 
@@ -60,9 +56,7 @@ export default {
       appKey.value = String(newKey);
       displayTitles.value = {};
       closeIssue();
-      progressFilter.value = 'all';
       searchQuery.value = '';
-      savedMessage.value = '';
       void loadProjectData();
     });
 
@@ -71,7 +65,7 @@ export default {
       void loadProjectData();
     });
 
-    watch([searchQuery, selectedMetricFilter, progressFilter], () => closeIssue());
+    watch([searchQuery, selectedMetricFilter], () => closeIssue());
 
     onMounted(() => {
       void loadApps().then(() => {
@@ -108,8 +102,8 @@ export default {
     function closeIssue(restoreFocus = false): void {
       const row = restoreFocus ? document.querySelector<HTMLButtonElement>('.issue-row.active') : null;
       ++detailRequest;
+      archiveTarget.value = null;
       selectedIssue.value = null;
-      savedMessage.value = '';
       if (row) void nextTick(() => {
         if (row.isConnected) { row.focus({ preventScroll: true }); row.scrollIntoView({ block: 'nearest' }); }
       });
@@ -127,32 +121,18 @@ export default {
         void nextTick(() => {
           if (window.matchMedia('(max-width: 980px)').matches) document.getElementById('issue-detail-panel')?.scrollIntoView({ block: 'start' });
         });
-        fixedReleaseInput.value = detail.issue.fixedInRelease ?? '';
-        verifiedReleaseInput.value = detail.issue.status === 'resolved' ? detail.issue.verifiedInRelease ?? '' : detail.issue.fixedInRelease ?? '';
-        fixPrInput.value = detail.issue.fixPrUrl ?? '';
-        for (const key of Object.keys(repairDraft.value) as Array<keyof typeof repairDraft.value>) repairDraft.value[key] = detail.issue.repair?.[key] ?? '';
-        savedMessage.value = '';
       } catch (error) { store.errorMessage = (error as Error).message; }
-    }
-
-    async function saveRepair(issue: IssueSummary, start = false): Promise<void> {
-      await updateIssue(issue, 'repair', { ...repairDraft.value, ...(start ? { action: 'start' } : {}) });
     }
 
     async function updateIssue(issue: IssueSummary, action: string, body: Record<string, unknown>): Promise<void> {
       if (saving.value) return;
       saving.value = true;
-      savedMessage.value = '';
       store.errorMessage = '';
       actionFeedback.value = null;
       try {
         const response = await requestJson<{ issue: IssueSummary }>(apiUrl(`/issues/${encodeURIComponent(issue.id)}/${action}`), { method: 'PATCH', body: JSON.stringify(body) }, store.token);
         if (selectedIssue.value?.issue.id === issue.id) {
           selectedIssue.value = { ...selectedIssue.value, issue: response.issue };
-          fixedReleaseInput.value = response.issue.fixedInRelease ?? '';
-          verifiedReleaseInput.value = response.issue.verifiedInRelease ?? response.issue.fixedInRelease ?? '';
-          fixPrInput.value = response.issue.fixPrUrl ?? '';
-          savedMessage.value = repairText.value.saved;
         }
         await loadProjectData();
         if (action === 'archive' || action === 'reopen') actionFeedback.value = {
@@ -168,35 +148,8 @@ export default {
       finally { saving.value = false; }
     }
 
-    async function archiveIssue(issue: IssueSummary): Promise<void> {
-      if (issue.status !== 'resolved' || !issue.verifiedInRelease) {
-        actionFeedback.value = { message: repairText.value.archiveHint, error: true };
-        return;
-      }
-      await updateIssue(issue, 'archive', {});
-    }
-
     async function reopenIssue(issue: IssueSummary): Promise<void> {
       await updateIssue(issue, 'reopen', {});
-    }
-
-    async function markIssueFixed(issue: IssueSummary): Promise<void> {
-      const fixedInRelease = fixedReleaseInput.value.trim();
-      if (!fixedInRelease) {
-        store.errorMessage = repairText.value.requiredFixed;
-        return;
-      }
-      await updateIssue(issue, 'fixed', { fixedInRelease });
-    }
-
-    async function markIssueVerified(issue: IssueSummary): Promise<void> {
-      const verifiedInRelease = verifiedReleaseInput.value.trim();
-      if (!verifiedInRelease) { store.errorMessage = repairText.value.requiredVerified; return; }
-      await updateIssue(issue, 'verified', { verifiedInRelease });
-    }
-
-    async function setIssueFixPr(issue: IssueSummary, clear = false): Promise<void> {
-      await updateIssue(issue, 'fix-pr', { fixPrUrl: clear ? '' : fixPrInput.value.trim() });
     }
 
     function buildIssueQuery(includeAppKey = true): string {
@@ -418,117 +371,10 @@ export default {
       return h('pre', { class: 'event-raw' }, JSON.stringify(evt, null, 2));
     }
 
-    function renderFixPrEditor(issue: IssueSummary) {
-      return h('details', { class: 'fix-pr-editor' }, [
-        h('summary', repairText.value.optionalPr),
-        h('div', { class: 'release-action-row' }, [
-          h('label', { class: 'field compact-field fix-pr-input-field' }, [
-            h('span', messages.value.fixPr),
-            h('input', {
-              type: 'url',
-              placeholder: messages.value.fixPrPlaceholder,
-              value: fixPrInput.value,
-              onInput: (event: Event) => {
-                fixPrInput.value = (event.target as HTMLInputElement).value;
-              }
-            })
-          ]),
-          h('button', { type: 'button', class: 'copy-for-ai-button', onClick: () => void setIssueFixPr(issue) }, messages.value.saveFixPr),
-          issue.fixPrUrl
-            ? h('button', { type: 'button', class: 'outline-button detail-action-button', onClick: () => void setIssueFixPr(issue, true) }, messages.value.clearFixPr)
-            : null
-        ]),
-        issue.fixPrUrl
-          ? h('a', { class: 'fix-pr-current-link', href: issue.fixPrUrl, target: '_blank', rel: 'noreferrer' }, issue.fixPrUrl)
-          : null
-      ]);
-    }
-
-    function renderIssueReleaseWorkflow(issue: IssueSummary) {
-      const t = repairText.value;
-      const stage = repairStage(issue);
-      const fields = [
-        ['cause', t.cause], ['summary', t.summary], ['commitSha', t.commitSha],
-        ['deployment', t.deployment], ['verification', t.verificationNote]
-      ] as const;
-      return h('section', { class: 'issue-release-workflow' }, [
-        h('div', { class: 'repair-heading' }, [h('h4', t.title), h('span', { class: `repair-badge ${stage}` }, t[stage])]),
-        h('ol', { class: 'repair-steps', 'aria-label': t.title }, (['pending', 'repairing', 'verification', 'resolved'] as const).map(step =>
-          h('li', { class: stage === step ? 'active' : '', 'aria-current': stage === step ? 'step' : undefined }, t[step]))),
-        h('p', { class: 'release-note' }, t[`${stage}Hint`]),
-        h('div', { class: 'release-status-grid' }, [
-          renderReleaseItem(t.firstRelease, issue.firstSeenRelease ?? '—'),
-          renderReleaseItem(t.lastRelease, issue.lastSeenRelease ?? '—'),
-          renderReleaseItem(t.fixedRelease, issue.fixedInRelease ?? '—'),
-          renderReleaseItem(t.verifiedRelease, stage === 'resolved' ? issue.verifiedInRelease ?? '—' : '—')
-        ]),
-        issue.fixedInRelease && issue.lastSeenRelease && compareRelease(issue.lastSeenRelease, issue.fixedInRelease) < 0
-          ? h('p', { class: 'release-note muted' }, t.oldRelease) : null,
-        h('div', { class: 'repair-fields' }, fields.map(([key, label]) => h('label', { class: `field repair-field repair-field-${key}` }, [
-          h('span', label),
-          h(key === 'commitSha' ? 'input' : 'textarea', {
-            value: repairDraft.value[key], rows: 2, maxlength: key === 'commitSha' ? 40 : 4000,
-            placeholder: key === 'deployment' ? t.deploymentPlaceholder : key === 'verification' ? t.verificationPlaceholder : '',
-            disabled: saving.value,
-            onInput: (event: Event) => { repairDraft.value[key] = (event.target as HTMLInputElement).value; savedMessage.value = ''; }
-          })
-        ]))),
-        h('div', { class: 'detail-actions' }, [
-          h('button', { class: 'outline-button', disabled: saving.value, onClick: () => void saveRepair(issue) }, saving.value ? t.saving : t.save),
-          stage === 'pending' ? h('button', { class: 'copy-for-ai-button', disabled: saving.value, onClick: () => void saveRepair(issue, true) }, t.start) : null,
-          savedMessage.value ? h('span', { class: 'repair-saved', role: 'status' }, savedMessage.value) : null
-        ]),
-        h('p', { class: 'release-note muted' }, t.hint),
-        h('div', { class: 'repair-release-actions' }, [
-          h('div', { class: 'release-action-row' }, [
-            h('label', { class: 'field compact-field' }, [h('span', t.fixedRelease), h('input', {
-              type: 'text', placeholder: '1.2.0', value: fixedReleaseInput.value,
-              onInput: (event: Event) => { fixedReleaseInput.value = (event.target as HTMLInputElement).value; }
-            })]),
-            h('button', { type: 'button', class: 'outline-button', disabled: saving.value || !fixedReleaseInput.value.trim(), onClick: () => void markIssueFixed(issue) }, t.fixed)
-          ]),
-          h('div', { class: 'release-action-row' }, [
-            h('label', { class: 'field compact-field' }, [h('span', t.verifiedRelease), h('input', {
-              type: 'text', placeholder: issue.fixedInRelease ?? '1.2.0', value: verifiedReleaseInput.value,
-              onInput: (event: Event) => { verifiedReleaseInput.value = (event.target as HTMLInputElement).value; }
-            })]),
-            h('button', { type: 'button', class: 'copy-for-ai-button', disabled: saving.value || stage !== 'verification' || !verifiedReleaseInput.value.trim(), onClick: () => void markIssueVerified(issue) }, t.verified)
-          ])
-        ]),
-        issue.repair?.updatedAt ? h('small', { class: 'muted' }, `${t.updated} ${formatTime(issue.repair.updatedAt)}`) : null
-      ]);
-    }
-
-    function renderReleaseItem(label: string, value: string) {
-      return h('div', { class: 'release-status-item' }, [
-        h('span', label),
-        h('strong', value)
-      ]);
-    }
-
     function getSeverityClass(count: number) {
       if (count > 20) return 'severity-critical';
       if (count > 5) return 'severity-warning';
       return 'severity-normal';
-    }
-
-    function compareRelease(left: string, right: string): number {
-      const leftParts = parseRelease(left);
-      const rightParts = parseRelease(right);
-      const max = Math.max(leftParts.length, rightParts.length);
-      for (let index = 0; index < max; index++) {
-        const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
-        if (diff !== 0) return diff;
-      }
-      return left.localeCompare(right);
-    }
-
-    function parseRelease(value: string): number[] {
-      return value
-        .replace(/^[^\d]*/, '')
-        .split(/[.-]/)
-        .map((part) => Number(part))
-        .filter((part) => Number.isFinite(part));
     }
 
     function buildCopyForAI(issue: IssueSummary, events: Array<Record<string, unknown>>): string {
@@ -601,8 +447,8 @@ export default {
         lines.push('');
       }
 
-      lines.push('## 修复记录');
-      lines.push(JSON.stringify({ status: issue.status, fixedInRelease: issue.fixedInRelease, verifiedInRelease: issue.status === 'resolved' ? issue.verifiedInRelease : null, repair: issue.repair ?? null }, null, 2));
+      lines.push('## 历史处理记录');
+      lines.push(JSON.stringify({ status: issue.status, fixedInRelease: issue.fixedInRelease, verifiedInRelease: issue.status === 'resolved' ? issue.verifiedInRelease : null, repair: issue.repair ?? null, archiveRecord: issue.archiveRecord ?? null }, null, 2));
       lines.push('完成修复后，请记录原因、修复摘要、提交、部署版本和验证结果；代码修改完成不代表已部署或已恢复。无需创建 PR。');
       lines.push('## 请帮我分析');
       lines.push('');
@@ -640,6 +486,17 @@ export default {
           h('span', actionFeedback.value.message),
           h('button', { type: 'button', 'aria-label': store.locale === 'zh-CN' ? '关闭提示' : 'Dismiss message', onClick: () => { actionFeedback.value = null; } }, '×')
         ]) : null,
+        h(ArchiveIssueDialog, {
+          issue: archiveTarget.value,
+          onCancel: () => { archiveTarget.value = null; },
+          onArchived: () => {
+            archiveTarget.value = null;
+            closeIssue();
+            actionFeedback.value = { message: store.locale === 'zh-CN' ? '已归档，可在「已归档」中查看备注。' : 'Archived. View the note in Archived issues.', error: false };
+            void loadProjectData();
+            void nextTick(() => document.querySelector<HTMLInputElement>('.issue-search input')?.focus());
+          }
+        }),
         h('aside', { class: 'sidebar detail-sidebar' }, [
           h(BrandHeader, { subtitle: store.user?.email ?? '' }),
           h('div', { class: 'panel-title' }, t.projectList),
@@ -753,15 +610,8 @@ export default {
 
           h('section', { class: selectedIssue.value ? 'grid issue-workspace has-selection' : 'grid issue-workspace no-selection' }, [
             h('div', { class: 'panel issue-list-panel' }, [
-              h('nav', { class: 'repair-filters', 'aria-label': repairText.value.title }, [
-            ...(['all', 'pending', 'repairing', 'verification', 'resolved'] as const).map(stage => h('button', {
-              type: 'button', class: progressFilter.value === stage ? 'active' : '', 'aria-pressed': progressFilter.value === stage,
-              onClick: () => { progressFilter.value = stage; }
-            }, [repairText.value[stage], h('span', String(issues.value.filter(issue => stage === 'all' || repairStage(issue) === stage).length))])),
-            selectedMetricFilter.value !== 'all' ? h('button', { onClick: () => { selectedMetricFilter.value = 'all'; } }, repairText.value.clearMetric) : null
-          ]),
               (() => {
-                const filteredIssues = issues.value.filter(issue => matchesIssueFilters(issue, searchQuery.value, selectedMetricFilter.value, progressFilter.value));
+                const filteredIssues = issues.value.filter(issue => matchesIssueFilters(issue, searchQuery.value, selectedMetricFilter.value, 'all'));
                 return [
                   h('div', { class: 'panel-head' }, [
                     h('h2', issueStatus.value === 'archived' ? t.issueHistory : t.issues),
@@ -775,7 +625,8 @@ export default {
                           searchQuery.value = (event.target as HTMLInputElement).value;
                         }
                       })
-                    ])
+                    ]),
+                    selectedMetricFilter.value !== 'all' ? h('button', { type: 'button', class: 'outline-button clear-metric', onClick: () => { selectedMetricFilter.value = 'all'; } }, repairText.value.clearMetric) : null
                   ]),
                   filteredIssues.length === 0
                     ? h('p', { class: 'empty' }, searchQuery.value || selectedMetricFilter.value !== 'all' ? t.noMatchingIssues : t.emptyIssues)
@@ -797,7 +648,6 @@ export default {
                               h('div', { class: 'issue-row-meta' }, [
                                 h('span', `${issue.errorType} / ${issue.eventCount} ${t.events}`),
                                 h('div', { class: 'issue-row-meta-secondary' }, [
-                                  h('span', { class: `repair-badge ${repairStage(issue)}` }, repairText.value[repairStage(issue)]),
                                   issue.archived && issue.archivedAt ? h('span', { class: 'issue-archived-at' }, `${t.archivedAt} ${formatTime(issue.archivedAt)}`) : null,
                                   Object.keys(issue.platformDistribution).length > 0
                                     ? h(
@@ -833,7 +683,6 @@ export default {
                       h('div', { class: 'detail-info-bar' }, [
                         h('span', { class: issue.errorType === 'http' || issue.errorType === 'request' ? 'badge-http' : 'badge-error' }, issue.errorType.toUpperCase()),
                         issue.archived ? h('span', { class: 'badge-archived' }, t.archivedIssues) : null,
-                        h('span', { class: `repair-badge ${repairStage(issue)}` }, repairText.value[repairStage(issue)]),
                         h('span', `${t.firstSeen} ${formatTime(issue.firstSeenAt)}`),
                         h('span', `${t.lastSeen} ${formatTime(issue.lastSeenAt)}`),
                         issue.archived && issue.archivedAt ? h('span', `${t.archivedAt} ${formatTime(issue.archivedAt)}`) : null,
@@ -869,14 +718,17 @@ export default {
                               type: 'button',
                               class: 'outline-button detail-action-button danger-action',
                               disabled: saving.value,
-                              title: issue.status === 'resolved' ? t.archiveIssue : repairText.value.archiveHint,
+                              title: t.archiveIssue,
                               onClick: () => {
-                                void archiveIssue(issue);
+                                archiveTarget.value = issue;
                               }
                             }, t.archiveIssue)
                       ]),
-                      renderIssueReleaseWorkflow(issue),
-                      renderFixPrEditor(issue),
+                      issue.archiveRecord ? h('section', { class: 'archive-record' }, [
+                        h('h4', store.locale === 'zh-CN' ? issue.archived ? '归档备注' : '上次归档备注' : issue.archived ? 'Archive note' : 'Last archive note'),
+                        h('p', issue.archiveRecord.note || (store.locale === 'zh-CN' ? '未填写备注' : 'No note provided')),
+                        h('small', formatTime(issue.archiveRecord.archivedAt))
+                      ]) : null,
                       ...Object.entries(groupEventsByType(selectedIssue.value.events)).map(([type, events]) => renderEventGroup(type, events))
                     ]);
                   })()

@@ -162,13 +162,9 @@ Alert emails include the full request URL and H5 page URL or native page route f
 
 The triggering device model and OS version are also included when reported. Updating the collector enables these fields for existing clients that already send `deviceInfo.model` and `deviceInfo.system`; missing values are marked **Not reported**. The device describes only the occurrence that triggered the email, not all occurrences in the issue.
 
-## Direct repair progress
+## Legacy repair APIs
 
-Use the authenticated owner session with `PATCH /api/issues/:id/repair`. Send any subset of `cause`, `summary`, `commitSha`, `deployment`, `verification`; omitted fields remain unchanged and empty strings clear fields. Text is limited to 4000 characters. Commit SHA is empty or 7–40 hexadecimal characters. `action: "start"` moves the issue to repairing and clears fixed/verified release markers. Notes persist in PostgreSQL `issues.repair_record` (additive migration).
-
-Write evidence at each stage; this API does not execute agents. `/fixed` records code completion and clears stale verification. `/verified` records explicit verification; never call it merely because code was edited or events stopped. PR creation is not required. The experimental repair-task queue is independent and does not automatically update these records.
-
-Deploy the collector before the dashboard because the new UI writes to `/repair`. Keep old frontend assets during deployment for already-open sessions. Back up the collector image and dashboard before replacing them; rollback can leave the additive JSONB column in place.
+The /repair, /fixed, /verified and optional PR endpoints remain available for existing integrations, but the Dashboard no longer exposes those manual workflows. They do not execute an AI or modify a repository. Do not call them merely to permit archiving; manual archive is independent of repair/version metadata.
 
 ## Reusable network diagnostics
 
@@ -190,13 +186,19 @@ The package is source-only, not published to pub.dev. Pin reviewed commit 792e32
 Run `yarn vitest run apps/server/src/project-rename.test.ts apps/server/src/store/project-rename.test.ts` for API validation and PostgreSQL WASM persistence. For browser verification, start a disposable in-memory Collector and a Dashboard proxying it, then run `RENAME_TEST_URL=http://127.0.0.1:5198 node scripts/verify-project-rename.cjs` with Playwright and Chrome available. `PLAYWRIGHT_MODULE` may point to an existing Playwright installation. The script refuses non-local hosts, creates only test data, and checks list/detail rename, blank names, failed-save retry, cancellation, reload, localization and dialog geometry at desktop/mobile widths.
 
 
-## Archive actions and readable issue details
+## Confirmed manual archive and notes
 
-The dashboard hides internal issue IDs and fingerprints from lists and detail headers; grouping and AI handoff identifiers remain available internally. Action buttons share the same height. Archiving still requires a verified repair: clicking an ineligible issue shows the requirement immediately instead of silently ignoring the click. Successful archive/reopen and failed requests show dismissible on-screen feedback, including after the detail panel closes.
+The Dashboard is a monitoring and archive workspace, not an automatic repair executor. Use Copy for AI to hand off diagnostics to your development tool. Repair-stage controls, version verification forms and PR editing are no longer shown; existing records and legacy APIs remain intact for compatibility.
+
+Click Archive to open a confirmation dialog with an optional note (up to 4000 characters). Cancel or Escape makes no request. Confirm archives directly, without a fixed/verified release prerequisite. Errors preserve the draft for retry. Archived details display the saved note and timestamp as plain text. Restore returns the issue to Current issues and retains the last archive note.
+
+Only the project owner can archive or restore an issue. PATCH /api/issues/:id/archive accepts an optional JSON object { "note": "Server-side fix or another reason" }; omitted/blank notes are allowed, unknown fields and notes over 4000 characters are rejected. The archive record and timestamp are saved atomically; retries do not replace an existing archive record. New occurrences still increment counts but keep manually archived issues archived until explicitly restored. This is organization, not proof of a fix or recovery.
+
+Deploy Collector before Dashboard. PostgreSQL adds issues.archive_record JSONB without deleting historical events, repair records, versions or PR links. Back up the database/image/frontend and verify owner-only archive, note readback, incoming-event behavior and restore. No SDK or consuming App upgrade is needed.
 
 ## Browse Issues Before Selecting Details
 
-The initial project view shows a full-width list with one issue per row. Detail is hidden until an issue is selected. Error messages display in full and wrap as needed; type, counts, status, platform, time appear in a separate metadata row. Select a card to show its details beside the list, or below it on narrow screens (automatically brought into view). **Close details** returns to the full list and restores focus to the selected card. Search/filter/project changes clear the selection. Closing also invalidates pending detail responses so an old request cannot reopen the panel. No API or storage changes are required.
+The initial project view shows a full-width list with one issue per row. Detail is hidden until an issue is selected. Error messages display in full and wrap as needed; type, counts, platform and time appear in a separate metadata row. Select a card to show its details beside the list, or below it on narrow screens (automatically brought into view). **Close details** returns to the full list and restores focus to the selected card. Search/filter/project changes clear the selection. Closing also invalidates pending detail responses so an old request cannot reopen the panel. No API or storage changes are required.
 
 
 ## Detailed Flutter diagnostics (source 0.2.1)
@@ -230,10 +232,10 @@ New HTTP issues separate target origin, environment and original failure phase. 
 
 Opening a historical HTTP issue replaces its path-only display title with the newest matching event’s recorded absolute request URL, retaining the complete error text. The selected list row and Copy to AI report use the same display title. Matching requires the same method and path; absent, relative or mismatched evidence leaves the stored summary visible without inventing a domain. Authentication query parameters remain masked and URL credentials are omitted. Titles wrap without truncation; stored messages, grouping and repair state are unchanged.
 
-Issue row metadata keeps type and event count on the left, with status, platform and timestamps grouped on the right. The group wraps within narrow rows while the full error title remains on its own line.
+Issue row metadata keeps type and event count on the left, with platform and timestamps grouped on the right. The group wraps within narrow rows while the full error title remains on its own line.
 
 ## Compact project detail layout
 
-The active project is identified in the sidebar; its duplicate main heading and description are omitted. Filters and actions share a wrapping toolbar, and all five metrics remain in one compact horizontal row with label and value on the same line (scrollable on narrow screens). Repair-stage filters appear as small underline tabs attached to the Issue list panel, without a separate gap above the list. Filtering, detail selection, request titles and repair actions retain their existing behavior.
+The active project is identified in the sidebar; its duplicate main heading and description are omitted. Filters and actions share a wrapping toolbar, and all five metrics remain in one compact horizontal row with label and value on the same line (scrollable on narrow screens). The current/archive switch controls visibility; misleading repair-stage tabs are removed. Filtering, detail selection, request titles and repair actions retain their existing behavior.
 
-The Issue heading and search field share one row; the redundant group total is omitted because repair-stage tabs already show counts. Filter chevrons are inset 12px with 36px reserved for text, and selectors/date fields share a 38px height. Keyboard focus remains visible.
+The Issue heading and search field share one row; the redundant group total is omitted; the compact Issues metric still shows the count. Filter chevrons are inset 12px with 36px reserved for text, and selectors/date fields share a 38px height. Keyboard focus remains visible.

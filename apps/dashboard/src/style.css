@@ -1228,3 +1228,22 @@ pre {
 .detail-content .event-group, .detail-content .event-card { grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .detail-content .event-header { flex-wrap: wrap; }
 .detail-content .event-header strong { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+
+.archive-dialog { box-sizing: border-box; width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; border: 1px solid #d8e1e6; border-radius: 10px; padding: 24px; color: #18232b; background: #fff; }
+.archive-dialog::backdrop { background: rgb(16 24 32 / 55%); }
+.archive-form { display: grid; gap: 16px; }
+.archive-form h2 { font-size: 20px; }
+.archive-form p { color: #60717d; line-height: 1.6; }
+.archive-form textarea { box-sizing: border-box; width: 100%; min-width: 0; resize: vertical; border: 1px solid #cfd9df; border-radius: 6px; padding: 10px 12px; font: inherit; }
+.archive-form textarea:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
+.archive-form .modal-actions { justify-content: flex-end; }
+.archive-form button { min-height: 38px; padding: 0 16px; }
+.archive-confirm-button { background: #0f766e; color: #fff; border-radius: 6px; }
+.archive-confirm-button:hover { background: #115e59; }
+.archive-record { padding: 14px; border: 1px solid #d8e1e6; border-radius: 6px; background: #f7f9fa; display: grid; gap: 8px; min-width: 0; }
+.archive-record p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.archive-record small { color: #60717d; }
+
+.archive-form p.error { color: #b42318; }
+.archive-form button:disabled { opacity: .6; cursor: wait; }
+.issue-list-panel .clear-metric { height: 34px; padding: 0 10px; font-size: 12px; }

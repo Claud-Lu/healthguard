@@ -28,9 +28,9 @@ It is designed for teams shipping browser, mini-program, and uni-app experiences
 
 - **Readable HTTP titles** — Opening historical HTTP issues shows recorded full request URLs alongside the complete error.
 - **Project names** — Rename projects in the sidebar without changing app keys or monitoring history.
-- **Repair progress** — Investigate, repair, deploy and verify directly with your AI; record evidence and optionally link a PR.
+- **Confirmed manual archive** — Hand diagnostics to your AI; archive with an optional note and restore when needed, without claiming an automated fix.
 - **🔌 Multi-Platform SDKs** — H5, WeChat Mini Program, Alipay Mini Program via uni-app, and uni-app multi-end runtimes
-- **📊 Real-time Dashboard** — Error tracking, HTTP request monitoring, performance metrics, breadcrumbs; compact inline metrics, inline Issue search, attached repair filter tabs, and right-aligned status, platform and time
+- **📊 Real-time Dashboard** — Error tracking, HTTP request monitoring, performance metrics, breadcrumbs; compact inline metrics, inline Issue search, manual archive notes, and right-aligned status, platform and time
 - **🐳 One-Command Deploy** — Docker Compose with PostgreSQL persistence
 - **🌍 Bilingual UI** — English / Chinese auto-detect with manual override
 - **🔐 Private by Default** — Local auth, per-user project isolation, data stays on your servers
