@@ -29,3 +29,12 @@ it('includes evidence from the triggering event in alert summaries', () => {
   expect(content.text).toContain('wifi');
   expect(content.text).toContain('不可用');
 });
+
+it('uses the triggering HTTP failure rather than a stale aggregate title', () => {
+  const event = { eventId: 'new', type: 'http', platform: 'flutter', timestamp: 100, method: 'GET', url: 'https://api.example.com/calls', duration: 10003, success: false, release: '1.0.53', context: { originalError: { dioType: 'connectionTimeout', message: 'connect timed out' }, networkDiagnostics: { requestId: 'req-42' } } } as unknown as HealthGuardEvent;
+  const result = issueAlertContent({ name: 'Demo' } as any, { id: 'i', message: 'receive timeout 15 seconds', errorType: 'http', eventCount: 10, lastSeenAt: 100 } as any, event, 'threshold');
+  expect(result.text).toContain('本次异常 / Current occurrence: GET');
+  expect(result.text).toContain('connection_timeout');
+  expect(result.text).toContain('req-42');
+  expect(result.text).toContain('历史聚合摘要 / Historical issue summary: receive timeout 15 seconds');
+});
