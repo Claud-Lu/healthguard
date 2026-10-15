@@ -105,13 +105,14 @@ function createFakePostgresPool(events: StoredEvent[]) {
       }
 
       if (sql.startsWith('INSERT INTO issues')) {
-        const hasReleaseColumns = sql.includes('first_seen_release');
+        const snapshot = params.length === 11;
+        const hasReleaseColumns = !snapshot && sql.includes('first_seen_release');
         const [id, appKey, fingerprint, message, errorType] = params;
         const eventCount = hasReleaseColumns ? 1 : Number(params[5]);
         const firstSeenAt = hasReleaseColumns ? params[5] : params[6];
         const lastSeenAt = hasReleaseColumns ? params[6] : params[7];
-        const firstSeenRelease = hasReleaseColumns ? params[7] : null;
-        const lastSeenRelease = hasReleaseColumns ? params[8] : null;
+        const firstSeenRelease = snapshot ? params[9] : hasReleaseColumns ? params[7] : null;
+        const lastSeenRelease = snapshot ? params[10] : hasReleaseColumns ? params[8] : null;
         const platformDistribution = hasReleaseColumns ? params[9] : params[8];
         issues.set(String(id), {
           id: String(id),

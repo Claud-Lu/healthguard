@@ -865,6 +865,7 @@ async function backfillFailedHttpIssues(pool: Pool): Promise<void> {
       event: HttpEvent & { fingerprint: string };
       count: number;
       firstSeenAt: number;
+      firstSeenRelease: string | null;
       lastSeenAt: number;
       platformDistribution: Record<string, number>;
     }
@@ -888,6 +889,7 @@ async function backfillFailedHttpIssues(pool: Pool): Promise<void> {
 
     if (existing) {
       existing.count += 1;
+      if (event.timestamp < existing.firstSeenAt) existing.firstSeenRelease = event.release ?? null;
       existing.firstSeenAt = Math.min(existing.firstSeenAt, event.timestamp);
       if (event.timestamp >= existing.lastSeenAt) existing.event = event;
       existing.lastSeenAt = Math.max(existing.lastSeenAt, event.timestamp);
@@ -899,6 +901,7 @@ async function backfillFailedHttpIssues(pool: Pool): Promise<void> {
       event,
       count: 1,
       firstSeenAt: event.timestamp,
+      firstSeenRelease: event.release ?? null,
       lastSeenAt: event.timestamp,
       platformDistribution: { [event.platform]: 1 }
     });
@@ -974,6 +977,7 @@ async function upsertHttpIssueSnapshot(
     event: HttpEvent & { fingerprint: string };
     count: number;
     firstSeenAt: number;
+    firstSeenRelease: string | null;
     lastSeenAt: number;
     platformDistribution: Record<string, number>;
   }
@@ -985,8 +989,8 @@ async function upsertHttpIssueSnapshot(
 
   if (existing.rows.length === 0) {
     await pool.query(
-      `INSERT INTO issues (id, app_key, fingerprint, message, error_type, event_count, first_seen_at, last_seen_at, platform_distribution)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      `INSERT INTO issues (id, app_key, fingerprint, message, error_type, event_count, first_seen_at, last_seen_at, platform_distribution, first_seen_release, last_seen_release)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         id,
         event.appKey,
@@ -996,7 +1000,9 @@ async function upsertHttpIssueSnapshot(
         aggregate.count,
         aggregate.firstSeenAt,
         aggregate.lastSeenAt,
-        JSON.stringify(aggregate.platformDistribution)
+        JSON.stringify(aggregate.platformDistribution),
+        aggregate.firstSeenRelease,
+        aggregate.event.release ?? null
       ]
     );
     return;
