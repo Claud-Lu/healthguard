@@ -1219,3 +1219,7 @@ pre {
   .project-toolbar select, .project-toolbar input { min-width: 0; max-width: 100%; }
   .project-toolbar .custom-date-range { flex-wrap: wrap; }
 }
+
+.detail-content .event-group, .detail-content .event-card { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.detail-content .event-header { flex-wrap: wrap; }
+.detail-content .event-header strong { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
