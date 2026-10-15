@@ -792,19 +792,21 @@ export default {
                             [
                               h('strong', { title: displayTitles.value[issue.id] ?? issue.message }, displayTitles.value[issue.id] ?? issue.message),
                               h('div', { class: 'issue-row-meta' }, [
-                              h('span', `${issue.errorType} / ${issue.eventCount} ${t.events}`),
-                              h('span', { class: `repair-badge ${repairStage(issue)}` }, repairText.value[repairStage(issue)]),
-                              issue.archived && issue.archivedAt ? h('span', { class: 'issue-archived-at' }, `${t.archivedAt} ${formatTime(issue.archivedAt)}`) : null,
-                              Object.keys(issue.platformDistribution).length > 0
-                                ? h(
-                                    'div',
-                                    { class: 'platform-tags' },
-                                    Object.entries(issue.platformDistribution).map(([platform, count]) =>
-                                      h('span', { class: 'platform-tag', title: `${count} events` }, `${platform}: ${count}`)
-                                    )
-                                  )
-                                : null,
+                                h('span', `${issue.errorType} / ${issue.eventCount} ${t.events}`),
+                                h('div', { class: 'issue-row-meta-secondary' }, [
+                                  h('span', { class: `repair-badge ${repairStage(issue)}` }, repairText.value[repairStage(issue)]),
+                                  issue.archived && issue.archivedAt ? h('span', { class: 'issue-archived-at' }, `${t.archivedAt} ${formatTime(issue.archivedAt)}`) : null,
+                                  Object.keys(issue.platformDistribution).length > 0
+                                    ? h(
+                                        'div',
+                                        { class: 'platform-tags' },
+                                        Object.entries(issue.platformDistribution).map(([platform, count]) =>
+                                          h('span', { class: 'platform-tag', title: `${count} events` }, `${platform}: ${count}`)
+                                        )
+                                      )
+                                    : null,
                               h('p', { class: 'issue-last-seen' }, formatTime(issue.lastSeenAt)),
+                                ])
                               ])
                             ]
                           )

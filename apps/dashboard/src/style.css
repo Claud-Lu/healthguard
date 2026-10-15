@@ -1169,6 +1169,8 @@ pre {
 .issue-workspace .issue-row strong { min-width: 0; max-width: 100%; display: block; white-space: pre-wrap; overflow: visible; text-overflow: clip; }
 .issue-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-width: 0; }
 .issue-row-meta > span:first-child { white-space: nowrap; }
+.issue-row-meta-secondary { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 16px; margin-left: auto; min-width: 0; max-width: 100%; }
+.issue-row-meta-secondary .issue-last-seen { margin: 0; white-space: nowrap; }
 .issue-workspace .detail > .panel-head { flex-wrap: wrap; }
 .issue-detail-heading-actions { display: flex; align-items: center; gap: 10px; min-width: 0; margin-left: auto; }
 .issue-detail-heading-actions .issue-id { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

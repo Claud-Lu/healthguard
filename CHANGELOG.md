@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### Issue 列表信息对齐
+
+- 状态、平台和时间作为一组靠右排列，事件类型和次数保留左侧，窄屏自动换行。
+
 ### Fixed
 
 - Restore recorded full request URLs in historical HTTP detail titles, selected rows and AI handoff while retaining complete wrapping error text and unchanged issue state.

@@ -229,3 +229,5 @@ New HTTP issues separate target origin, environment and original failure phase. 
 ## Full request URLs in issue titles
 
 Opening a historical HTTP issue replaces its path-only display title with the newest matching event’s recorded absolute request URL, retaining the complete error text. The selected list row and Copy to AI report use the same display title. Matching requires the same method and path; absent, relative or mismatched evidence leaves the stored summary visible without inventing a domain. Authentication query parameters remain masked and URL credentials are omitted. Titles wrap without truncation; stored messages, grouping and repair state are unchanged.
+
+Issue row metadata keeps type and event count on the left, with status, platform and timestamps grouped on the right. The group wraps within narrow rows while the full error title remains on its own line.
