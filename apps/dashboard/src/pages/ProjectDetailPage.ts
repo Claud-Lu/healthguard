@@ -771,6 +771,7 @@ export default {
                             },
                             [
                               h('strong', { title: issue.message }, issue.message),
+                              h('div', { class: 'issue-row-meta' }, [
                               h('span', `${issue.errorType} / ${issue.eventCount} ${t.events}`),
                               h('span', { class: `repair-badge ${repairStage(issue)}` }, repairText.value[repairStage(issue)]),
                               issue.archived && issue.archivedAt ? h('span', { class: 'issue-archived-at' }, `${t.archivedAt} ${formatTime(issue.archivedAt)}`) : null,
@@ -785,6 +786,7 @@ export default {
                                 : null,
                               h('p', { class: 'issue-last-seen' }, formatTime(issue.lastSeenAt)),
                               h('small', issue.fingerprint)
+                              ])
                             ]
                           )
                         )

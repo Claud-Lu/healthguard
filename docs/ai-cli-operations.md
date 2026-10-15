@@ -191,7 +191,7 @@ Run `yarn vitest run apps/server/src/project-rename.test.ts apps/server/src/stor
 
 ## Browse Issues Before Selecting Details
 
-The initial project view shows a full-width list with one issue per row. Detail is hidden until an issue is selected. Long summaries truncate on one line; hover for the complete text. Select a card to show its details beside the list, or below it on narrow screens (automatically brought into view). **Close details** returns to the full list and restores focus to the selected card. Search/filter/project changes clear the selection. Closing also invalidates pending detail responses so an old request cannot reopen the panel. No API or storage changes are required.
+The initial project view shows a full-width list with one issue per row. Detail is hidden until an issue is selected. Error messages display in full and wrap as needed; type, counts, status, platform, time and fingerprint appear in a separate metadata row. Select a card to show its details beside the list, or below it on narrow screens (automatically brought into view). **Close details** returns to the full list and restores focus to the selected card. Search/filter/project changes clear the selection. Closing also invalidates pending detail responses so an old request cannot reopen the panel. No API or storage changes are required.
 
 
 ## Detailed Flutter diagnostics (source 0.2.0)
