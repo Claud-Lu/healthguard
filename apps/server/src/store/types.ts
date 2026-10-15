@@ -47,6 +47,7 @@ export interface IssueSummary {
   platformDistribution: Record<string, number>;
   archived: boolean;
   archivedAt: number | null;
+  archiveRecord?: { note: string; archivedAt: number } | null;
 }
 
 export interface OverviewTotals {
@@ -149,7 +150,7 @@ export interface Store {
   getOverview(query?: IssueQuery): Promise<OverviewTotals>;
   getAppsOverview(appKeys: string[]): Promise<Array<{ appKey: string; totals: OverviewTotals }>>;
   getIssueDetail(id: string, platform?: string, eventLimit?: number, startTime?: number, endTime?: number): Promise<IssueDetail>;
-  archiveIssue(id: string, archivedAt: number): Promise<IssueSummary | null>;
+  archiveIssue(id: string, archivedAt: number, note?: string): Promise<IssueSummary | null>;
   reopenIssue(id: string): Promise<IssueSummary | null>;
   markIssueFixed(id: string, fixedInRelease: string): Promise<IssueSummary | null>;
   markIssueVerified(id: string, verifiedInRelease: string): Promise<IssueSummary | null>;

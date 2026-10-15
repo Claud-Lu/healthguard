@@ -19,6 +19,7 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
   const { pool, sessionTtlMs = 7 * 24 * 60 * 60 * 1000 } = options;
   await ensureSchema(pool);
   await pool.query('ALTER TABLE issues ADD COLUMN IF NOT EXISTS repair_record JSONB');
+  await pool.query('ALTER TABLE issues ADD COLUMN IF NOT EXISTS archive_record JSONB');
   await ensureNotificationSchema(pool);
   await backfillFailedHttpIssues(pool);
 
@@ -396,10 +397,12 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       }
     },
 
-    async archiveIssue(id: string, archivedAt: number): Promise<IssueSummary | null> {
+    async archiveIssue(id: string, archivedAt: number, note = ''): Promise<IssueSummary | null> {
       const result = await pool.query(
-        "UPDATE issues SET archived_at = $1, status = 'archived' WHERE id = $2 AND status = 'resolved' AND verified_in_release IS NOT NULL RETURNING *",
-        [archivedAt, id]
+        `UPDATE issues SET archived_at = CASE WHEN archived_at IS NULL THEN $1 ELSE archived_at END,
+          archive_record = CASE WHEN archived_at IS NULL THEN $3::jsonb ELSE archive_record END,
+          status = 'archived' WHERE id = $2 RETURNING *`,
+        [archivedAt, id, JSON.stringify({ note, archivedAt })]
       );
       if (result.rows.length === 0) return null;
       return rowToIssue(result.rows[0]);
@@ -1036,8 +1039,8 @@ async function updateIssueRecurrence(
            last_seen_release = CASE WHEN $6 >= last_seen_at THEN COALESCE($3, last_seen_release) ELSE last_seen_release END,
            message = CASE WHEN $6 >= last_seen_at THEN $7 ELSE message END,
            platform_distribution = $4,
-           archived_at = NULL,
-           status = CASE WHEN status = 'repairing' THEN 'repairing' ELSE 'open' END
+           archived_at = CASE WHEN status = 'archived' AND archive_record IS NOT NULL THEN archived_at ELSE NULL END,
+           status = CASE WHEN status = 'archived' AND archive_record IS NOT NULL THEN 'archived' WHEN status = 'repairing' THEN 'repairing' ELSE 'open' END
        WHERE id = $5`,
       [input.eventCount, input.lastSeenAt, input.eventRelease ?? null, JSON.stringify(input.platformDistribution), input.id, input.eventTimestamp, input.message]
     );
@@ -1123,6 +1126,7 @@ function rowToIssue(row: Record<string, unknown>): IssueSummary {
     verifiedInRelease: nullableString(row.verified_in_release),
     fixPrUrl: nullableString(row.fix_pr_url),
     repair: (row.repair_record as IssueRepairRecord | null) ?? null,
+    archiveRecord: (row.archive_record as IssueSummary['archiveRecord']) ?? null,
     status,
     platformDistribution: (row.platform_distribution as Record<string, number>) ?? {},
     archived,

@@ -179,10 +179,11 @@ export function createMemoryStore(): Store {
       return { issue, events };
     },
 
-    async archiveIssue(id: string, archivedAt: number): Promise<IssueSummary | null> {
+    async archiveIssue(id: string, archivedAt: number, note = ''): Promise<IssueSummary | null> {
       const issue = state.issues.get(id) ?? null;
       if (!issue) return null;
-      if (issue.status !== 'resolved' || !issue.verifiedInRelease) return null;
+      if (issue.archived) return issue;
+      issue.archiveRecord = { note, archivedAt };
       issue.archived = true;
       issue.archivedAt = archivedAt;
       issue.status = 'archived';
@@ -456,6 +457,7 @@ function aggregateHttpIssue(state: MemoryStoreState, event: HttpEvent & { finger
 }
 
 function applyRecurrenceStatus(issue: IssueSummary, release?: string): void {
+  if (issue.archived && issue.archiveRecord) return;
   if (!issue.fixedInRelease) {
     if (issue.status !== 'repairing') issue.status = 'open';
     issue.archived = false;

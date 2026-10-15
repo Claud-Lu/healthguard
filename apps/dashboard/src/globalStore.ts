@@ -46,6 +46,7 @@ export interface IssueSummary {
   platformDistribution: Record<string, number>;
   archived: boolean;
   archivedAt: number | null;
+  archiveRecord?: { note: string; archivedAt: number } | null;
 }
 
 export interface OverviewTotals {
