@@ -1161,3 +1161,12 @@ pre {
 .rename-form h2, .rename-form p { margin: 0; }
 .rename-form p { line-height: 1.6; }
 .rename-form input { box-sizing: border-box; width: 100%; min-width: 0; }
+
+/* Browse all issues until a detail is selected. */
+.issue-workspace.no-selection { grid-template-columns: minmax(0, 1fr); }
+.issue-workspace.no-selection .issue-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); align-items: start; }
+.issue-workspace.no-selection .issue-row strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.issue-workspace .detail > .panel-head { flex-wrap: wrap; }
+.issue-detail-heading-actions { display: flex; align-items: center; gap: 10px; min-width: 0; margin-left: auto; }
+.issue-detail-heading-actions .issue-id { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.close-issue-detail { white-space: nowrap; }

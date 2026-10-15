@@ -140,7 +140,7 @@ The triggering device model and OS version are also included when reported. Upda
 See [Network diagnostics](./network-diagnostics.md) for optional event fields, SDK setup, privacy, bounded replay and rollout verification. Deploy Collector/Dashboard before new SDK consumers, then release each client. JavaScript packages are prepared at 0.4.0; Flutter source is 0.1.0 and is distributed separately from npm. Do not claim deployment, registry publication or device acceptance from a source commit or build alone.
 
 
-## Flutter migration compatibility (source 0.1.1)
+## Flutter migration compatibility (source 0.2.0)
 
 For manual HTTP reports, captureHttpFailure accepts occurredAt, eventEnvironment, deviceModel, deviceSystem and fingerprint. Diagnostic context retains bounded allowlisted networkDiagnostics and originalError fields; passive snapshot sampledAt records collection time separately from the original failure time.
 
@@ -148,4 +148,32 @@ Applications may configure additionalContextKeys for explicitly approved scalar 
 
 Existing application queues and installation IDs can be migrated through HealthGuardStorage. Persist the new queue before clearing old storage and retain original event IDs, timestamps and releases. A custom transport must throw unless the collector acknowledges the full batch.
 
-The package is source-only, not published to pub.dev. Pin reviewed commit 1e95665f978f4347120c969a9771bbc64531cdca. Registry publication, server deployment and device acceptance are separate steps.
+The package is source-only, not published to pub.dev. Pin reviewed commit b9ad8bea6afcee848c99e67a8f141faa17a52fd3. Registry publication, server deployment and device acceptance are separate steps.
+
+## Browse Issues Before Selecting Details
+
+The initial project view shows a full-width, responsive issue card grid. Detail is hidden until an issue is selected. Long card summaries are limited to three lines; hover for the complete text. Select a card to show its details beside the list, or below it on narrow screens (automatically brought into view). **Close details** returns to the full list and restores focus to the selected card. Search/filter/project changes clear the selection. Closing also invalidates pending detail responses so an old request cannot reopen the panel. No API or storage changes are required.
+
+
+## Detailed Flutter diagnostics (source 0.2.0)
+
+NetworkDiagnostics now lives in the SDK. It provides beginRequest, endRequest,
+collect and dispose; applications supply allowedHosts and healthPath and connect
+these hooks to their single existing HTTP reporting path. Retain business
+configuration, handled-error reporting and legacy-storage migration adapters;
+remove duplicated native observers and application probe implementations only
+after migrating all call sites.
+
+The Android client and detailed event stream share one reference-counted observer.
+Network evidence includes request IDs, start/failure snapshots, observed changes,
+in-flight counts, last successful response and original Dio/OS errors. It does
+not confirm which peer caused a failure. Non-Android native evidence remains
+explicitly unavailable.
+
+Active probes require a non-empty HTTPS/443 host allowlist. healthPath must be a
+relative absolute path without authority, scheme, query or fragment. Each stage
+and the whole group have bounded timeouts; per-host single-flight and a 60-second
+cache bound probe traffic. Probe results are collected after failure and retain
+their actual sampling time. They are separate requests and never reproduce the
+original business connection. No authentication, business queries, redirects or
+TLS bypass are used. Manual and interceptor cancellation creates no alert.

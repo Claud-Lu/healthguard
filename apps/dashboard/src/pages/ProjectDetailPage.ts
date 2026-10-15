@@ -3,7 +3,7 @@ import ProjectRow from '../components/ProjectRow';
 import { sdkIntegrationSnippet } from '../sdk-integration';
 import { renderNetworkDiagnostic } from '../network-diagnostic';
 import { networkDiagnosticLines } from '@health-guard/core';
-import { computed, h, onMounted, ref, watch } from 'vue';
+import { computed, h, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { store, messages, loadApps } from '../globalStore';
 import { apiUrl, formatTime, requestJson } from '../api';
@@ -55,7 +55,7 @@ export default {
 
     watch(() => route.params.appKey, (newKey) => {
       appKey.value = String(newKey);
-      selectedIssue.value = null;
+      closeIssue();
       progressFilter.value = 'all';
       searchQuery.value = '';
       savedMessage.value = '';
@@ -63,11 +63,11 @@ export default {
     });
 
     watch([selectedPlatform, issueStatus, timePreset, customStartDate, customEndDate], () => {
+      closeIssue();
       void loadProjectData();
-      if (selectedIssue.value) {
-        void openIssue(selectedIssue.value.issue);
-      }
     });
+
+    watch([searchQuery, selectedMetricFilter, progressFilter], () => closeIssue());
 
     onMounted(() => {
       void loadApps().then(() => {
@@ -93,7 +93,7 @@ export default {
         overview.value = overviewResponse.totals;
         issues.value = issueResponse.issues;
         if (selectedIssue.value && !issues.value.some((issue) => issue.id === selectedIssue.value?.issue.id)) {
-          selectedIssue.value = null;
+          closeIssue();
         }
       } catch (error) {
         store.errorMessage = (error as Error).message;
@@ -101,6 +101,16 @@ export default {
     }
 
     let detailRequest = 0;
+    function closeIssue(restoreFocus = false): void {
+      const row = restoreFocus ? document.querySelector<HTMLButtonElement>('.issue-row.active') : null;
+      ++detailRequest;
+      selectedIssue.value = null;
+      savedMessage.value = '';
+      if (row) void nextTick(() => {
+        if (row.isConnected) { row.focus({ preventScroll: true }); row.scrollIntoView({ block: 'nearest' }); }
+      });
+    }
+
     async function openIssue(issue: IssueSummary): Promise<void> {
       const request = ++detailRequest;
       const project = appKey.value;
@@ -108,6 +118,9 @@ export default {
         const detail = await requestJson<IssueDetailResponse>(apiUrl(`/issues/${encodeURIComponent(issue.id)}?${buildIssueQuery(false)}`), undefined, store.token);
         if (request !== detailRequest || project !== appKey.value) return;
         selectedIssue.value = detail;
+        void nextTick(() => {
+          if (window.matchMedia('(max-width: 980px)').matches) document.getElementById('issue-detail-panel')?.scrollIntoView({ block: 'start' });
+        });
         fixedReleaseInput.value = detail.issue.fixedInRelease ?? '';
         verifiedReleaseInput.value = detail.issue.status === 'resolved' ? detail.issue.verifiedInRelease ?? '' : detail.issue.fixedInRelease ?? '';
         fixPrInput.value = detail.issue.fixPrUrl ?? '';
@@ -725,7 +738,7 @@ export default {
             }, [repairText.value[stage], h('span', String(issues.value.filter(issue => stage === 'all' || repairStage(issue) === stage).length))])),
             selectedMetricFilter.value !== 'all' ? h('button', { onClick: () => { selectedMetricFilter.value = 'all'; } }, repairText.value.clearMetric) : null
           ]),
-          h('section', { class: 'grid issue-workspace' }, [
+          h('section', { class: selectedIssue.value ? 'grid issue-workspace has-selection' : 'grid issue-workspace no-selection' }, [
             h('div', { class: 'panel' }, [
               (() => {
                 const filteredIssues = issues.value.filter(issue => matchesIssueFilters(issue, searchQuery.value, selectedMetricFilter.value, progressFilter.value));
@@ -752,10 +765,12 @@ export default {
                             {
                               type: 'button',
                               class: selectedIssue.value?.issue.id === issue.id ? `issue-row active ${getSeverityClass(issue.eventCount)}` : `issue-row ${getSeverityClass(issue.eventCount)}`,
+                              'aria-expanded': selectedIssue.value?.issue.id === issue.id,
+                              'aria-controls': selectedIssue.value ? 'issue-detail-panel' : undefined,
                               onClick: () => void openIssue(issue)
                             },
                             [
-                              h('strong', issue.message),
+                              h('strong', { title: issue.message }, issue.message),
                               h('span', `${issue.errorType} / ${issue.eventCount} ${t.events}`),
                               h('span', { class: `repair-badge ${repairStage(issue)}` }, repairText.value[repairStage(issue)]),
                               issue.archived && issue.archivedAt ? h('span', { class: 'issue-archived-at' }, `${t.archivedAt} ${formatTime(issue.archivedAt)}`) : null,
@@ -777,10 +792,13 @@ export default {
                 ];
               })()
             ]),
-            h('div', { class: 'panel detail' }, [
+            selectedIssue.value ? h('div', { id: 'issue-detail-panel', class: 'panel detail' }, [
               h('div', { class: 'panel-head' }, [
                 h('h2', t.issueDetail),
-                selectedIssue.value ? h('span', { class: 'issue-id', title: selectedIssue.value.issue.id }, selectedIssue.value.issue.id.slice(0, 12) + '...') : null
+                h('div', { class: 'issue-detail-heading-actions' }, [
+                  h('span', { class: 'issue-id', title: selectedIssue.value.issue.id }, selectedIssue.value.issue.id.slice(0, 12) + '...'),
+                  h('button', { type: 'button', class: 'outline-button close-issue-detail', disabled: saving.value, onClick: () => closeIssue(true) }, store.locale === 'zh-CN' ? '收起详情' : 'Close details')
+                ])
               ]),
               selectedIssue.value
                 ? (() => {
@@ -838,8 +856,8 @@ export default {
                       ...Object.entries(groupEventsByType(selectedIssue.value.events)).map(([type, events]) => renderEventGroup(type, events))
                     ]);
                   })()
-                : h('p', { class: 'empty' }, t.noIssueSelected)
-            ])
+                : null
+            ]) : null
           ])
         ])
       ]);
