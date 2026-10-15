@@ -15,6 +15,25 @@ void main() {
     expect(lookedUp, false);
   });
 
+  for (final path in [
+    '//other.example.com/health',
+    'https://other.example.com/health',
+    '/health?token=secret',
+    '/health#fragment'
+  ]) {
+    test('health probe rejects unsafe target path $path', () async {
+      var lookedUp = false;
+      final result = await NetworkDiagnostics.probeHost(
+          Uri.https('api.example.com'),
+          allowedHosts: {'api.example.com'},
+          healthPath: path, lookup: (_) async {
+        lookedUp = true;
+        return [];
+      });
+      expect(result, {'outcome': 'health_path_not_allowed'});
+      expect(lookedUp, false);
+    });
+  }
   TestWidgetsFlutterBinding.ensureInitialized();
   final origin = Uri.https('api.example.com');
   test(

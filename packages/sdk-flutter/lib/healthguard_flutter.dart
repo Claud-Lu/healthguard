@@ -1,5 +1,7 @@
 library;
 
+export 'src/network_diagnostics.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -121,7 +123,7 @@ class HealthGuardClient {
       String? deviceSystem,
       String? fingerprint,
       Map<String, dynamic>? context}) async {
-    if (!enabled || _isCollector(url)) return;
+    if (!enabled || _isCollector(url) || failureKind == 'cancelled') return;
     await initialize();
     final uri = Uri.tryParse(url);
     final origin = uri != null &&
@@ -186,7 +188,7 @@ class HealthGuardClient {
       'anonymousId': _anonymous,
       'release': release,
       'environment': eventEnvironment ?? environment,
-      'sdkVersion': '0.1.1-flutter',
+      'sdkVersion': '0.2.0-flutter',
       if (deviceModel != null || deviceSystem != null)
         'deviceInfo': {
           if (deviceModel != null) 'model': _safeText(deviceModel),
@@ -242,7 +244,7 @@ class HealthGuardClient {
       'anonymousId': _anonymous,
       'release': release,
       'environment': eventEnvironment ?? environment,
-      'sdkVersion': '0.1.1-flutter',
+      'sdkVersion': '0.2.0-flutter',
       if (deviceModel != null || deviceSystem != null)
         'deviceInfo': {
           if (deviceModel != null) 'model': _safeText(deviceModel),
@@ -508,6 +510,9 @@ const _diagnosticKeys = {
   'outcome',
   'durationMs',
   'errorType',
+  'addressFamily',
+  'sampledAddressCount',
+  'certificateValidated',
   'families',
   'addressCount',
   'code',

@@ -1,5 +1,5 @@
 group 'dev.healthguard.flutter'
-version '0.1.1'
+version '0.2.0'
 buildscript {
     repositories { google(); mavenCentral() }
     dependencies { classpath 'com.android.tools.build:gradle:8.1.0' }

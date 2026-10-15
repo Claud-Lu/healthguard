@@ -144,4 +144,22 @@ void main() {
         {'resourceId': 'resource-1', 'serverCode': 'BUSY'});
     client.dispose();
   });
+  test('manual cancellation does not start monitoring or create an alert',
+      () async {
+    var sends = 0;
+    final client = HealthGuardClient(
+        appKey: 'demo',
+        endpoint: 'https://collector.example.com/events',
+        transport: (_) async {
+          sends++;
+        });
+    await client.captureHttpFailure(
+        method: 'GET',
+        url: 'https://api.example.com/calls',
+        durationMs: 1,
+        failureKind: 'cancelled');
+    expect(sends, 0);
+    expect(client.pendingCount, 0);
+    client.dispose();
+  });
 }
