@@ -86,5 +86,5 @@ export function issueAlertContent(app: AppRecord, issue: IssueSummary, event: He
   );
   if (dashboard) lines.push('', `查看项目 / View project: ${dashboard.replace(/\/$/, '')}/projects/${encodeURIComponent(app.appKey)}`);
   lines.push('', '可在 HealthGuard 通知设置中调整规则或关闭推送。');
-  return { subject: `[HealthGuard] ${labels[reason]} · ${app.name}`.replace(/[\r\n]/g, ' ').slice(0, 200), text: lines.join('\n') };
+  return { subject: `[HealthGuard][${issue.id}] ${labels[reason]} · ${app.name}`.replace(/[\r\n]/g, ' ').slice(0, 512), text: lines.join('\n') };
 }

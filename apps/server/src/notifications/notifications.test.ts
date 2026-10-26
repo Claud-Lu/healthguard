@@ -117,7 +117,7 @@ describe('email notification API and delivery', () => {
     const worker = createNotificationWorker(store, key, send);
     await worker.run();
     await worker.run();
-    expect(send.mock.calls.map(([mail]) => mail.subject).sort()).toEqual(jobs.map(job => job.subject).sort());
+    expect(send.mock.calls.map(([, , mail]) => mail.subject).sort()).toEqual(jobs.map(job => job.subject).sort());
     const history = (await request('GET', `${root}/history`)).json().jobs;
     expect(history.every((job: { status: string }) => job.status === 'sent')).toBe(true);
     expect(history.map((job: { subject: string }) => job.subject).sort()).toEqual(jobs.map(job => job.subject).sort());

@@ -26,6 +26,8 @@ It is designed for teams shipping browser, mini-program, and uni-app experiences
 
 ## ✨ Features
 
+- **Issue IDs in email subjects** — Identify errors directly in inbox lists; new-issue, regression and threshold alerts retain the full issue ID.
+
 - **Readable HTTP titles** — Opening historical HTTP issues shows recorded full request URLs alongside the complete error.
 - **Project names** — Rename projects in the sidebar without changing app keys or monitoring history.
 - **Confirmed manual archive** — Hand diagnostics to your AI; archive with an optional note and restore when needed, without claiming an automated fix.

@@ -156,6 +156,8 @@ If the consuming app is served over HTTPS, use an HTTPS collector endpoint or an
 
 ## Email notifications
 
+Automatic alert subjects begin with `[HealthGuard][<full Issue ID>]`, followed by the alert type and project name. Use this stable issue ID to distinguish errors directly in the inbox; it matches `Issue ID` in the body and the existing issue API. A Collector update affects newly generated alerts only; queued/history messages and test subjects retain their content. No SDK or application release is needed.
+
 See [Email notifications](./email-notifications.md) for dashboard setup, SMTP credential handling, trigger rules, delivery history and authenticated API operations.
 
 Alert emails include the full request URL and H5 page URL or native page route from the triggering event. Missing page data requires a client SDK upgrade (`@health-guard/sdk-uniapp@0.3.1` for the uni-app route fix) and a new client release; historical events cannot be backfilled. Authentication parameters are masked.
