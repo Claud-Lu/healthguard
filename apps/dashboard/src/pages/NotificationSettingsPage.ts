@@ -1,3 +1,4 @@
+import { notificationTimelineRows } from '../event-timeline';
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ApiError, apiUrl, formatTime, requestJson } from '../api';
@@ -5,7 +6,7 @@ import { logout, store, type AppRecord } from '../globalStore';
 
 interface Sender { host: string; port: number; secure: boolean; username: string; fromEmail: string; fromName: string; hasPassword?: boolean }
 interface Rule { enabled: boolean; recipients: string[]; onNewIssue: boolean; onRegression: boolean; threshold: number; cooldownMinutes: number }
-interface Job { id: string; status: string; reason: string; subject: string; recipients: string[]; error: string | null; createdAt: number }
+interface Job { id: string; status: string; reason: string; subject: string; recipients: string[]; error: string | null; createdAt: number; eventTimestamp?: number | null; receivedAt?: number | null; sendingStartedAt?: number | null; sentAt?: number | null }
 
 const errors: Record<string, [string, string]> = {
   ENCRYPTION_NOT_CONFIGURED: ['发件配置暂不可用，请联系部署管理员。', 'Sender settings are unavailable. Contact your administrator.'],
@@ -193,10 +194,10 @@ export default defineComponent({
       ]),
       selectedKey.value ? h('section', { class: 'notification-card notification-history' }, [
         h('div', { class: 'notification-card-heading' }, [h('h2', t('发送记录', 'Delivery history')), h('button', { class: 'outline-button', disabled: busy.value, onClick: () => { void action(history); } }, t('刷新记录', 'Refresh'))]),
-        h('p', { class: 'notification-help' }, t('显示所选项目最近 50 条记录。“邮件服务器已接收”不代表已进入收件箱，请同时检查垃圾邮件。', 'Latest 50 messages for the selected project. SMTP acceptance does not guarantee inbox delivery; check spam too.')),
+        h('p', { class: 'notification-help' }, t('显示所选项目最近 50 条记录。“邮件服务器已接收”不代表已进入收件箱，请同时检查垃圾邮件。各时间独立记录；历史缺失值显示未记录，不用任务生成时间代替发生时间。', 'Latest 50 messages for the selected project. SMTP acceptance does not guarantee inbox delivery; check spam too. Each clock is separate; missing historical values are not inferred from job creation time.')),
         !jobs.value.length ? h('div', { class: 'notification-empty' }, t('暂无发送记录。配置好邮箱后，可先发一封测试邮件。', 'No messages yet. Configure email and send a test message.')) : h('div', { class: 'notification-table-wrap' }, [h('table', [
-          h('thead', [h('tr', [t('时间', 'Time'), t('邮件', 'Message'), t('收件人', 'Recipients'), t('状态', 'Status')].map(label => h('th', label)))]),
-          h('tbody', jobs.value.map(job => h('tr', { key: job.id }, [h('td', formatTime(job.createdAt)), h('td', job.subject), h('td', job.recipients.join(', ')), h('td', [h('span', { class: `notification-status ${job.status}` }, statusLabel(job.status)), job.error ? h('p', { class: 'notification-help' }, errorText(job.error)) : null])])))
+          h('thead', [h('tr', [t('时间记录（本地时区）', 'Timeline (local time)'), t('邮件', 'Message'), t('收件人', 'Recipients'), t('状态', 'Status')].map(label => h('th', label)))]),
+          h('tbody', jobs.value.map(job => h('tr', { key: job.id }, [h('td', { class: 'notification-timeline' }, notificationTimelineRows(job, store.locale, formatTime).map(row => h('div', [h('strong', `${row.label}: `), row.value]))), h('td', job.subject), h('td', job.recipients.join(', ')), h('td', [h('span', { class: `notification-status ${job.status}` }, statusLabel(job.status)), job.error ? h('p', { class: 'notification-help' }, errorText(job.error)) : null])])))
         ])])
       ]) : null
     ]);

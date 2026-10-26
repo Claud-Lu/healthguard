@@ -1,3 +1,4 @@
+import { eventTimelineRows, eventTimingNote } from '../event-timeline';
 import BrandHeader from '../components/BrandHeader';
 import ArchiveIssueDialog from '../components/ArchiveIssueDialog';
 import { issueDisplayTitle } from '../issue-title';
@@ -198,6 +199,13 @@ export default {
       return groups;
     }
 
+    function renderEventTimeline(evt: Record<string, unknown>) {
+      return h('div', { class: 'event-timeline' }, [
+        ...eventTimelineRows(evt, store.locale, formatTime).map(row => h('p', [h('strong', `${row.label}: `), row.value])),
+        h('small', eventTimingNote(store.locale))
+      ]);
+    }
+
     function renderErrorEvent(evt: Record<string, unknown>) {
       const parsed = parseErrorPayload(evt);
       const context = getEventContext(evt);
@@ -220,6 +228,7 @@ export default {
         ]),
         evt.filename ? h('p', { class: 'event-meta' }, `${String(evt.filename)}:${String(evt.lineno ?? '-')}:${String(evt.colno ?? '-')}`) : null,
         evt.stack ? h('pre', { class: 'event-stack' }, String(evt.stack)) : null,
+        renderEventTimeline(evt),
         renderNetworkDiagnostic(evt, store.locale === 'zh-CN' ? 'zh' : 'en'),
         renderRequestData(getEventRequestData(evt, context)),
         renderBreadcrumbs(evt.breadcrumbs as Array<Record<string, unknown>> | undefined),
@@ -295,6 +304,7 @@ export default {
           h('span', `Duration: ${String(evt.duration ?? '-')}ms`),
           evt.errorMessage ? h('span', { class: 'event-error-msg' }, String(evt.errorMessage)) : null
         ]),
+        renderEventTimeline(evt),
         renderNetworkDiagnostic(evt, store.locale === 'zh-CN' ? 'zh' : 'en'),
         renderRequestData(getEventRequestData(evt, context)),
         renderBreadcrumbs(evt.breadcrumbs as Array<Record<string, unknown>> | undefined),
@@ -404,7 +414,8 @@ export default {
         const scene = getEventScene(evt, context);
         lines.push(`### 事件 ${i + 1}`);
         lines.push(`- **平台:** ${String(evt.platform ?? '-')}`);
-        lines.push(`- **时间:** ${formatTime(Number(evt.timestamp ?? 0))}`);
+        lines.push(...eventTimelineRows(evt, 'zh-CN', formatTime).map(row => `- **${row.label}:** ${row.value}`));
+        lines.push(`- **时间说明:** ${eventTimingNote('zh-CN')}`);
 
         if (evt.type === 'http' || url) {
           lines.push(`- **接口:** ${method} ${String(url ?? '-')}`);
