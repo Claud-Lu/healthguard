@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { notificationAddress } from './content';
+import { issueAlertContent, notificationAddress } from './content';
+import type { ErrorEvent, HealthGuardEvent } from '@health-guard/core';
+import type { AppRecord, IssueSummary } from '../store/types';
 
 describe('notification addresses', () => {
   it('retains full URLs and masks credentials in queries and hash routes', () => {
@@ -19,8 +21,6 @@ describe('notification addresses', () => {
   });
 });
 
-import { issueAlertContent } from './content';
-import type { HealthGuardEvent } from '@health-guard/core';
 it('includes evidence from the triggering event in alert summaries', () => {
   const event = { eventId: 'e', platform: 'flutter', type: 'http', timestamp: 1, method: 'GET', url: 'https://api.example.com/v1', duration: 10, success: false,
     networkDiagnostic: { version: 1, category: 'timeout', networkAvailability: 'available', network: { online: true, transport: 'wifi', validated: false }, timing: { availability: 'unavailable' }, recentChanges: [] } } as unknown as HealthGuardEvent;
@@ -41,9 +41,9 @@ it('uses the triggering HTTP failure rather than a stale aggregate title', () =>
 
 
 describe('issue identity in email subjects', () => {
-  const app = { id: 'p1', appKey: 'demo', name: 'Example project', type: 'web', ownerUserId: 'u1', createdAt: 1 } as import('../store/types').AppRecord;
-  const issue = { id: 'demo:js:boom', appKey: 'demo', fingerprint: 'js:boom', message: 'Example error', errorType: 'js', eventCount: 1, lastSeenAt: 1 } as import('../store/types').IssueSummary;
-  const event = { eventId: 'occurrence-one', appKey: 'demo', platform: 'web', type: 'error', timestamp: 1, errorType: 'js', message: 'Example error', fingerprint: 'js:boom', sessionId: 's', anonymousId: 'a', sdkVersion: 'test', breadcrumbs: [] } as import('@health-guard/core').ErrorEvent;
+  const app = { id: 'p1', appKey: 'demo', name: 'Example project', type: 'web', ownerUserId: 'u1', createdAt: 1 } as AppRecord;
+  const issue = { id: 'demo:js:boom', appKey: 'demo', fingerprint: 'js:boom', message: 'Example error', errorType: 'js', eventCount: 1, lastSeenAt: 1 } as IssueSummary;
+  const event = { eventId: 'occurrence-one', appKey: 'demo', platform: 'web', type: 'error', timestamp: 1, errorType: 'js', message: 'Example error', fingerprint: 'js:boom', sessionId: 's', anonymousId: 'a', sdkVersion: 'test', breadcrumbs: [] } as ErrorEvent;
 
   it.each([
     ['new_issue', '新异常 / New issue'],
