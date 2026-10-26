@@ -226,7 +226,7 @@ function createFakePostgresPool(events: StoredEvent[]) {
         return { rows: [task] };
       }
 
-      if (sql.startsWith('SELECT payload FROM events')) {
+      if (sql.startsWith('SELECT payload, received_at FROM events')) {
         return {
           rows: events
             .filter((event) => event.type === params[0] && event.app_key === params[1] && event.payload.fingerprint === params[2])

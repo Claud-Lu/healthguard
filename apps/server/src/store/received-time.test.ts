@@ -84,7 +84,7 @@ for (const mode of ['memory', 'postgres']) describe(mode + ' server receipt and 
       });
       await worker.run();
       expect(transmitted).toMatchObject({ sendingStartedAt: received + 10_000 });
-      expect(transmitted?.text).toContain('开始发送时间 / Send started (UTC): 2026-10-26T02:31:59.000Z');
+      expect(transmitted?.text).toContain('发信处理开始时间 / Delivery processing started (UTC): 2026-10-26T02:31:59.000Z');
       const store = f.db ? await f.makeStore() : f.store;
       const [sent] = await store.notifications.listJobs('u1', 'demo');
       expect(sent).toMatchObject({ eventTimestamp: occurred, receivedAt: received, createdAt: received, sendingStartedAt: received + 10_000, sentAt: received + 12_000, status: 'sent' });

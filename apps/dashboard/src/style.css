@@ -1247,3 +1247,10 @@ pre {
 .archive-form p.error { color: #b42318; }
 .archive-form button:disabled { opacity: .6; cursor: wait; }
 .issue-list-panel .clear-metric { height: 34px; padding: 0 10px; font-size: 12px; }
+
+
+.event-timeline { padding: 10px 12px; border-left: 2px solid #a9b8ca; background: rgba(127, 145, 169, .06); min-width: 0; overflow-wrap: anywhere; }
+.event-timeline p { margin: 3px 0; font-size: 12px; line-height: 1.6; }
+.event-timeline small { display: block; margin-top: 6px; font-size: 11px; line-height: 1.6; opacity: .75; }
+.notification-timeline { min-width: 235px; font-size: 12px; line-height: 1.7; }
+.notification-timeline strong { font-weight: 500; }

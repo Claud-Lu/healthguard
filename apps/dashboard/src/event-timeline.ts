@@ -27,7 +27,7 @@ export function notificationTimelineRows(job: TimelineInput, locale: Locale, for
     ['eventTimestamp', '客户端发生', 'Client event'],
     ['receivedAt', '服务器接收', 'Server received'],
     ['createdAt', '邮件生成', 'Notification created'],
-    ['sendingStartedAt', '开始发送', 'Send started'],
+    ['sendingStartedAt', '发送处理开始', 'Delivery processing started'],
     ['sentAt', '邮件服务器接受', 'SMTP accepted']
   ] as const;
   return fields.map(([key, chinese, english], index) => ({

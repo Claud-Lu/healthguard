@@ -108,7 +108,7 @@ export function createNotificationWorker(store: Store, key: Buffer | null, sendM
     }
     try {
       // Use current recipients so removed recipients never receive queued alerts.
-      await sendMail(config, decryptSecret(config.passwordEncrypted, key, job.ownerUserId), { ...job, text: `${job.text}\n\n开始发送时间 / Send started (UTC): ${new Date(job.sendingStartedAt ?? job.updatedAt).toISOString()}\n此时间为开始发信时间，邮件服务器接受时间见发送记录；不代表进入收件箱。 / This is the send-start time; SMTP acceptance is shown in delivery history and does not confirm inbox delivery.`, recipients: job.reason === 'test' ? job.recipients : rule.recipients });
+      await sendMail(config, decryptSecret(config.passwordEncrypted, key, job.ownerUserId), { ...job, text: `${job.text}\n\n发信处理开始时间 / Delivery processing started (UTC): ${new Date(job.sendingStartedAt ?? job.updatedAt).toISOString()}\n此时间为发信处理开始时间，邮件服务器接受时间见发送记录；不代表进入收件箱。 / This is the delivery-processing start time; SMTP acceptance is shown in delivery history and does not confirm inbox delivery.`, recipients: job.reason === 'test' ? job.recipients : rule.recipients });
       await store.notifications.finishJob(job.id, 'sent', null, Date.now());
     } catch (error) {
       await store.notifications.finishJob(job.id, 'failed', safeMailError(error), Date.now());

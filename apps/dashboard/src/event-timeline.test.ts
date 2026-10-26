@@ -21,7 +21,7 @@ describe('monitoring timelines', () => {
   });
   it('keeps all five mail clocks separate and labels legacy/test values without guessing', () => {
     const rows = notificationTimelineRows({ eventTimestamp: 1000, receivedAt: 2000, createdAt: 3000, sendingStartedAt: 4000, sentAt: 5000 }, 'zh-CN', format);
-    expect(rows.map(row => row.label)).toEqual(['客户端发生', '服务器接收', '邮件生成', '开始发送', '邮件服务器接受']);
+    expect(rows.map(row => row.label)).toEqual(['客户端发生', '服务器接收', '邮件生成', '发送处理开始', '邮件服务器接受']);
     expect(rows.map(row => row.value)).toEqual([1, 2, 3, 4, 5].map(second => format(second * 1000)));
     const legacy = notificationTimelineRows({ createdAt: 3000, updatedAt: 9000, status: 'failed' }, 'en-US', format);
     expect(legacy[0].value).toBe('Not recorded');

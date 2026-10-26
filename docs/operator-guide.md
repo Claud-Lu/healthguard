@@ -129,6 +129,8 @@ Do not commit the real token. The repository `docker-compose.yml` reads `HEALTHG
 
 ## Email notifications
 
+Event details and AI handoff separate the client-reported occurrence from server receipt. Delivery history shows occurrence, receipt, job creation, processing start and SMTP acceptance. Unknown historical fields are not inferred; receipt time requires the updated Collector, with a nullable additive database column. See the event/delivery clock semantics in the linked notification guide before diagnosing delayed reports.
+
 Automatic alert subjects begin with `[HealthGuard][<full Issue ID>]`, followed by the alert type and project name. Use this stable issue ID to distinguish errors directly in the inbox; it matches `Issue ID` in the body and the existing issue API. A Collector update affects newly generated alerts only; queued/history messages and test subjects retain their content. No SDK or application release is needed.
 
 See [Email notifications](./email-notifications.md) for dashboard setup, SMTP credential handling, trigger rules, delivery history and authenticated API operations.

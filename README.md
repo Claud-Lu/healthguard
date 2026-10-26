@@ -26,6 +26,8 @@ It is designed for teams shipping browser, mini-program, and uni-app experiences
 
 ## ✨ Features
 
+- **Separate monitoring clocks** — Compare client occurrence, server receipt and mail lifecycle times without mistaking delayed reports for fresh failures.
+
 - **Issue IDs in email subjects** — Identify errors directly in inbox lists; new-issue, regression and threshold alerts retain the full issue ID.
 
 - **Readable HTTP titles** — Opening historical HTTP issues shows recorded full request URLs alongside the complete error.
