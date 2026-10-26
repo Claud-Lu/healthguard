@@ -28,7 +28,7 @@ export function createMemoryNotifications(): NotificationStore {
       jobs.push(structuredClone(job));
       return true;
     },
-    async listJobs(id, key) { return structuredClone(jobs.filter(j => j.ownerUserId === id && j.appKey === key).slice(-50).reverse()); },
+    async listJobs(id, key) { return structuredClone(jobs.filter(j => j.ownerUserId === id && j.appKey === key).slice(-50).reverse().map(job => ({ ...job, sentAt: job.status === 'sent' ? job.updatedAt : null }))); },
     async claimJob(now) {
       for (const job of jobs) {
         if (job.status === 'sending' && job.updatedAt < now - 300_000) {
@@ -37,7 +37,7 @@ export function createMemoryNotifications(): NotificationStore {
       }
       const job = jobs.find(j => j.status === 'pending');
       if (!job) return null;
-      job.status = 'sending'; job.updatedAt = now;
+      job.status = 'sending'; job.updatedAt = now; job.sendingStartedAt = now;
       return structuredClone(job);
     },
     async finishJob(id, status, error, now) { const job = jobs.find(j => j.id === id); if (job) Object.assign(job, { status, error, updatedAt: now }); }
@@ -105,7 +105,7 @@ export function createPostgresNotifications(db: Pool | PoolClient): Notification
     async claimJob(now) {
       // A crash after SMTP accepted a message is ambiguous. Do not resend and risk duplicate mail.
       await db.query("UPDATE notification_jobs SET status = 'failed', error = 'DELIVERY_UNKNOWN', updated_at = $1 WHERE status = 'sending' AND updated_at < $2", [now, now - 300_000]);
-      const r = await db.query(`UPDATE notification_jobs SET status = 'sending', updated_at = $1 WHERE id = (
+      const r = await db.query(`UPDATE notification_jobs SET status = 'sending', updated_at = $1, payload = payload || jsonb_build_object('sendingStartedAt', $1::bigint) WHERE id = (
         SELECT id FROM notification_jobs WHERE status = 'pending' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1
       ) RETURNING *`, [now]);
       return r.rows[0] ? toJob(r.rows[0]) : null;
@@ -115,5 +115,5 @@ export function createPostgresNotifications(db: Pool | PoolClient): Notification
 }
 
 function toJob(row: Record<string, any>): NotificationJob {
-  return { ...row.payload, status: row.status, error: row.error ?? null, updatedAt: Number(row.updated_at) };
+  return { ...row.payload, status: row.status, error: row.error ?? null, createdAt: Number(row.created_at), updatedAt: Number(row.updated_at), sentAt: row.status === 'sent' ? Number(row.updated_at) : null };
 }

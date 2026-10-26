@@ -58,9 +58,11 @@ export interface OverviewTotals {
   issues: number;
 }
 
+export type StoredEvent = HealthGuardEvent & { receivedAt?: number | null };
+
 export interface IssueDetail {
   issue: IssueSummary | null;
-  events: HealthGuardEvent[];
+  events: StoredEvent[];
 }
 
 export type RepairTaskStatus = 'pending' | 'claimed' | 'running' | 'pr_created' | 'failed' | 'canceled' | 'closed';
@@ -145,7 +147,7 @@ export interface Store {
   findAppByKey(appKey: string): Promise<AppRecord | null>;
   listAppsByUser(userId: string): Promise<AppRecord[]>;
 
-  ingestEvents(events: HealthGuardEvent[]): Promise<void>;
+  ingestEvents(events: HealthGuardEvent[], receivedAt?: number): Promise<void>;
   listIssues(query?: IssueQuery): Promise<IssueSummary[]>;
   getOverview(query?: IssueQuery): Promise<OverviewTotals>;
   getAppsOverview(appKeys: string[]): Promise<Array<{ appKey: string; totals: OverviewTotals }>>;

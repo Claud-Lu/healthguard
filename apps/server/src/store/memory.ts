@@ -3,7 +3,7 @@ import { createMemoryNotifications } from '../notifications/store';
 import { queueIssueAlert } from '../notifications/service';
 import { compareRelease } from './releases';
 import type { ErrorEvent, HealthGuardEvent, HttpEvent } from '@health-guard/core';
-import type { AppRecord, IssueRepairRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskAgent, RepairTaskNote, UpdateRepairTaskInput } from './types';
+import type { StoredEvent, AppRecord, IssueRepairRecord, IssueSummary, Store, UserRecord, OverviewTotals, IssueDetail, IssueQuery, CreateRepairTaskInput, RepairTask, RepairTaskAgent, RepairTaskNote, UpdateRepairTaskInput } from './types';
 
 const TERMINAL_REPAIR_STATUSES = ['closed', 'failed', 'canceled'] as const;
 
@@ -11,7 +11,7 @@ export interface MemoryStoreState {
   users: UserRecord[];
   sessions: Map<string, string>;
   apps: AppRecord[];
-  events: HealthGuardEvent[];
+  events: StoredEvent[];
   issues: Map<string, IssueSummary>;
   repairTasks: RepairTask[];
   repairTaskNotes: RepairTaskNote[];
@@ -75,14 +75,14 @@ export function createMemoryStore(): Store {
         .sort((left, right) => right.createdAt - left.createdAt);
     },
 
-    async ingestEvents(events: HealthGuardEvent[]): Promise<void> {
+    async ingestEvents(events: HealthGuardEvent[], receivedAt = Date.now()): Promise<void> {
       for (const event of events) {
         if (acceptedEventIds.has(event.eventId)) continue;
         acceptedEventIds.add(event.eventId);
-        let payload = event;
+        let payload: StoredEvent = { ...event, receivedAt };
 
         if (event.type === 'http' && !event.success) {
-          payload = { ...event, fingerprint: createHttpFingerprint(event) };
+          payload = { ...event, receivedAt, fingerprint: createHttpFingerprint(event) };
         }
 
         state.events.push(payload);

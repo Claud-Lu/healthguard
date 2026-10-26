@@ -10,7 +10,7 @@ import type { NotificationJob } from '../notifications/types';
 const occurred = Date.parse('2026-09-30T10:31:56Z');
 const received = Date.parse('2026-10-26T02:31:49Z');
 const event: ErrorEvent = { eventId: 'delayed-event', appKey: 'demo', type: 'error', timestamp: occurred, platform: 'flutter', sessionId: 's', anonymousId: 'a', sdkVersion: 'test', breadcrumbs: [], errorType: 'js', message: 'Old offline failure', fingerprint: 'js:delayed', release: '1.0.50' };
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); });
 
 for (const mode of ['memory', 'postgres']) describe(mode + ' server receipt and mail timeline', () => {
   async function fixture() {

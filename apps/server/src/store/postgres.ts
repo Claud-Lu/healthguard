@@ -18,6 +18,8 @@ export interface PostgresStoreOptions {
 export async function createPostgresStore(options: PostgresStoreOptions): Promise<Store> {
   const { pool, sessionTtlMs = 7 * 24 * 60 * 60 * 1000 } = options;
   await ensureSchema(pool);
+  // Nullable and unbackfilled: historical insertion times are not request receipt times.
+  await pool.query('ALTER TABLE events ADD COLUMN IF NOT EXISTS received_at BIGINT');
   await pool.query('ALTER TABLE issues ADD COLUMN IF NOT EXISTS repair_record JSONB');
   await pool.query('ALTER TABLE issues ADD COLUMN IF NOT EXISTS archive_record JSONB');
   await ensureNotificationSchema(pool);
@@ -89,7 +91,7 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       return result.rows.map(rowToApp);
     },
 
-    async ingestEvents(events: HealthGuardEvent[]): Promise<void> {
+    async ingestEvents(events: HealthGuardEvent[], receivedAt = Date.now()): Promise<void> {
       if (events.length === 0) return;
       const batchIds = new Set<string>();
       events = events.filter((event) => {
@@ -123,9 +125,9 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
             payload = { ...payload, fingerprint: createHttpFingerprint(payload) };
           }
 
-          const offset = i * 13;
+          const offset = i * 14;
           placeholders.push(
-            `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13})`
+            `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14})`
           );
           values.push(
             payload.eventId,
@@ -140,14 +142,15 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
             payload.environment ?? null,
             payload.pageUrl ?? null,
             payload.sdkVersion,
-            JSON.stringify(payload)
+            JSON.stringify(payload),
+            receivedAt
           );
         }
 
         const inserted = await client.query(
           `INSERT INTO events (
             event_id, app_key, platform, type, timestamp, session_id, user_id,
-            anonymous_id, release, environment, page_url, sdk_version, payload
+            anonymous_id, release, environment, page_url, sdk_version, payload, received_at
           ) VALUES ${placeholders.join(', ')} ON CONFLICT (event_id) DO NOTHING RETURNING event_id`,
           values
         );
@@ -169,7 +172,7 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
           }
           if (alertApp && issueId) {
             const afterRows = await client.query('SELECT * FROM issues WHERE id = $1', [issueId]);
-            if (afterRows.rows[0]) await queueIssueAlert(notifications, alertApp, await notifications.getRule(event.appKey), before, rowToIssue(afterRows.rows[0]), event);
+            if (afterRows.rows[0]) await queueIssueAlert(notifications, alertApp, await notifications.getRule(event.appKey), before, rowToIssue(afterRows.rows[0]), { ...event, receivedAt });
           }
         }
 
@@ -367,7 +370,7 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       const issue = rowToIssue(issueResult.rows[0]);
       const eventType = issue.errorType === 'http' ? 'http' : 'error';
 
-      let sql = 'SELECT payload FROM events WHERE type = $1 AND app_key = $2 AND payload->>\'fingerprint\' = $3';
+      let sql = 'SELECT payload, received_at FROM events WHERE type = $1 AND app_key = $2 AND payload->>\'fingerprint\' = $3';
       const params: (string | number)[] = [eventType, issue.appKey, issue.fingerprint];
 
       if (platform) {
@@ -381,7 +384,7 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
       params.push(eventLimit);
 
       const eventResult = await pool.query(sql, params);
-      const events = eventResult.rows.map((row) => parsePayload(row.payload));
+      const events = eventResult.rows.map((row) => ({ ...parsePayload(row.payload), receivedAt: row.received_at == null ? null : Number(row.received_at) }));
 
       return { issue, events };
 

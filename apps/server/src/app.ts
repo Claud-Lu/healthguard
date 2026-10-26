@@ -141,6 +141,7 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
       }
     }
   }, async (request, reply) => {
+    const receivedAt = Date.now();
     let batch: EventBatch;
 
     try {
@@ -151,7 +152,7 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
       });
     }
 
-    await store.ingestEvents(batch.events);
+    await store.ingestEvents(batch.events, receivedAt);
 
     return reply.status(202).send({
       accepted: batch.events.length

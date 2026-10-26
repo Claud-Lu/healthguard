@@ -37,6 +37,10 @@ export interface NotificationJob {
   recipients: string[];
   status: 'pending' | 'sending' | 'sent' | 'failed' | 'canceled';
   error: string | null;
+  eventTimestamp?: number | null;
+  receivedAt?: number | null;
+  sendingStartedAt?: number | null;
+  sentAt?: number | null;
   createdAt: number;
   updatedAt: number;
 }

@@ -3,8 +3,7 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import nodemailer from 'nodemailer';
 import { nanoid } from 'nanoid';
-import type { HealthGuardEvent } from '@health-guard/core';
-import type { AppRecord, IssueSummary, Store } from '../store/types';
+import type { AppRecord, IssueSummary, Store, StoredEvent } from '../store/types';
 import { compareRelease } from '../store/releases';
 import { issueAlertContent } from './content';
 import { isLocalDevelopmentEvent } from './eligibility';
@@ -31,7 +30,7 @@ export function decryptSecret(value: string, key: Buffer, userId: string): strin
   return Buffer.concat([cipher.update(data), cipher.final()]).toString('utf8');
 }
 
-export async function queueIssueAlert(notifications: NotificationStore, app: AppRecord, rule: NotificationRule, before: IssueSummary | null, after: IssueSummary, event: HealthGuardEvent): Promise<void> {
+export async function queueIssueAlert(notifications: NotificationStore, app: AppRecord, rule: NotificationRule, before: IssueSummary | null, after: IssueSummary, event: StoredEvent): Promise<void> {
   const currentReason = alertReason(before, after, rule);
   if (isLocalDevelopmentEvent(event)) {
     // Local events still update shared issues. Preserve first/regression triggers
@@ -48,8 +47,8 @@ export async function queueIssueAlert(notifications: NotificationStore, app: App
   const reason = deferredEnabled ? deferred : currentReason;
   if (!reason || !rule.recipients.length || !await notifications.getSender(app.ownerUserId)) return;
   const now = Date.now();
-  const { subject, text } = issueAlertContent(app, after, event, reason, process.env.HEALTHGUARD_DASHBOARD_URL);
-  await notifications.enqueue({ id: nanoid(), ownerUserId: app.ownerUserId, appKey: app.appKey, issueId: after.id, reason, subject, text, recipients: rule.recipients, status: 'pending', error: null, createdAt: now, updatedAt: now }, rule.cooldownMinutes * 60_000);
+  const { subject, text } = issueAlertContent(app, after, event, reason, process.env.HEALTHGUARD_DASHBOARD_URL, now);
+  await notifications.enqueue({ id: nanoid(), ownerUserId: app.ownerUserId, appKey: app.appKey, issueId: after.id, reason, subject, text, eventTimestamp: event.timestamp, receivedAt: event.receivedAt ?? null, recipients: rule.recipients, status: 'pending', error: null, createdAt: now, updatedAt: now }, rule.cooldownMinutes * 60_000);
 }
 
 export type SendMail = (sender: SenderConfig, password: string, job: NotificationJob) => Promise<void>;
@@ -79,6 +78,7 @@ export const smtpSendMail: SendMail = async (sender, password, job) => {
     const result = await transport.sendMail({
       from: { name: sender.fromName || 'HealthGuard', address: sender.fromEmail },
       to: job.recipients, subject: job.subject, text: job.text,
+      date: new Date(job.sendingStartedAt ?? Date.now()),
       messageId: `<${job.id}@healthguard.local>`
     });
     if (result.rejected?.length) throw Object.assign(new Error('Recipients rejected'), { code: 'PARTIAL_REJECTION' });
@@ -108,7 +108,7 @@ export function createNotificationWorker(store: Store, key: Buffer | null, sendM
     }
     try {
       // Use current recipients so removed recipients never receive queued alerts.
-      await sendMail(config, decryptSecret(config.passwordEncrypted, key, job.ownerUserId), { ...job, recipients: job.reason === 'test' ? job.recipients : rule.recipients });
+      await sendMail(config, decryptSecret(config.passwordEncrypted, key, job.ownerUserId), { ...job, text: `${job.text}\n\n开始发送时间 / Send started (UTC): ${new Date(job.sendingStartedAt ?? job.updatedAt).toISOString()}\n此时间为开始发信时间，邮件服务器接受时间见发送记录；不代表进入收件箱。 / This is the send-start time; SMTP acceptance is shown in delivery history and does not confirm inbox delivery.`, recipients: job.reason === 'test' ? job.recipients : rule.recipients });
       await store.notifications.finishJob(job.id, 'sent', null, Date.now());
     } catch (error) {
       await store.notifications.finishJob(job.id, 'failed', safeMailError(error), Date.now());

@@ -1,5 +1,5 @@
 import { httpEventSummary, networkDiagnosticLines, type HealthGuardEvent } from '@health-guard/core';
-import type { AppRecord, IssueSummary } from '../store/types';
+import type { AppRecord, IssueSummary, StoredEvent } from '../store/types';
 import type { NotificationJob } from './types';
 
 const labels = { new_issue: '新异常 / New issue', regression: '异常再次出现 / Regression', threshold: '达到次数阈值 / Threshold reached', test: '测试 / Test' };
@@ -45,7 +45,7 @@ export function pageAddress(event: HealthGuardEvent): string | undefined {
     .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
 }
 
-export function issueAlertContent(app: AppRecord, issue: IssueSummary, event: HealthGuardEvent, reason: NotificationJob['reason'], dashboard?: string): { subject: string; text: string } {
+export function issueAlertContent(app: AppRecord, issue: IssueSummary, event: StoredEvent, reason: NotificationJob['reason'], dashboard?: string, createdAt = Date.now()): { subject: string; text: string } {
   const page = pageAddress(event);
   const browser = event.platform === 'web' || event.platform === 'uniapp-h5';
   const native = event.platform === 'uniapp-app' || event.platform === 'flutter';
@@ -79,7 +79,11 @@ export function issueAlertContent(app: AppRecord, issue: IssueSummary, event: He
   lines.push(
     `${pageLabel}: ${page ? notificationAddress(page) : missing}`, '',
     `本次版本 / Event release: ${event.release ?? missing}`,
-    `本次发生 / Event time (UTC): ${new Date(event.timestamp).toISOString()}`,
+    `客户端发生时间 / Client event time (UTC): ${new Date(event.timestamp).toISOString()}`,
+    `服务器接收时间 / Server received (UTC): ${event.receivedAt == null ? "历史记录未保存 / Not recorded" : new Date(event.receivedAt).toISOString()}`,
+    `邮件生成时间 / Notification created (UTC): ${new Date(createdAt).toISOString()}`,
+    ...(event.receivedAt == null ? [] : [`接收与发生时间差 / Receipt minus event time: ${event.receivedAt - event.timestamp} ms`]),
+    "时间说明 / Timing note: 发生时间由客户端上报；时间差可能来自补报、传输延迟或设备时钟偏差，不能单凭收信时间认定为刚发生或当前版本故障。 / Client time and receipt time can differ due to replay, transport delay or device clock skew; receiving an email does not establish a new failure or a current-release failure.",
     `最近发生 / Last seen (UTC): ${new Date(issue.lastSeenAt).toISOString()}`,
     `Event ID: ${event.eventId}`,
     `Issue ID: ${issue.id}`
