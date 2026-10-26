@@ -273,7 +273,7 @@ describe('email notification API and delivery', () => {
     expect(job.text).toContain('请求地址 / Request URL: https://api.example.com/api/orders?token=%5BFiltered%5D&order=42');
     expect(job.text).toContain('页面完整地址 / Page URL: https://shop.example.com/app?lang=zh#/orders/detail?id=42&token=%5BFiltered%5D');
     expect(job.text).toContain('本次版本 / Event release: trigger-release');
-    expect(job.text).toContain(`本次发生 / Event time (UTC): ${new Date(trigger.timestamp).toISOString()}`);
+    expect(job.text).toContain(`客户端发生时间 / Client event time (UTC): ${new Date(trigger.timestamp).toISOString()}`);
     expect(job.text).toContain('状态码 / Status: 503');
     expect(job.text).toContain('请求耗时 / Duration: 120 ms');
     expect(job.text).toContain('环境 / Environment: test');
