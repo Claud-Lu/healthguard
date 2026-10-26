@@ -91,12 +91,36 @@ describe('email notification API and delivery', () => {
     await store.ingestEvents([event('5', 'js:boom', 'v2.0.0')]);
     jobs = await store.notifications.listJobs('u1', 'app-one');
     expect(jobs[0].reason).toBe('regression');
+    for (const job of jobs) expect(job.subject.startsWith(`[HealthGuard][${job.issueId}] `)).toBe(true);
     const send = vi.fn().mockResolvedValue(undefined);
     const worker = createNotificationWorker(store, key, send);
     await Promise.all([worker.run(), worker.run()]);
     expect(send).toHaveBeenCalledOnce();
     expect((await store.notifications.listJobs('u1', 'app-one')).filter(j => j.status === 'sent')).toHaveLength(1);
     vi.restoreAllMocks();
+  });
+
+  it('delivers distinct issue IDs in subjects and retains them in notification history', async () => {
+    const { request, root, store } = await fixture();
+    await request('PUT', '/api/notifications/sender', sender);
+    await request('PUT', root, defaultRule);
+    await store.ingestEvents([event('occurrence-one'), event('occurrence-two', 'js:another')]);
+    const jobs = await store.notifications.listJobs('u1', 'app-one');
+    const issues = await store.listIssues({ appKey: 'app-one' });
+    expect(jobs).toHaveLength(2);
+    expect(new Set(jobs.map(job => job.subject)).size).toBe(2);
+    for (const issue of issues) {
+      const job = jobs.find(item => item.issueId === issue.id)!;
+      expect(job.subject.startsWith(`[HealthGuard][${issue.id}] `)).toBe(true);
+    }
+    const send = vi.fn().mockResolvedValue(undefined);
+    const worker = createNotificationWorker(store, key, send);
+    await worker.run();
+    await worker.run();
+    expect(send.mock.calls.map(([mail]) => mail.subject).sort()).toEqual(jobs.map(job => job.subject).sort());
+    const history = (await request('GET', `${root}/history`)).json().jobs;
+    expect(history.every((job: { status: string }) => job.status === 'sent')).toBe(true);
+    expect(history.map((job: { subject: string }) => job.subject).sort()).toEqual(jobs.map(job => job.subject).sort());
   });
 
   it('ingests events successfully when SMTP fails and cancels queued alerts after disabling', async () => {
