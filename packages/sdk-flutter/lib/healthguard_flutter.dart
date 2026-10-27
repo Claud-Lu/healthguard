@@ -2,6 +2,9 @@ library;
 
 export 'src/network_diagnostics.dart';
 export 'src/io_request_trace.dart';
+export 'src/device_identity.dart';
+export 'src/device_debug_page.dart';
+import 'src/device_identity.dart';
 import 'src/network_diagnostics.dart';
 
 import 'dart:async';
@@ -37,6 +40,7 @@ class HealthGuardClient {
     HealthGuardStorage? storage,
     Future<void> Function(Map<String, dynamic>)? transport,
     Future<Map<String, dynamic>> Function()? networkSnapshot,
+    Future<Map<String, dynamic>> Function()? deviceSnapshot,
     this.retryInterval = const Duration(seconds: 30),
     this.cooldown = const Duration(seconds: 30),
     Set<String> additionalContextKeys = const {},
@@ -44,6 +48,7 @@ class HealthGuardClient {
   })  : _storage = storage ?? _PreferencesStorage(),
         _transport = transport,
         _snapshot = networkSnapshot,
+        _deviceSnapshot = deviceSnapshot,
         _contextKeys = Set.unmodifiable(additionalContextKeys),
         _limit = maxPendingEvents.clamp(1, 100);
 
@@ -52,6 +57,12 @@ class HealthGuardClient {
   final HealthGuardStorage _storage;
   final Future<void> Function(Map<String, dynamic>)? _transport;
   final Future<Map<String, dynamic>> Function()? _snapshot;
+  final Future<Map<String, dynamic>> Function()? _deviceSnapshot;
+  HealthGuardDeviceIdentity _device = const HealthGuardDeviceIdentity();
+  HealthGuardDeviceIdentity get deviceIdentity => _device;
+  String get deviceShortCode => _device.shortCode;
+  String get appVersion =>
+      release.isNotEmpty ? release : (_device.appVersion ?? '');
   final Set<String> _contextKeys;
   final int _limit;
   final Duration retryInterval, cooldown;
@@ -75,6 +86,20 @@ class HealthGuardClient {
 
   Future<void> initialize() => _initializing ??= _initialize();
   Future<void> _initialize() async {
+    try {
+      final value = await (_deviceSnapshot?.call() ??
+              _channel.invokeMapMethod<String, dynamic>('deviceIdentity', {
+                'appKey': appKey
+              }).then((value) => value ?? <String, dynamic>{}))
+          .timeout(const Duration(milliseconds: 300));
+      _device = HealthGuardDeviceIdentity.fromNative(value);
+    } on TimeoutException {
+      _device = const HealthGuardDeviceIdentity(reason: 'timeout');
+    } on MissingPluginException {
+      _device = const HealthGuardDeviceIdentity(reason: 'unsupported_platform');
+    } catch (_) {
+      _device = const HealthGuardDeviceIdentity(reason: 'platform_error');
+    }
     try {
       final saved = jsonDecode(await _storage.read(_key) ?? '[]');
       if (saved is List) {
@@ -188,14 +213,14 @@ class HealthGuardClient {
       'timestamp': (occurredAt ?? now).millisecondsSinceEpoch,
       'sessionId': _session,
       'anonymousId': _anonymous,
-      'release': release,
+      'release': appVersion,
       'environment': eventEnvironment ?? environment,
-      'sdkVersion': '0.2.1-flutter',
-      if (deviceModel != null || deviceSystem != null)
-        'deviceInfo': {
-          if (deviceModel != null) 'model': _safeText(deviceModel),
-          if (deviceSystem != null) 'system': _safeText(deviceSystem),
-        },
+      'sdkVersion': healthGuardSdkVersion,
+      ..._device.toEventFields(),
+      'deviceInfo': {
+        'model': _safeText(deviceModel ?? _device.model ?? '未获取'),
+        'system': _safeText(deviceSystem ?? _device.system ?? '未获取'),
+      },
       if (fingerprint != null) 'fingerprint': _safeText(fingerprint),
       'method': method.toUpperCase(),
       'url': safeRequestUrl(url),
@@ -244,14 +269,14 @@ class HealthGuardClient {
       'timestamp': DateTime.now().millisecondsSinceEpoch,
       'sessionId': _session,
       'anonymousId': _anonymous,
-      'release': release,
+      'release': appVersion,
       'environment': eventEnvironment ?? environment,
-      'sdkVersion': '0.2.1-flutter',
-      if (deviceModel != null || deviceSystem != null)
-        'deviceInfo': {
-          if (deviceModel != null) 'model': _safeText(deviceModel),
-          if (deviceSystem != null) 'system': _safeText(deviceSystem),
-        },
+      'sdkVersion': healthGuardSdkVersion,
+      ..._device.toEventFields(),
+      'deviceInfo': {
+        'model': _safeText(deviceModel ?? _device.model ?? '未获取'),
+        'system': _safeText(deviceSystem ?? _device.system ?? '未获取'),
+      },
       'errorType': 'native',
       'message': message,
       if (stackTrace != null) 'stack': _safeText(stackTrace.toString()),

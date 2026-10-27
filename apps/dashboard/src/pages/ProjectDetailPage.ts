@@ -1,3 +1,5 @@
+import DevicePanel from '../components/DevicePanel';
+import { deviceContextLines } from '@health-guard/core';
 import { eventTimelineRows, eventTimingNote } from '../event-timeline';
 import BrandHeader from '../components/BrandHeader';
 import ArchiveIssueDialog from '../components/ArchiveIssueDialog';
@@ -43,6 +45,8 @@ export default {
     const customEndDate = ref('');
     const repairText = computed(() => repairLabels[store.locale]);
     const saving = ref(false);
+    const deviceRefresh = ref(0);
+    const deviceTimeRange = computed(() => { deviceRefresh.value; return getSelectedTimeRange(); });
     const archiveTarget = ref<IssueSummary | null>(null);
     const actionFeedback = ref<{ message: string; error: boolean } | null>(null);
 
@@ -82,6 +86,7 @@ export default {
     async function loadProjectData(): Promise<void> {
       if (!store.token || !appKey.value) return;
       const request = ++projectRequest;
+      ++deviceRefresh.value;
       const query = buildIssueQuery();
       try {
         const [overviewResponse, issueResponse] = await Promise.all([
@@ -158,7 +163,7 @@ export default {
       if (includeAppKey) params.push(`appKey=${encodeURIComponent(appKey.value)}`);
       if (selectedPlatform.value) params.push(`platform=${encodeURIComponent(selectedPlatform.value)}`);
       params.push(`status=${encodeURIComponent(issueStatus.value)}`);
-      const range = getSelectedTimeRange();
+      const range = deviceTimeRange.value;
       if (range.start !== undefined) params.push(`start=${encodeURIComponent(String(range.start))}`);
       if (range.end !== undefined) params.push(`end=${encodeURIComponent(String(range.end))}`);
       return params.join('&');
@@ -228,6 +233,7 @@ export default {
         ]),
         evt.filename ? h('p', { class: 'event-meta' }, `${String(evt.filename)}:${String(evt.lineno ?? '-')}:${String(evt.colno ?? '-')}`) : null,
         evt.stack ? h('pre', { class: 'event-stack' }, String(evt.stack)) : null,
+        ...deviceContextLines(evt, store.locale === 'zh-CN' ? 'zh' : 'en').map(line => h('p', { class: 'event-device-context' }, line)),
         renderEventTimeline(evt),
         renderNetworkDiagnostic(evt, store.locale === 'zh-CN' ? 'zh' : 'en'),
         renderRequestData(getEventRequestData(evt, context)),
@@ -304,6 +310,7 @@ export default {
           h('span', `Duration: ${String(evt.duration ?? '-')}ms`),
           evt.errorMessage ? h('span', { class: 'event-error-msg' }, String(evt.errorMessage)) : null
         ]),
+        ...deviceContextLines(evt, store.locale === 'zh-CN' ? 'zh' : 'en').map(line => h('p', { class: 'event-device-context' }, line)),
         renderEventTimeline(evt),
         renderNetworkDiagnostic(evt, store.locale === 'zh-CN' ? 'zh' : 'en'),
         renderRequestData(getEventRequestData(evt, context)),
@@ -423,6 +430,7 @@ export default {
           lines.push(`- **耗时:** ${String(evt.duration ?? '-')}ms`);
         }
 
+        lines.push(...deviceContextLines(evt, 'zh').map(line => `- ${line}`));
         lines.push(...networkDiagnosticLines(evt, 'zh').map((line) => `- ${line}`));
         if (page) lines.push(`- **页面:** ${String(page)}`);
         if (scene) lines.push(`- **场景:** ${String(scene)}`);
@@ -618,6 +626,8 @@ export default {
             metricCard(t.affectedUsers, overview.value.affectedUsers),
             metricCard(t.issues, overview.value.issues)
           ]),
+
+          h(DevicePanel, { key: appKey.value, appKey: appKey.value, platform: selectedPlatform.value, start: deviceTimeRange.value.start, end: deviceTimeRange.value.end, refresh: deviceRefresh.value }),
 
           h('section', { class: selectedIssue.value ? 'grid issue-workspace has-selection' : 'grid issue-workspace no-selection' }, [
             h('div', { class: 'panel issue-list-panel' }, [

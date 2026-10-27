@@ -1,4 +1,4 @@
-import type { ErrorEvent, HealthGuardEvent } from '@health-guard/core';
+import type { DeviceList, ErrorEvent, HealthGuardEvent } from '@health-guard/core';
 import type { NotificationStore } from '../notifications/types';
 
 export type AppType = 'web' | 'wechat-miniprogram' | 'alipay-miniprogram' | 'flutter' | 'uni-app' | 'other';
@@ -133,8 +133,22 @@ export interface IssueQuery {
   offset?: number;
 }
 
+export interface DeviceQuery {
+  appKey: string;
+  platform?: string;
+  startTime?: number;
+  endTime?: number;
+  kind?: 'stable' | 'installation' | 'unknown';
+  search?: string;
+  key?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface Store {
   notifications: NotificationStore;
+  listDevices(query: DeviceQuery): Promise<DeviceList>;
+  listDeviceEvents(query: DeviceQuery): Promise<{ events: StoredEvent[]; total: number }>;
   createUser(user: UserRecord): Promise<void>;
   findUserByEmail(email: string): Promise<UserRecord | null>;
   findUserById(id: string): Promise<UserRecord | null>;

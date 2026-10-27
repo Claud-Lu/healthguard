@@ -85,3 +85,8 @@ Agents must obtain explicit authorization before sending test emails or enabling
 ## Validation
 
 `yarn test`, `yarn type-check`, `yarn lint`, and `yarn build` cover the normal project checks. Set `TEST_DATABASE_URL` to an isolated PostgreSQL database to run the notification integration test, which creates and removes its own schema and verifies concurrent ingestion, durable settings, single job claims and interrupted-delivery recovery. Do not target a production database for this test.
+
+
+### Device shortcode and triggering App version (Unreleased)
+
+New automatic alerts show the stable-device shortcode (when available) in the subject and body, and include the triggering event's App/SDK versions plus ID source/scope/status. Missing stable IDs remain unknown/unavailable; model and installation ID never substitute for a stable device code. New Flutter consumers use the same code in their debug page. See [device identity](./device-identity.md). Historical/queued emails are not rewritten.

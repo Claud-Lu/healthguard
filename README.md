@@ -26,6 +26,8 @@ It is designed for teams shipping browser, mini-program, and uni-app experiences
 
 ## ✨ Features
 
+- **Scoped Android device identities** — Flutter source 0.3.0 adds pseudonymous IDs, device anomaly histories and matching App/email codes. [Protocol and rollout limits](./docs/device-identity.md). Unreleased; target-tablet acceptance pending.
+
 - **Separate monitoring clocks** — Compare client occurrence, server receipt and mail lifecycle times without mistaking delayed reports for fresh failures.
 
 - **Issue IDs in email subjects** — Identify errors directly in inbox lists; new-issue, regression and threshold alerts retain the full issue ID.

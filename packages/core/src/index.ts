@@ -1,6 +1,8 @@
 import { z } from 'zod';
 export * from './network-diagnostics';
 export * from './http-evidence';
+export * from './device-identity';
+import { deviceIdentityIsConsistent } from './device-identity';
 import { httpFailurePhase, httpOccurrenceLines } from './http-evidence';
 import { networkTargetOrigin } from './network-diagnostics';
 
@@ -67,6 +69,11 @@ export const baseEventSchema = z.object({
   environment: z.enum(['development', 'test', 'production']).optional(),
   pageUrl: z.string().optional(),
   sdkVersion: z.string().min(1),
+  deviceId: z.string().regex(/^hgd1_[a-f0-9]{64}$/).optional(),
+  deviceIdStatus: z.enum(['available', 'unavailable']).optional(),
+  deviceIdSource: z.literal('android_id').optional(),
+  deviceIdScope: z.enum(['android_user_signing_key_app', 'android_user_app_legacy']).optional(),
+  deviceIdReason: z.enum(['not_available', 'invalid_android_id', 'platform_error', 'timeout', 'unsupported_platform']).optional(),
   deviceInfo: deviceInfoSchema.optional(),
   networkDiagnostic: networkDiagnosticSchema.optional()
 });
@@ -127,6 +134,9 @@ export const eventBatchSchema = z
   })
   .superRefine((batch, context) => {
     for (const [index, event] of batch.events.entries()) {
+      if (!deviceIdentityIsConsistent(event)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['events', index, 'deviceId'], message: 'device identity must be a scoped pseudonym or explicitly unavailable' });
+      }
       if (event.appKey !== batch.appKey) {
         context.addIssue({
           code: z.ZodIssueCode.custom,

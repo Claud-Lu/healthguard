@@ -208,3 +208,8 @@ Issue row metadata keeps type and event count on the left, with platform and tim
 The active project is identified in the sidebar; its duplicate main heading and description are omitted. Filters and actions share a wrapping toolbar, and all five metrics remain in one compact horizontal row with label and value on the same line (scrollable on narrow screens). The current/archive switch controls visibility; misleading repair-stage tabs are removed. Filtering, detail selection, request titles and repair actions retain their existing behavior.
 
 The Issue heading and search field share one row; the redundant group total is omitted; the compact Issues metric still shows the count. Filter chevrons are inset 12px with 36px reserved for text, and selectors/date fields share a 38px height. Keyboard focus remains visible.
+
+
+## Scoped device identities (Unreleased)
+
+Android/Flutter 0.3.0 source adds native-side pseudonymization, uniform event metadata and an embeddable App debug page. The project device panel separates stable device identities, installation IDs and unidentified records; it never groups by model. New emails carry the triggering shortcode and App release. Deploy Collector/Dashboard before SDK consumers; preserve project, package and signing scope. No historical IDs are backfilled. Follow [the device identity protocol, owner-only APIs and target-tablet acceptance matrix](./device-identity.md). Source/build checks do not establish publication, deployment, email delivery or target-device lifecycle behavior.

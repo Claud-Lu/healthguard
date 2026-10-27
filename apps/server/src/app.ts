@@ -1,3 +1,4 @@
+import { registerDeviceRoutes } from './device-routes';
 import { registerArchiveRoutes } from './archive-routes';
 import { registerProjectRoutes } from './project-routes';
 import cors from '@fastify/cors';
@@ -26,6 +27,7 @@ export function createServerApp(store: Store, options?: { corsOrigin?: string | 
   });
   registerNotificationRoutes(app, store, options);
   registerProjectRoutes(app, store);
+  registerDeviceRoutes(app, store);
 
   const healthPayload = {
     ok: true,

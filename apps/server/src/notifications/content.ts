@@ -1,4 +1,4 @@
-import { httpEventSummary, networkDiagnosticLines, type HealthGuardEvent } from '@health-guard/core';
+import { deviceContextLines, deviceShortCode, httpEventSummary, networkDiagnosticLines, type HealthGuardEvent } from '@health-guard/core';
 import type { AppRecord, IssueSummary, StoredEvent } from '../store/types';
 import type { NotificationJob } from './types';
 
@@ -62,6 +62,8 @@ export function issueAlertContent(app: AppRecord, issue: IssueSummary, event: St
     `环境 / Environment: ${event.environment ?? missing}`,
     `本次设备型号 / Event device model: ${event.deviceInfo?.model?.trim() || missing}`,
     `本次系统版本 / Event OS: ${event.deviceInfo?.system?.trim() || missing}`,
+    ...deviceContextLines(event, 'zh'),
+    ...deviceContextLines(event, 'en'),
     `累计次数 / Total count: ${issue.eventCount}`, ''
   ];
   if (event.type === 'http') {
@@ -90,5 +92,5 @@ export function issueAlertContent(app: AppRecord, issue: IssueSummary, event: St
   );
   if (dashboard) lines.push('', `查看项目 / View project: ${dashboard.replace(/\/$/, '')}/projects/${encodeURIComponent(app.appKey)}`);
   lines.push('', '可在 HealthGuard 通知设置中调整规则或关闭推送。');
-  return { subject: `[HealthGuard][${issue.id}] ${labels[reason]} · ${app.name}`.replace(/[\r\n]/g, ' ').slice(0, 512), text: lines.join('\n') };
+  return { subject: `[HealthGuard][${issue.id}] ${labels[reason]} · ${app.name}${deviceShortCode(event) ? ` · ${deviceShortCode(event)}` : ''}`.replace(/[\r\n]/g, ' ').slice(0, 512), text: lines.join('\n') };
 }

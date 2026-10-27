@@ -15,7 +15,7 @@ Applications may configure additionalContextKeys for explicitly approved scalar 
 
 Existing application queues and installation IDs can be migrated through HealthGuardStorage. Persist the new queue before clearing old storage and retain original event IDs, timestamps and releases. A custom transport must throw unless the collector acknowledges the full batch.
 
-The package is source-only, not published to pub.dev. Pin reviewed commit 792e323348083657ae519cabac104479314d9cfd. Registry publication, server deployment and device acceptance are separate steps.
+The package is source-only, not published to pub.dev. The older 0.2.1 integration was pinned at 792e323348083657ae519cabac104479314d9cfd; it does not include the 0.3.0 device identity feature. Pin the reviewed 0.3.0 feature commit when migrating. Registry publication, server deployment and device acceptance are separate steps.
 
 
 ## Detailed Flutter diagnostics (source 0.2.1)
@@ -67,3 +67,8 @@ Connection acquisition includes possible connection-pool wait, DNS, TCP, TLS and
 proxy work. Individual original DNS/TCP/TLS timings remain unavailable. Independent
 post-failure probes never fill those timings or prove the original path healthy.
 No request headers, body, IP addresses or URL query are stored in requestTrace.
+
+
+## Scoped device identity (0.3.0 source)
+
+Android automatically supplies a SHA-256 pseudonym and device/App metadata. Read `client.deviceShortCode` after initialization or mount `HealthGuardDeviceDebugPage(client: client)` in existing debug navigation. Never use the shortcode as a database key or an authentication credential. Android ID's scope/reset limits, unavailable behavior, Collector rollout and acceptance checklist are documented in [device identity](../../docs/device-identity.md). Other platforms remain explicitly unavailable; no raw Android ID is returned to Dart. This is source-only and not yet published to pub.dev.

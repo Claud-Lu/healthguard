@@ -13,6 +13,8 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.provider.Settings;
+import android.content.pm.PackageInfo;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -59,6 +61,14 @@ public class HealthGuardPlugin implements FlutterPlugin,
         switch (call.method) {
             case "start": users++; start(); result.success(null); break;
             case "stop": users = Math.max(0, users - 1); if (users == 0) stop(); result.success(null); break;
+            case "deviceIdentity":
+                final String appKey = call.argument("appKey");
+                final Context context = app;
+                new Thread(() -> {
+                    final Map<String, Object> identity = deviceIdentity(context, appKey);
+                    handler.post(() -> result.success(identity));
+                }, "healthguard-device").start();
+                break;
             case "snapshot": result.success(snapshot()); break;
             default: result.notImplemented();
         }
@@ -68,6 +78,32 @@ public class HealthGuardPlugin implements FlutterPlugin,
     }
     @Override public void onCancel(Object args) {
         sink = null; users = Math.max(0, users - 1); if (users == 0) stop();
+    }
+
+    private static Map<String, Object> deviceIdentity(Context context, String appKey) {
+        Map<String, Object> value = new HashMap<>();
+        value.put("deviceIdStatus", "unavailable");
+        value.put("deviceIdSource", "android_id");
+        String scope = Build.VERSION.SDK_INT >= 26 ? "android_user_signing_key_app" : "android_user_app_legacy";
+        value.put("deviceIdScope", scope);
+        value.put("model", Build.MODEL);
+        value.put("system", "Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")");
+        value.put("deviceIdReason", "not_available");
+        if (context == null) return value;
+        try {
+            PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            if (info.versionName != null) value.put("appVersion", info.versionName);
+        } catch (Exception ignored) { /* Device identity remains independent of app version lookup. */ }
+        try {
+            String raw = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
+            if (raw == null || raw.trim().isEmpty()) return value;
+            // Only a project/app-scoped pseudonym crosses the channel; raw ID is never logged or stored.
+            String id = DeviceId.create(raw, context.getPackageName(), appKey, scope);
+            if (id == null) { value.put("deviceIdReason", "invalid_android_id"); return value; }
+            value.put("deviceId", id); value.put("deviceIdStatus", "available");
+            value.remove("deviceIdReason");
+        } catch (Exception ignored) { value.put("deviceIdReason", "platform_error"); }
+        return value;
     }
 
     private synchronized Map<String, Object> snapshot() {

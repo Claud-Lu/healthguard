@@ -1,3 +1,5 @@
+import { summarizeDevices, matchesDeviceEvent } from './devices';
+import { deviceGrouping } from '@health-guard/core';
 import { createHttpFingerprint, httpEventSummary } from '@health-guard/core';
 import { createMemoryNotifications } from '../notifications/store';
 import { queueIssueAlert } from '../notifications/service';
@@ -32,6 +34,12 @@ export function createMemoryStore(): Store {
 
   return {
     notifications,
+    async listDevices(query) { return summarizeDevices(state.events, query); },
+    async listDeviceEvents(query) {
+      const events = state.events.filter(e => matchesDeviceEvent(e, query) && deviceGrouping(e).key === query.key)
+        .sort((a, b) => b.timestamp - a.timestamp || a.eventId.localeCompare(b.eventId));
+      return { total: events.length, events: events.slice(query.offset ?? 0, (query.offset ?? 0) + (query.limit ?? 50)) };
+    },
     async createUser(user: UserRecord): Promise<void> {
       state.users.push(user);
     },

@@ -1254,3 +1254,19 @@ pre {
 .event-timeline small { display: block; margin-top: 6px; font-size: 11px; line-height: 1.6; opacity: .75; }
 .notification-timeline { min-width: 235px; font-size: 12px; line-height: 1.7; }
 .notification-timeline strong { font-weight: 500; }
+
+/* Device identities remain readable on narrow field-service screens. */
+.device-panel { margin-bottom: 18px; min-width: 0; }
+.device-note { color: var(--muted, #64748b); font-size: 13px; line-height: 1.6; }
+.device-counts, .device-controls { display: flex; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+.device-counts > *, .device-controls > * { margin-right: 12px; margin-bottom: 8px; }
+.device-controls input { min-width: 0; max-width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; }
+.device-controls [aria-pressed="true"] { background: #e0edff; color: #194185; border-color: #6998e8; }
+.device-list { max-height: 360px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 10px; }
+.device-row { display: flex; flex-direction: column; align-items: flex-start; text-align: left; background: transparent; border: 1px solid #d8e1ed; border-radius: 10px; padding: 14px; min-width: 0; cursor: pointer; color: inherit; }
+.device-row > * { max-width: 100%; overflow-wrap: anywhere; margin-bottom: 6px; }
+.device-row.active { border-color: #5287db; background: #f0f6ff; }
+.device-row span { font-size: 12px; color: #526175; line-height: 1.5; }
+.device-history { margin-top: 16px; min-width: 0; }
+.device-history p, .device-identity, .event-device-context { overflow-wrap: anywhere; }
+.device-history .event-card { margin-top: 12px; }

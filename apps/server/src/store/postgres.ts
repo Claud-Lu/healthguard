@@ -1,3 +1,5 @@
+import { deviceEventSql } from './devices';
+import { deviceShortCode, type DeviceSummary } from '@health-guard/core';
 import type { Pool, PoolClient } from 'pg';
 import { createPostgresNotifications, ensureNotificationSchema } from '../notifications/store';
 import { queueIssueAlert } from '../notifications/service';
@@ -20,6 +22,7 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
   await ensureSchema(pool);
   // Nullable and unbackfilled: historical insertion times are not request receipt times.
   await pool.query('ALTER TABLE events ADD COLUMN IF NOT EXISTS received_at BIGINT');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_events_device_lookup ON events(app_key, timestamp DESC)');
   await pool.query('ALTER TABLE issues ADD COLUMN IF NOT EXISTS repair_record JSONB');
   await pool.query('ALTER TABLE issues ADD COLUMN IF NOT EXISTS archive_record JSONB');
   await ensureNotificationSchema(pool);
@@ -27,6 +30,49 @@ export async function createPostgresStore(options: PostgresStoreOptions): Promis
 
   return {
     notifications: createPostgresNotifications(pool),
+    async listDevices(query) {
+      const { cte, params } = deviceEventSql(query);
+      const filters: string[] = [];
+      if (query.kind) { params.push(query.kind); filters.push(`kind = $${params.length}`); }
+      if (query.search) {
+        params.push(query.search.toLowerCase().replace(/^hg-/, ''));
+        filters.push(`(POSITION($${params.length} IN LOWER(identity_key)) > 0 OR POSITION($${params.length} IN LOWER(latest->>'model')) > 0)`);
+      }
+      const filtered = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+      params.push(query.limit ?? 50, query.offset ?? 0);
+      const result = await pool.query(`${cte}, grouped AS (
+        SELECT identity_key, kind, COUNT(*)::int AS anomaly_count, MIN(timestamp) AS first_seen, MAX(timestamp) AS last_seen,
+          MAX(COALESCE(received_at, timestamp)) AS last_reported,
+          (ARRAY_AGG(jsonb_build_object('model', payload->'deviceInfo'->>'model', 'system', payload->'deviceInfo'->>'system',
+            'latestRelease', NULLIF(TRIM(release), ''), 'sdkVersion', sdk_version, 'lastReportedAt', received_at,
+            'deviceId', CASE WHEN kind = 'stable' THEN payload->>'deviceId' ELSE NULL END,
+            'source', CASE WHEN kind = 'stable' THEN payload->>'deviceIdSource' ELSE NULL END,
+            'scope', CASE WHEN kind = 'stable' THEN payload->>'deviceIdScope' ELSE NULL END)
+            ORDER BY COALESCE(received_at, timestamp) DESC, timestamp DESC, event_id DESC))[1] AS latest
+        FROM identified GROUP BY identity_key, kind
+      ), filtered AS (SELECT * FROM grouped ${filtered}), page AS (
+        SELECT identity_key, kind, anomaly_count, first_seen, last_seen, last_reported, latest FROM filtered
+        ORDER BY last_seen DESC, identity_key ASC LIMIT $${params.length - 1} OFFSET $${params.length}
+      ) SELECT COALESCE((SELECT jsonb_agg(jsonb_build_object('key', identity_key, 'kind', kind,
+        'anomalyCount', anomaly_count, 'firstSeenAt', first_seen, 'lastSeenAt', last_seen, 'lastReportedAt', last_reported) || latest
+        ORDER BY last_seen DESC, identity_key ASC) FROM page), '[]'::jsonb) AS devices,
+        (SELECT COUNT(*)::int FROM filtered) AS total,
+        jsonb_build_object('stableDevices', (SELECT COUNT(*)::int FROM grouped WHERE kind = 'stable'),
+          'installations', (SELECT COUNT(*)::int FROM grouped WHERE kind = 'installation'),
+          'unidentifiedEvents', (SELECT COALESCE(SUM(anomaly_count), 0)::int FROM grouped WHERE kind = 'unknown')) AS totals`, params);
+      const row = result.rows[0];
+      return { total: Number(row.total), totals: row.totals, devices: (row.devices as DeviceSummary[]).map(device => ({ ...device,
+        shortCode: device.deviceId ? deviceShortCode({ deviceId: device.deviceId, deviceIdStatus: 'available', deviceIdSource: device.source, deviceIdScope: device.scope }) : null })) };
+    },
+    async listDeviceEvents(query) {
+      const { cte, params } = deviceEventSql(query);
+      params.push(query.key, query.limit ?? 50, query.offset ?? 0);
+      const result = await pool.query(`${cte}, matching AS (SELECT * FROM identified WHERE identity_key = $${params.length - 2}), page AS (
+        SELECT payload, received_at, timestamp, event_id FROM matching ORDER BY timestamp DESC, event_id ASC LIMIT $${params.length - 1} OFFSET $${params.length}
+      ) SELECT (SELECT COUNT(*)::int FROM matching) AS total,
+        COALESCE((SELECT jsonb_agg(payload || jsonb_build_object('receivedAt', received_at) ORDER BY timestamp DESC, event_id ASC) FROM page), '[]'::jsonb) AS events`, params);
+      return { total: Number(result.rows[0].total), events: result.rows[0].events };
+    },
     async createUser(user: UserRecord): Promise<void> {
       await pool.query(
         'INSERT INTO users (id, email, password_hash, created_at) VALUES ($1, $2, $3, $4)',
