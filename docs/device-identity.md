@@ -1,6 +1,6 @@
 # Scoped device identity (Android / Flutter 0.3.0 source)
 
-This feature is **Unreleased**. Source checks are separate from SDK publication, Collector/Dashboard deployment, App release and target-tablet acceptance.
+This feature is available as **Flutter 0.3.0 Git source**. Collector/Dashboard and a consuming App have passed deployment verification. Package-registry publication, real email delivery and target-tablet acceptance remain separate and pending.
 
 ## Identity and limits
 
@@ -96,4 +96,4 @@ Record tablet model, Android/API, package, signature fingerprint, App version/bu
 - Flutter 3.27 / Dart 3.6: all 40 SDK tests and Dart analysis passed. The pending-identity Dio test confirms the business failure returns before identity lookup completes.
 - Android plugin: Java 11 target compiled against Android API 35 and Flutter 3.27 embedding; deterministic hash/scope tests passed. No target APK installation was performed.
 - Real Chrome against disposable Collector: same-model synthetic identities, cross-version history, categories, shortcode search/empty state, desktop/390px layout and English passed. Screenshots/logs retained outside source.
-- No connected physical tablets, production deployment, registry publication, real email delivery or App distribution was performed. The physical acceptance matrix above remains pending.
+- Follow-up publication verified Collector/Dashboard deployment, preserved data/configuration, authenticated live browser flows, public asset hashes and a consuming App artifact/update API. No synthetic events were written to deployed data and no real test email was sent. Target-tablet acceptance and package-registry publication remain pending; the physical matrix above is unchanged.
