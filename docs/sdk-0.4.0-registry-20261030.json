@@ -1,0 +1,38 @@
+[
+  {
+    "name": "@health-guard/core",
+    "version": "0.4.0",
+    "latest": "0.4.0",
+    "publishedAt": "2026-10-30T09:13:46.428Z",
+    "integrity": "sha512-sc7xLm87+QY8IhKysYnVUtOew5sc+MSD/7nlSZMuPKDQXIeBFKDvFDk5XQNwvqFn0gt73Mj/B89HaRt/ztiTPA==",
+    "source": "a54ee71cf02925ba2b1f1c6ed565423761e92e57",
+    "provenance": true
+  },
+  {
+    "name": "@health-guard/sdk-web",
+    "version": "0.4.0",
+    "latest": "0.4.0",
+    "publishedAt": "2026-10-30T09:14:29.348Z",
+    "integrity": "sha512-/TKwZb2uaQalwdO+2Uigwrt9aoMe/IXHyPwnnjb5gr6E5MbEWtoElF6vyoMw9SHBszrxpj/EQCh/5UX+wMDBkA==",
+    "source": "a54ee71cf02925ba2b1f1c6ed565423761e92e57",
+    "provenance": true
+  },
+  {
+    "name": "@health-guard/sdk-miniprogram",
+    "version": "0.4.0",
+    "latest": "0.4.0",
+    "publishedAt": "2026-10-30T09:12:33.824Z",
+    "integrity": "sha512-n0zenkYnsN+Tx6tB+94SuJCyZbajeqdWVmUgDboT251wQJ9CaeOIpyZePviwQQHSi0MsSgBOUXZBfKXf3WbXuw==",
+    "source": "a54ee71cf02925ba2b1f1c6ed565423761e92e57",
+    "provenance": true
+  },
+  {
+    "name": "@health-guard/sdk-uniapp",
+    "version": "0.4.0",
+    "latest": "0.4.0",
+    "publishedAt": "2026-10-30T09:14:03.577Z",
+    "integrity": "sha512-PuLmPuZ9sV6oaaeMjC1LQ0VFHAAq2BJuCmeW3ajfOgaIFceLRMI5+4YNJKIoJJkL6g8KTGDAQ6GiwQeEm00JZA==",
+    "source": "a54ee71cf02925ba2b1f1c6ed565423761e92e57",
+    "provenance": true
+  }
+]

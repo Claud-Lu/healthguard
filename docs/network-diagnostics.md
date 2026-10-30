@@ -5,7 +5,7 @@
 ## 接入与发布顺序
 
 1. 先部署更新后的 Collector 和 Dashboard；新字段为可选字段，旧客户端仍可上报。
-2. 验收后发布 npm `@health-guard/core`、Web、小程序和 uni-app SDK `0.4.0`。本仓库版本提升不代表已经发布到 npm。
+2. npm `@health-guard/core`、Web、小程序和 uni-app SDK `0.4.0` 已于 2026-10-30 正式发布。每个自托管部署仍须核对自己的 Collector/Dashboard 版本与可选能力配置。
 3. Flutter 新增 `packages/sdk-flutter` / `healthguard_flutter@0.2.1`，当前可以通过 Git/path 引入；它不在 npm 发布流程中。pub.dev 发布须单独执行。
 4. 业务端升级并重新构建发布。旧 App 不能通过后台升级获得新采集能力，历史事件不回填。
 5. 替换业务端拦截器时删除重复 HTTP 上报路径；原有已处理异常调用、业务上下文和真实配置需要逐项核对，不自动删除。

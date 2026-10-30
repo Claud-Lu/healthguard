@@ -62,6 +62,8 @@ Only the display name changes. The app key, SDK settings, event/issue history an
 
 ## Integrate The Web SDK
 
+Web SDK 0.4.0 is available on npm. It owns passive browser error evidence and provides an optional Vue adapter; see [Browser diagnostics](./web-diagnostics.md). Builds supply exact release IDs and private sourcemaps. Upgrade and rebuild each consumer separately.
+
 Install `@health-guard/sdk-web`, then initialize the client in the target web application:
 
 ```ts

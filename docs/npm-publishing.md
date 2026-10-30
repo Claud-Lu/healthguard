@@ -59,4 +59,4 @@ After that, pushing a `v*` tag from the trusted repository publishes all package
 
 ## Reusable network diagnostics
 
-See [Network diagnostics](./network-diagnostics.md) for optional event fields, SDK setup, privacy, bounded replay and rollout verification. Deploy Collector/Dashboard before new SDK consumers, then release each client. JavaScript packages are prepared at 0.4.0; Flutter source is 0.1.0 and is distributed separately from npm. Do not claim deployment, registry publication or device acceptance from a source commit or build alone.
+See [Network diagnostics](./network-diagnostics.md) for optional event fields, SDK setup, privacy, bounded replay and rollout verification. Deploy Collector/Dashboard before new SDK consumers, then release each client. JavaScript core/Web/miniprogram/uni-app packages 0.4.0 were published to npm on 2026-10-30; Flutter is distributed separately from npm and retains its own release status. Do not claim deployment, registry publication or device acceptance from a source commit or build alone.

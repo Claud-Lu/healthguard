@@ -5,14 +5,17 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## JavaScript SDK 0.4.0 — 2026-10-30
 
-### 2026-10-30：浏览器异常诊断归入 Web SDK（源码 0.4.0）
+### 浏览器异常诊断归入 Web SDK
 
+- 发布记录：源码 a54ee71，GitHub Actions 41031232633；core、Web、小程序和 uni-app 的 npm 0.4.0 已核对 registry 与 provenance。业务依赖升级、部署与真机验收分别执行。
 - Web SDK 统一生成异常发生时的页面、产品/构建版本、浏览器、脚本清单与最近操作/请求现场，补充 UA 可推断的型号与系统；每条异常独立快照，不受后续换页、加载脚本或上传时机影响。应用无需复制浏览器观察器。
 - 提供无 Vue 运行时依赖的 `installVueErrorHandler`，保留原始 Error、组件/阶段与既有处理器；手动异常可传入有界组件/阶段信息。跨域 `Script error.` 标记 opaque，不能补造浏览器隐藏的堆栈或将脚本清单当作确切根因。
 - 统一在队列/默认和自定义 transport 前脱敏，剔除 URL 凭据及嵌套敏感值，不读取输入、文本、组件状态或请求/响应体。默认只做被动采集，支持关闭浏览器现场；dispose 清理监听及其拥有的 fetch/XHR 包装。
 - 修复其他批次上传过程中业务异常被丢弃的问题；较大诊断批次使用普通 fetch，避免超过浏览器 keepalive 配额而持续上报失败。构建系统继续负责精确版本及私有源码映射；已有客户端需升级并重新构建，历史不回填。源码提交、npm 发布、网站/App 部署和真机验收分别记录。
+
+## [Unreleased]
 
 ### 2026-10-27：Android / Flutter 设备标识（SDK 源码 0.3.0）
 

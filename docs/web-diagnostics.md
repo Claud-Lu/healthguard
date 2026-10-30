@@ -1,4 +1,4 @@
-# Browser error diagnostics (Web SDK 0.4.0 source, unreleased)
+# Browser error diagnostics (Web SDK 0.4.0)
 
 The Web SDK owns browser error evidence. Applications configure a project, collector and release; they do not need to implement their own window error listeners, browser parsers, script inventories or diagnostic redaction.
 
@@ -39,7 +39,7 @@ Other frameworks can forward caught errors with `client.captureException(error, 
 
 An SDK running in a browser cannot discover a Git commit or generate a build's sourcemaps. The application build supplies `release`/`buildRelease` and retains the exact private maps and JS hashes. Use matching maps to symbolicate available stacks; never rebuild a newer map for an older event or expose private maps in the public web root.
 
-This browser feature reuses `deviceInfo` and breadcrumb data supported by existing event schemas. Other optional 0.4.0 features have their own collector requirements; follow their rollout instructions separately. This document describes unreleased source. npm publication, upgrading/rebuilding consuming applications, production deployment, real browser/device testing and actual inbox checks remain separate steps. Existing deployed clients do not acquire new code automatically, and historical events are not backfilled.
+This browser feature reuses `deviceInfo` and breadcrumb data supported by existing event schemas. Other optional 0.4.0 features have their own collector requirements; follow their rollout instructions separately. Web SDK 0.4.0 was published to npm on 2026-10-30 from a54ee71 through the trusted publishing workflow. Consumer upgrades/rebuilds, production deployment, real browser/device testing and inbox checks remain separate steps. See the [SDK release record](./sdk-0.4.0-release-20261030.md). Existing deployed clients do not acquire new code automatically, and historical events are not backfilled.
 
 ## Reproducible browser verification
 
