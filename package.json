@@ -23,7 +23,8 @@
     "test": "vitest run",
     "type-check": "tsc -p tsconfig.json --noEmit",
     "prepare": "git config core.hooksPath .githooks",
-    "test:network": "vitest run packages/core/src/network-diagnostics.test.ts packages/network-sdk.test.ts apps/dashboard/src/network-diagnostic.test.ts apps/dashboard/src/sdk-integration.test.ts apps/server/src/notifications/content.test.ts --coverage --coverage.include=packages/core/src/network-diagnostics.ts --coverage.reporter=text --coverage.thresholds.lines=80 --coverage.thresholds.branches=80 --coverage.thresholds.functions=80 --coverage.thresholds.statements=80"
+    "test:network": "vitest run packages/core/src/network-diagnostics.test.ts packages/network-sdk.test.ts apps/dashboard/src/network-diagnostic.test.ts apps/dashboard/src/sdk-integration.test.ts apps/server/src/notifications/content.test.ts --coverage --coverage.include=packages/core/src/network-diagnostics.ts --coverage.reporter=text --coverage.thresholds.lines=80 --coverage.thresholds.branches=80 --coverage.thresholds.functions=80 --coverage.thresholds.statements=80",
+    "test:web:browser": "node scripts/verify-web-diagnostics.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.9",

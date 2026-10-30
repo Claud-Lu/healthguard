@@ -6,6 +6,9 @@ import {
   type ErrorEvent as HealthGuardErrorEvent,
   type EventBatch
 } from '@health-guard/core';
+import { describeWebDevice, installWebBreadcrumbs, sanitizeWebValue, webErrorBreadcrumb } from './web-diagnostics';
+export { installVueErrorHandler } from './vue';
+export { sanitizeWebDiagnosticUrl } from './web-diagnostics';
 
 const SDK_VERSION = '0.4.0';
 
@@ -21,6 +24,9 @@ export interface CaptureHttpInput {
 }
 
 export interface HealthGuardClientOptions {
+  /** Passive browser error context; enabled by default. Never performs active probes. */
+  webDiagnostics?: boolean;
+  buildRelease?: string;
   networkDiagnostics?: boolean | NetworkDiagnosticsOptions;
   appKey: string;
   endpoint: string;
@@ -35,8 +41,13 @@ export interface HealthGuardClientOptions {
   transport?: (batch: EventBatch, endpoint: string) => Promise<void>;
 }
 
+export interface ExceptionContext {
+  component?: string;
+  phase?: string;
+}
+
 export interface HealthGuardClient {
-  captureException(error: unknown): void;
+  captureException(error: unknown, context?: ExceptionContext): void;
   captureHttp(input: CaptureHttpInput): void;
   capturePerformance(input: CapturePerformanceInput): void;
   addBreadcrumb(breadcrumb: Omit<Breadcrumb, 'timestamp'> & { timestamp?: number }): void;
@@ -58,8 +69,10 @@ export interface CapturePerformanceInput {
 }
 
 export interface BrowserLikeTarget {
-  navigator?: { onLine?: boolean; connection?: { effectiveType?: string; addEventListener?: (name: string, cb: () => void) => void; removeEventListener?: (name: string, cb: () => void) => void } };
-  performance?: { getEntriesByName(name: string): ArrayLike<unknown> };
+  navigator?: { userAgent?: string; language?: string; onLine?: boolean; connection?: { effectiveType?: string; addEventListener?: (name: string, cb: () => void) => void; removeEventListener?: (name: string, cb: () => void) => void } };
+  performance?: { getEntriesByName(name: string): ArrayLike<unknown>; getEntriesByType?: (name: string) => ArrayLike<{ name: string; initiatorType?: string }> };
+  document?: { scripts?: ArrayLike<{ src?: string; crossOrigin?: string | null }>; visibilityState?: string };
+  screen?: { width?: number; height?: number };
   location?: {
     href: string;
   };
@@ -106,7 +119,7 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
     }
 
     isFlushing = true;
-    const events = queue.splice(0, maxBatchSize);
+    const events = queue.splice(0, maxBatchSize).map(event => sanitizeWebValue(event));
     inFlight = events;
     try {
       await transport({ appKey: options.appKey, events }, options.endpoint);
@@ -126,7 +139,7 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
 
   function enqueue(event: EventBatch['events'][number]): void {
     if (disposed || (event.type === 'http' && isCollectorEndpoint(event.url, options.endpoint))) return;
-    queue.push(event);
+    queue.push(sanitizeWebValue(event));
     if (queue.length > pending.limit) queue.splice(0, queue.length - pending.limit);
     pending.save([...inFlight, ...queue]);
 
@@ -135,15 +148,19 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
     }
   }
 
-  function captureError(error: unknown, errorType: HealthGuardErrorEvent['errorType'], metadata: Partial<HealthGuardErrorEvent> = {}): void {
+  function captureError(error: unknown, errorType: HealthGuardErrorEvent['errorType'], metadata: Partial<HealthGuardErrorEvent> = {}, context?: ExceptionContext): void {
     const normalized = normalizeError(error);
     const message = metadata.message ?? normalized.message;
     const stack = metadata.stack ?? normalized.stack;
 
-    if (isFlushing || isSdkInternalError(message)) {
+    if (disposed || isSdkInternalError(message)) {
       return;
     }
 
+    const scene: Breadcrumb[] = [];
+    if (options.webDiagnostics !== false) {
+      try { scene.push(webErrorBreadcrumb(target, options, { message, stack, lineno: metadata.lineno }, context)); } catch { /* A restricted browser must still report the original error. */ }
+    }
     enqueue({
       ...createBaseEvent(options, sessionId, anonymousId, target),
       type: 'error',
@@ -158,7 +175,7 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
         message,
         stack
       }),
-      breadcrumbs: [...breadcrumbs]
+      breadcrumbs: [...breadcrumbs, ...scene].slice(-30)
     });
   }
 
@@ -169,7 +186,17 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
     timer.unref?.();
   }
 
-  installAutoCapture(options, target, captureError, (input) => {
+  function addBreadcrumb(input: Omit<Breadcrumb, 'timestamp'> & { timestamp?: number }): void {
+    if (disposed) return;
+    breadcrumbs.push(sanitizeWebValue({ ...input, timestamp: input.timestamp ?? Date.now() }));
+    if (breadcrumbs.length > 30) breadcrumbs.shift();
+  }
+
+  function captureHttp(input: CaptureHttpInput): void {
+    if (disposed) return;
+    if (options.webDiagnostics !== false && !isCollectorEndpoint(input.url, options.endpoint)) {
+      addBreadcrumb({ type: 'http', message: 'http.response', data: { method: input.method.toUpperCase(), url: input.url, status: input.status, duration: input.duration } });
+    }
     enqueue({
       ...createBaseEvent(options, sessionId, anonymousId, target),
       type: 'http',
@@ -181,26 +208,18 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
       networkDiagnostic: diagnostics.capture(input),
       errorMessage: input.errorMessage
     });
-  });
+  }
+
+  const stopAutoCapture = installAutoCapture(options, target, captureError, captureHttp);
+  const stopBreadcrumbs = options.webDiagnostics !== false && options.autoCapture
+    ? installWebBreadcrumbs(target, addBreadcrumb) : () => {};
 
   return {
-    captureException(error: unknown): void {
-      captureError(error, 'js');
+    captureException(error: unknown, context?: ExceptionContext): void {
+      captureError(error, 'js', {}, context);
     },
 
-    captureHttp(input: CaptureHttpInput): void {
-      enqueue({
-        ...createBaseEvent(options, sessionId, anonymousId, target),
-        type: 'http',
-        method: input.method.toUpperCase(),
-        url: sanitizeUrl(input.url),
-        status: input.status,
-        duration: input.duration,
-        success: input.success,
-        networkDiagnostic: diagnostics.capture(input),
-      errorMessage: input.errorMessage
-      });
-    },
+    captureHttp,
 
     capturePerformance(input: CapturePerformanceInput): void {
       enqueue({
@@ -212,20 +231,13 @@ export function createHealthGuardClient(options: HealthGuardClientOptions): Heal
       });
     },
 
-    addBreadcrumb(input): void {
-      breadcrumbs.push({
-        ...input,
-        timestamp: input.timestamp ?? Date.now()
-      });
-
-      if (breadcrumbs.length > 30) {
-        breadcrumbs.shift();
-      }
-    },
+    addBreadcrumb,
 
     dispose(): void {
       disposed = true;
       if (timer) clearInterval(timer);
+      stopAutoCapture();
+      stopBreadcrumbs();
       diagnostics.dispose();
     },
     async flush(): Promise<void> {
@@ -271,19 +283,21 @@ function createBaseEvent(
     environment: options.environment,
     userId: options.userId,
     pageUrl: target?.location?.href,
-    deviceInfo: getWebDeviceInfo()
+    deviceInfo: getWebDeviceInfo(target)
   };
 }
 
-function getWebDeviceInfo() {
-  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
-    return undefined;
-  }
+function getWebDeviceInfo(target?: BrowserLikeTarget) {
+  if (!target?.navigator) return undefined;
+  const userAgent = target.navigator.userAgent || '';
+  const { model, system } = describeWebDevice(userAgent);
   return {
-    userAgent: navigator.userAgent,
-    language: navigator.language,
-    screenWidth: window.screen?.width,
-    screenHeight: window.screen?.height
+    userAgent,
+    model,
+    system,
+    language: target.navigator.language,
+    screenWidth: target.screen?.width,
+    screenHeight: target.screen?.height
   };
 }
 
@@ -312,13 +326,17 @@ function isSdkInternalError(message: string | undefined): boolean {
 }
 
 async function defaultTransport(batch: EventBatch, endpoint: string, requireAcknowledgement = false): Promise<void> {
+  const body = JSON.stringify(batch);
+  // keepalive has a shared ~64 KiB browser quota; detailed batches can exceed it.
+  const keepalive = new TextEncoder().encode(body).byteLength <= 60000;
   const response = await fetch(endpoint, {
     method: 'POST',
+    credentials: 'omit',
     headers: {
       'content-type': 'application/json'
     },
-    body: JSON.stringify(batch),
-    keepalive: true
+    body,
+    keepalive
   });
 
   if (!response.ok) {
@@ -395,15 +413,20 @@ function installAutoCapture(
     metadata?: Partial<HealthGuardErrorEvent>
   ) => void,
   captureHttp: (input: CaptureHttpInput) => void
-): void {
+): () => void {
+  const cleanups: (() => void)[] = [];
   if (!target) {
-    return;
+    return () => {};
   }
+  const observe = (type: string, listener: EventListener) => {
+    target.addEventListener?.(type, listener);
+    cleanups.push(() => target.removeEventListener?.(type, listener));
+  };
 
   const autoCapture = normalizeAutoCapture(options.autoCapture);
 
   if (autoCapture.errors && target.addEventListener) {
-    target.addEventListener('error', ((event: Event) => {
+    observe('error', ((event: Event) => {
       const errorEvent = event as globalThis.ErrorEvent;
       const resourceFailure = getResourceFailure(event);
 
@@ -425,7 +448,7 @@ function installAutoCapture(
   }
 
   if (autoCapture.unhandledRejections && target.addEventListener) {
-    target.addEventListener('unhandledrejection', ((event: Event) => {
+    observe('unhandledrejection', ((event: Event) => {
       const rejectionEvent = event as PromiseRejectionEvent;
       const reason = rejectionEvent.reason;
       
@@ -438,7 +461,8 @@ function installAutoCapture(
   }
 
   if (autoCapture.fetch && target.fetch) {
-    const originalFetch = target.fetch.bind(target);
+    const previousFetch = target.fetch;
+    const originalFetch = previousFetch.bind(target);
 
     target.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const startedAt = Date.now();
@@ -472,6 +496,8 @@ function installAutoCapture(
         throw error;
       }
     }) as typeof fetch;
+    const patchedFetch = target.fetch;
+    cleanups.push(() => { if (target.fetch === patchedFetch) target.fetch = previousFetch; });
   }
 
   if (autoCapture.xhr && target.XMLHttpRequest) {
@@ -528,7 +554,10 @@ function installAutoCapture(
 
       return xhr;
     } as unknown as typeof XMLHttpRequest;
+    const patchedConstructor = target.XMLHttpRequest;
+    cleanups.push(() => { if (target.XMLHttpRequest === patchedConstructor) target.XMLHttpRequest = OriginalXMLHttpRequest; });
   }
+  return () => cleanups.forEach(cleanup => cleanup());
 }
 
 function isCollectorEndpoint(url: string, endpoint: string): boolean {
